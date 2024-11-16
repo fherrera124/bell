@@ -1,43 +1,69 @@
 {
-  description = "bell - Audio utilities used in cspot and euphonium project";
+  description = "bell - Various internal CPP utilities";
 
   inputs = {
-    nixpkgs.url = "nixpkgs/nixos-23.11";
+    nixpkgs.url = "nixpkgs/nixos-24.05";
+    nixpkgs-unstable.url = "github:nixos/nixpkgs/nixpkgs-unstable";
     flake-utils.url = "github:numtide/flake-utils";
   };
 
   outputs = {
     self,
     nixpkgs,
+    nixpkgs-unstable,
     flake-utils,
-  }:
-    flake-utils.lib.eachDefaultSystem (system: let
+  }: let
+    overlay = final: prev: {
+      unstable = nixpkgs-unstable.legacyPackages.${prev.system};
+    };
+  in
+    {
+      overlays.default = overlay;
+    }
+    // flake-utils.lib.eachDefaultSystem (system: let
       pkgs = import nixpkgs {
         inherit system;
+        overlays = [overlay];
+      };
+
+      llvm = pkgs.llvmPackages_18;
+      clang-tools = pkgs.clang-tools.override {llvmPackages = llvm;};
+      iwyu = pkgs.include-what-you-use.override {llvmPackages = llvm;};
+
+      common-pkgs = with pkgs;
+            [
+              catch2_3
+              cmake
+              ninja
+            ]
+            ++ [clang-tools llvm.clang llvm.libllvm iwyu];
+
+      apps = {
       };
 
       packages = {
-        default = pkgs.callPackage ./package.nix {
-          stdenv = pkgs.llvmPackages_16.stdenv;
+        tests = llvm.stdenv.mkDerivation {
+          name = "tests";
+          src = ./.;
+          cmakeFlags = ["-DBELL_DISABLE_TESTS=OFF"];
+          nativeBuildInputs = common-pkgs;
+          enableParallelBuilding = true;
+          doCheck = true;
+          # Run the unit tests
+          checkPhase = ''
+            ./test/umt-test
+          '';
         };
       };
-      devShells = {
-        default = pkgs.mkShell.override {stdenv = pkgs.llvmPackages_16.stdenv;} {
-          packages = with pkgs; [
-            # dev tools
-            cmake
-            ninja
-            catch2
 
-            # deps
-            mbedtls
-            portaudio
-            avahi
-          ];
+      devShells = {
+        default = pkgs.mkShell {
+          packages = common-pkgs;
         };
       };
     in {
-      inherit devShells packages;
+      inherit apps devShells packages;
       checks = packages;
+      devShell = devShells.default;
     });
 }

@@ -1,35 +1,21 @@
 #include "SocketStream.h"
 
-#include <stdint.h>  // for uint8_t
-#include <cstdio>    // for NULL, ssize_t
+#include <cstdint>  // for uint8_t
+#include <cstdio>   // for NULL, ssize_t
 #include <memory>
 
-#include "BellSocket.h"
-#include "TCPSocket.h"  // for TCPSocket
-#include "TLSSocket.h"  // for TLSSocket
+using namespace bell::io;
 
-using namespace bell;
-
-int SocketBuffer::open(const std::string& hostname, int port, bool isSSL) {
+int SocketBuffer::open(std::unique_ptr<Socket> socket, int operationTimeoutMs) {
   if (internalSocket != nullptr) {
     close();
   }
-  if (isSSL) {
-    internalSocket = std::make_unique<bell::TLSSocket>();
-  } else {
-    internalSocket = std::make_unique<bell::TCPSocket>();
-  }
-
-  internalSocket->open(hostname, port);
-  return 0;
-}
-
-int SocketBuffer::open(std::unique_ptr<bell::Socket> socket) {
-  if (internalSocket != nullptr) {
-    close();
-  }
-
+  this->operationTimeoutMs = operationTimeoutMs;
   internalSocket = std::move(socket);
+
+  // Set the socket to non-blocking mode if a timeout is specified
+  internalSocket->setBlocking(operationTimeoutMs == 0);
+
   return 0;
 }
 
@@ -43,28 +29,34 @@ int SocketBuffer::close() {
 }
 
 int SocketBuffer::sync() {
-  ssize_t bw, n = pptr() - pbase();
-  while (n > 0) {
-    bw = internalSocket->write(reinterpret_cast<uint8_t*>(pptr() - n), n);
-    if (bw < 0) {
-      setp(pptr() - n, obuf + bufLen);
-      pbump(n);
-      return -1;
+  ssize_t bw;
+  ssize_t n = pptr() - pbase();
+  try {
+    while (n > 0) {
+      bw = internalSocket->write(reinterpret_cast<uint8_t*>(pptr() - n), n,
+                                 operationTimeoutMs);
+      n -= bw;
     }
-    n -= bw;
+  } catch (...) {
+    setp(pptr() - n, obuf.data() + bufLen);
+    pbump(n);
+    return -1;
   }
-  setp(obuf, obuf + bufLen);
+  setp(obuf.data(), obuf.data() + bufLen);
   return 0;
 }
 
 SocketBuffer::int_type SocketBuffer::underflow() {
-  ssize_t br = internalSocket->read(reinterpret_cast<uint8_t*>(ibuf), bufLen);
-  if (br <= 0) {
-    setg(NULL, NULL, NULL);
+  size_t br = 0;
+  try {
+    br = internalSocket->read(reinterpret_cast<uint8_t*>(ibuf.data()), bufLen,
+                              operationTimeoutMs);
+  } catch (std::exception& e) {
+    setg(nullptr, nullptr, nullptr);
     return traits_type::eof();
   }
-  setg(ibuf, ibuf, ibuf + br);
-  return traits_type::to_int_type(*ibuf);
+  setg(ibuf.data(), ibuf.data(), ibuf.data() + br);
+  return traits_type::to_int_type(*ibuf.data());
 }
 
 SocketBuffer::int_type SocketBuffer::overflow(int_type c) {
@@ -77,48 +69,56 @@ SocketBuffer::int_type SocketBuffer::overflow(int_type c) {
   return c;
 }
 
-std::streamsize SocketBuffer::xsgetn(char_type* __s, std::streamsize __n) {
+std::streamsize SocketBuffer::xsgetn(char_type* _s, std::streamsize _n) {
   const std::streamsize bn = egptr() - gptr();
-  if (__n <= bn) {
-    traits_type::copy(__s, gptr(), __n);
-    gbump(__n);
-    return __n;
+  if (_n <= bn) {
+    traits_type::copy(_s, gptr(), _n);
+    gbump(_n);
+    return _n;
   }
-  traits_type::copy(__s, gptr(), bn);
-  setg(NULL, NULL, NULL);
-  std::streamsize remain = __n - bn;
-  char_type* end = __s + __n;
-  ssize_t br;
-  while (remain > 0) {
-    br = internalSocket->read(reinterpret_cast<uint8_t*>(end - remain), remain);
-    if (br <= 0)
-      return (__n - remain);
-    remain -= br;
+  traits_type::copy(_s, gptr(), bn);
+  setg(nullptr, nullptr, nullptr);
+  std::streamsize remain = _n - bn;
+  char_type* end = _s + _n;
+  size_t br;
+  try {
+    while (remain > 0) {
+      br = internalSocket->read(reinterpret_cast<uint8_t*>(end - remain),
+                                remain, operationTimeoutMs);
+      if (br == 0) {
+        return (_n - remain);
+      }
+      remain -= br;
+    }
+  } catch (...) {
+    return (_n - remain);
   }
-  return __n;
+  return _n;
 }
 
-std::streamsize SocketBuffer::xsputn(const char_type* __s,
-                                     std::streamsize __n) {
-  if (pptr() + __n <= epptr()) {
-    traits_type::copy(pptr(), __s, __n);
-    pbump(__n);
-    return __n;
+std::streamsize SocketBuffer::xsputn(const char_type* _s, std::streamsize _n) {
+  if (pptr() + _n <= epptr()) {
+    traits_type::copy(pptr(), _s, _n);
+    pbump(_n);
+    return _n;
   }
   if (sync() < 0)
     return 0;
   ssize_t bw;
-  std::streamsize remain = __n;
-  const char_type* end = __s + __n;
-  while (remain > bufLen) {
-    bw = internalSocket->write((uint8_t*)(end - remain), remain);
-    if (bw < 0)
-      return (__n - remain);
-    remain -= bw;
+  std::streamsize remain = _n;
+  const char_type* end = _s + _n;
+  try {
+    while (remain > bufLen) {
+      bw = internalSocket->write((uint8_t*)(end - remain), remain,
+                                 operationTimeoutMs);
+      remain -= bw;
+    }
+  } catch (...) {
+    return (_n - remain);
   }
   if (remain > 0) {
     traits_type::copy(pptr(), end - remain, remain);
     pbump(remain);
   }
-  return __n;
+  return _n;
 }

@@ -1,17 +1,13 @@
 #include <BinaryStream.h>
 #include <stdexcept>  // for runtime_error
 
-using namespace bell;
+using namespace bell::io;
 
-BinaryStream::BinaryStream(std::ostream* ostr) {
-  this->ostr = ostr;
-  byteOrder = std::endian::native;
-}
+BinaryStream::BinaryStream(std::ostream* ostr)
+    : byteOrder(std::endian::native), ostr(ostr) {}
 
-BinaryStream::BinaryStream(std::istream* istr) {
-  this->istr = istr;
-  byteOrder = std::endian::native;
-}
+BinaryStream::BinaryStream(std::istream* istr)
+    : byteOrder(std::endian::native), istr(istr) {}
 
 void BinaryStream::setByteOrder(std::endian byteOrder) {
   this->byteOrder = byteOrder;

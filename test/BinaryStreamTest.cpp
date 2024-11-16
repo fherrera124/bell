@@ -1,15 +1,15 @@
-#include <catch2/catch.hpp>
+#include <catch2/catch_test_macros.hpp>
 #include "BinaryStream.h"
 
-#include <sstream>        // for std::ostringstream
-#include "StreamUtils.h"  // for bell::IMemoryStream
+#include <sstream>         // for std::ostringstream
+#include "MemoryStream.h"  // for bell::IMemoryStream
 
 TEST_CASE("BinaryStream encodes and decodes data properly", "[BinaryStream]") {
   // Static so we retain value through the test
   static std::ostringstream result;
   static int idx = 0;
 
-  auto bs = bell::BinaryStream(&result);
+  auto bs = bell::io::BinaryStream(&result);
 
   // Request big endian
   bs.setByteOrder(std::endian::big);
@@ -103,10 +103,10 @@ TEST_CASE("BinaryStream encodes and decodes data properly", "[BinaryStream]") {
   SECTION("decodes values properly") {
     // Copy previously encoded data into a string, wrap with memorystream
     std::string res = result.str();
-    bell::IMemoryStream istr((std::byte*)res.data(), res.size());
+    bell::io::IMemoryStream istr((std::byte*)res.data(), res.size());
 
     // Create binary stream wrapping the previously encoded data
-    bs = bell::BinaryStream(&istr);
+    bs = bell::io::BinaryStream(&istr);
     bs.setByteOrder(std::endian::big);
     auto resVector = std::vector<uint8_t>(res.begin(), res.end());
 

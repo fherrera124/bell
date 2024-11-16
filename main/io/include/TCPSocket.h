@@ -1,153 +1,22 @@
-#ifndef BELL_BASIC_SOCKET_H
-#define BELL_BASIC_SOCKET_H
+#pragma once
 
-#include <ctype.h>
-#include <stdlib.h>
-#include <sys/types.h>
-#include <cstring>
-#include <iostream>
-#include <memory>
-#include <stdexcept>
-#include <string>
-#include <vector>
-#include "BellSocket.h"
-#ifdef _WIN32
-#include <winsock2.h>
-#include <ws2tcpip.h>
-#include "win32shim.h"
-#else
-#include <netdb.h>
-#include <netinet/in.h>
-#include <netinet/tcp.h>
-#include <sys/ioctl.h>
-#include <sys/socket.h>
-#include <unistd.h>
-#ifdef __sun
-#include <sys/filio.h>
-#endif
-#endif
-#include <BellLogger.h>
+#include "POSIXSocket.h"
 
-namespace bell {
-class TCPSocket : public bell::Socket {
- private:
-  int sockFd;
-  bool isClosed = true;
-
+namespace bell::io {
+/**
+ * @brief TCP implementation of the bell::Socket
+ */
+class TCPSocket : public POSIXSocket {
  public:
-  TCPSocket(){};
-  ~TCPSocket() { close(); };
+  TCPSocket() = default;
+  ~TCPSocket() override;
 
-  int getFd() { return sockFd; }
+  // Socket interface overrides
+  void connect(const std::string& host, uint16_t port,
+               int timeoutMs = 0) override;
+  std::unique_ptr<Socket> accept() override;
 
-  void open(const std::string& host, uint16_t port) {
-    int err;
-    int domain = AF_INET;
-    int socketType = SOCK_STREAM;
-
-    struct addrinfo hints {
-    }, *addr;
-    //fine-tune hints according to which socket you want to open
-    hints.ai_family = domain;
-    hints.ai_socktype = socketType;
-    hints.ai_protocol =
-        IPPROTO_IP;  // no enum : possible value can be read in /etc/protocols
-    hints.ai_flags = AI_CANONNAME | AI_ALL | AI_ADDRCONFIG;
-
-    // BELL_LOG(info, "http", "%s %d", host.c_str(), port);
-
-    char portStr[6];
-    snprintf(portStr, sizeof(portStr), "%u", port);
-    err = getaddrinfo(host.c_str(), portStr, &hints, &addr);
-    if (err != 0) {
-      throw std::runtime_error("Resolve failed");
-    }
-
-    sockFd = socket(addr->ai_family, addr->ai_socktype, addr->ai_protocol);
-
-    if (sockFd < 0) {
-      BELL_LOG(error, "http",
-               "Could not create socket to %s, port %d. Error %d", host.c_str(),
-               port, errno);
-      throw std::runtime_error("Sock create failed");
-    }
-
-    isClosed = false;
-    err = connect(sockFd, addr->ai_addr, addr->ai_addrlen);
-    if (err < 0) {
-      close();
-      BELL_LOG(error, "http", "Could not connect to %s, port %d. Error %d",
-               host.c_str(), port, errno);
-      throw std::runtime_error("Sock connect failed");
-    }
-
-    int flag = 1;
-    setsockopt(sockFd,       /* socket affected */
-               IPPROTO_TCP,  /* set option at TCP level */
-               TCP_NODELAY,  /* name of option */
-               (char*)&flag, /* the cast is historical cruft */
-               sizeof(int)); /* length of option value */
-
-    freeaddrinfo(addr);
-    isClosed = false;
-  }
-
-  void wrapFd(int fd) {
-    if (fd != -1) {
-      sockFd = fd;
-      int flag = 1;
-      setsockopt(sockFd,       /* socket affected */
-                 IPPROTO_TCP,  /* set option at TCP level */
-                 TCP_NODELAY,  /* name of option */
-                 (char*)&flag, /* the cast is historical cruft */
-                 sizeof(int)); /* length of option value */
-
-      isClosed = false;
-    }
-  }
-
-  size_t read(uint8_t* buf, size_t len) {
-    ssize_t res = recv(sockFd, (char*)buf, len, 0);
-    if (res < 0) {
-      throw std::runtime_error("error in recv");
-    }
-    return res;
-  }
-
-  size_t write(const uint8_t* buf, size_t len) {
-    ssize_t res = send(sockFd, (char*)buf, len, 0);
-    if (res < 0) {
-      throw std::runtime_error("error in read");
-    }
-    return res;
-  }
-
-  size_t poll() {
-#ifdef _WIN32
-    unsigned long value;
-    ioctlsocket(sockFd, FIONREAD, &value);
-#else
-    int value;
-    ioctl(sockFd, FIONREAD, &value);
-#endif
-    return value;
-  }
-
-  bool isOpen() { return !isClosed; }
-
-  void close() {
-    if (!isClosed) {
-#ifdef _WIN32
-      closesocket(sockFd);
-#else
-      ::close(sockFd);
-#endif
-      sockFd = -1;
-      isClosed = true;
-    }
-  }
+ private:
+  const char* LOG_TAG = "TCPSocket";
 };
-
-}  // namespace bell
-
-#endif
+}  // namespace bell::io

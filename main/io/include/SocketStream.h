@@ -1,29 +1,36 @@
 #pragma once
 
+#include <array>
 #include <iostream>  // for streamsize, basic_streambuf<>::int_type, ios...
 #include <memory>    // for unique_ptr, operator!=
 #include <string>    // for char_traits, string
 
-#include "BellSocket.h"  // for Socket
+#include "Socket.h"  // for Socket
 
-namespace bell {
+namespace bell::io {
 class SocketBuffer : public std::streambuf {
  private:
-  std::unique_ptr<bell::Socket> internalSocket;
+  std::unique_ptr<Socket> internalSocket;
+
+  // Timeout for socket operations in milliseconds, 0 means that the socket is blocking
+  int operationTimeoutMs;
 
   static const int bufLen = 1024;
-  char ibuf[bufLen], obuf[bufLen];
+  std::array<char, bufLen> ibuf{};
+  std::array<char, bufLen> obuf{};
 
  public:
-  SocketBuffer() { internalSocket = nullptr; }
+  SocketBuffer() = default;
 
-  SocketBuffer(const std::string& hostname, int port, bool isSSL = false) {
-    open(hostname, port);
-  }
+  // Delete copy constructor and copy assignment operator
+  SocketBuffer(const SocketBuffer&) = delete;
+  SocketBuffer& operator=(const SocketBuffer&) = delete;
 
-  int open(const std::string& hostname, int port, bool isSSL = false);
+  // Define move constructor and move assignment operator
+  SocketBuffer(SocketBuffer&& other) noexcept = default;
+  SocketBuffer& operator=(SocketBuffer&& other) noexcept = default;
 
-  int open(std::unique_ptr<bell::Socket> socket);
+  int open(std::unique_ptr<Socket> socket, int operationTimeoutMs = 0);
 
   int close();
 
@@ -34,15 +41,15 @@ class SocketBuffer : public std::streambuf {
   ~SocketBuffer() { close(); }
 
  protected:
-  virtual int sync();
+  int sync() override;
 
-  virtual int_type underflow();
+  int_type underflow() override;
 
-  virtual int_type overflow(int_type c = traits_type::eof());
+  int_type overflow(int_type c = traits_type::eof()) override;
 
-  virtual std::streamsize xsgetn(char_type* __s, std::streamsize __n);
+  std::streamsize xsgetn(char_type* _s, std::streamsize _n) override;
 
-  virtual std::streamsize xsputn(const char_type* __s, std::streamsize __n);
+  std::streamsize xsputn(const char_type* _s, std::streamsize _n) override;
 };
 
 class SocketStream : public std::iostream {
@@ -52,22 +59,15 @@ class SocketStream : public std::iostream {
  public:
   SocketStream() : std::iostream(&socketBuf) {}
 
-  SocketStream(const std::string& hostname, int port, bool isSSL = false)
+  SocketStream(std::unique_ptr<Socket> socket, int operationTimeoutMs = 0)
       : std::iostream(&socketBuf) {
-    open(hostname, port, isSSL);
+    open(std::move(socket), operationTimeoutMs);
   }
 
   SocketBuffer* rdbuf() { return &socketBuf; }
 
-  int open(const std::string& hostname, int port, bool isSSL = false) {
-    int err = socketBuf.open(hostname, port, isSSL);
-    if (err)
-      setstate(std::ios::failbit);
-    return err;
-  }
-
-  int open(std::unique_ptr<bell::Socket> socket) {
-    int err = socketBuf.open(std::move(socket));
+  int open(std::unique_ptr<Socket> socket, int operationTimeoutMs = 0) {
+    int err = socketBuf.open(std::move(socket), operationTimeoutMs);
     if (err)
       setstate(std::ios::failbit);
     return err;
@@ -77,4 +77,4 @@ class SocketStream : public std::iostream {
 
   bool isOpen() { return socketBuf.isOpen(); }
 };
-}  // namespace bell
+}  // namespace bell::io

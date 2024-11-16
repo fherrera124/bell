@@ -4,12 +4,45 @@
 #include <bit>  // for endian
 #endif
 
-#include <stdint.h>  // for int16_t, int32_t, int64_t, uint16_t, uint32_t
+#include <cstdint>  // for int16_t, int32_t, int64_t, uint16_t, uint32_t
 #include <cstddef>   // for byte
 #include <iostream>  // for istream, ostream
 
-namespace bell {
+namespace bell::io {
 class BinaryStream {
+ public:
+  BinaryStream(std::ostream* ostr);
+  BinaryStream(std::istream* istr);
+
+  /**
+   * @brief Set byte order used by stream.
+   *
+   * @param byteOrder stream's byteorder. Defaults to native.
+   */
+  void setByteOrder(std::endian byteOrder);
+
+  // Read operations
+  BinaryStream& operator>>(char& value);
+  BinaryStream& operator>>(std::byte& value);
+  BinaryStream& operator>>(uint8_t& value);
+  BinaryStream& operator>>(int16_t& value);
+  BinaryStream& operator>>(uint16_t& value);
+  BinaryStream& operator>>(int32_t& value);
+  BinaryStream& operator>>(uint32_t& value);
+  BinaryStream& operator>>(int64_t& value);
+  BinaryStream& operator>>(uint64_t& value);
+
+  // Write operations
+  BinaryStream& operator<<(char value);
+  BinaryStream& operator<<(std::byte value);
+  BinaryStream& operator<<(uint8_t value);
+  BinaryStream& operator<<(int16_t value);
+  BinaryStream& operator<<(uint16_t value);
+  BinaryStream& operator<<(int32_t value);
+  BinaryStream& operator<<(uint32_t value);
+  BinaryStream& operator<<(int64_t value);
+  BinaryStream& operator<<(uint64_t value);
+
  private:
   std::endian byteOrder;
 
@@ -44,38 +77,5 @@ class BinaryStream {
     return __builtin_bswap64(value);
 #endif
   }
-
- public:
-  BinaryStream(std::ostream* ostr);
-  BinaryStream(std::istream* istr);
-
-  /**
-   * @brief Set byte order used by stream.
-   *
-   * @param byteOrder stream's byteorder. Defaults to native.
-   */
-  void setByteOrder(std::endian byteOrder);
-
-  // Read operations
-  BinaryStream& operator>>(char& value);
-  BinaryStream& operator>>(std::byte& value);
-  BinaryStream& operator>>(uint8_t& value);
-  BinaryStream& operator>>(int16_t& value);
-  BinaryStream& operator>>(uint16_t& value);
-  BinaryStream& operator>>(int32_t& value);
-  BinaryStream& operator>>(uint32_t& value);
-  BinaryStream& operator>>(int64_t& value);
-  BinaryStream& operator>>(uint64_t& value);
-
-  // Write operations
-  BinaryStream& operator<<(char value);
-  BinaryStream& operator<<(std::byte value);
-  BinaryStream& operator<<(uint8_t value);
-  BinaryStream& operator<<(int16_t value);
-  BinaryStream& operator<<(uint16_t value);
-  BinaryStream& operator<<(int32_t value);
-  BinaryStream& operator<<(uint32_t value);
-  BinaryStream& operator<<(int64_t value);
-  BinaryStream& operator<<(uint64_t value);
 };
-}  // namespace bell
+}  // namespace bell::io
