@@ -3,6 +3,7 @@
 #include <cerrno>
 #include "Logger.h"
 #include "SocketUtils.h"
+#include <fmt/format.h>
 
 // Platform specific socket includes
 #ifdef _WIN32
@@ -88,7 +89,7 @@ size_t POSIXSocket::read(uint8_t* buf, size_t len, int timeoutMs) {
   ssize_t res = recv(sockFd, buf, len, 0);
   if (res < 0) {
     close();
-    throw std::runtime_error("Error in recv, " + std::string(strerror(errno)));
+    throw std::runtime_error(fmt::format("Error in recv, {}", strerror(errno)));
   }
 
   return static_cast<size_t>(res);
@@ -143,7 +144,7 @@ void POSIXSocket::listen(int backlog) {
   }
 
   isListening = true;
-  BELL_LOG(info, LOG_TAG, "Listening on socket %d", sockFd);
+  BELL_LOG(info, LOG_TAG, "Listening on socket {}", sockFd);
 }
 
 void POSIXSocket::bind(const std::string& address, uint16_t port) {
@@ -163,11 +164,11 @@ void POSIXSocket::bind(const std::string& address, uint16_t port) {
 
   if (::bind(sockFd, reinterpret_cast<struct sockaddr*>(&resolved.addr),
              resolved.addrLen) != 0) {
-    throw std::runtime_error("Bind failed" + std::string(strerror(errno)));
+    throw std::runtime_error(fmt::format("Bind failed: {}", strerror(errno)));
   }
 
   isClosed = false;
-  BELL_LOG(info, LOG_TAG, "Bound to %s:%d", address.c_str(), port);
+  BELL_LOG(info, LOG_TAG, "Bound to {}:{}", address.c_str(), port);
 }
 
 std::string POSIXSocket::getLocalAddress() const {

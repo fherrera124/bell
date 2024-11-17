@@ -1,171 +1,156 @@
 #pragma once
 
-#include <chrono>
-#include <cstdarg>  // for va_end, va_list, va_start
-#include <cstdio>   // for printf, vprintf
-#include <iomanip>
-#include <iostream>
+// System includes
 #include <memory>
 #include <mutex>
-#include <string>  // for string, basic_string
+#include <string>
 #include <vector>
+
+// Library includes
+#include <fmt/chrono.h>
+#include <fmt/color.h>
+#include <fmt/core.h>
 
 namespace bell {
 
-class AbstractLogger {
+// List of available levels for the BELL_LOG macro
+enum class LogLevel { DEBUG, ERROR, INFO, WARN };
+
+class LoggerBackend {
  public:
-  AbstractLogger() = default;
-  virtual ~AbstractLogger() = default;
+  LoggerBackend() = default;
+  virtual ~LoggerBackend() = default;
 
-  void enableSubmoduleLogging(bool enable);
-  void enableTimestampLogging(bool enable, bool local = false);
-
-  virtual void debug(std::string filename, int line, std::string submodule,
-                     const char* format, ...) = 0;
-  virtual void error(std::string filename, int line, std::string submodule,
-                     const char* format, ...) = 0;
-  virtual void info(std::string filename, int line, std::string submodule,
-                    const char* format, ...) = 0;
-
- protected:
-  bool enableSubmodule = false;
-  bool enableTimestamp = false;
-  bool shortTime = false;
+  /**
+   * @brief Implement this function to log a message to the underlying logger
+   * 
+   * @param level log level
+   * @param filename Filename of the caller, cleaned up to only include the basename
+   * @param line Line number of the caller
+   * @param tag Optional tag to include in the log message
+   * @param message Formatted log message
+   */
+  virtual void log(LogLevel level, const std::string& filename, int line,
+                   const std::string& tag, const std::string& message) = 0;
 };
 
-static std::mutex bellRegisteredLoggersMutex;
-extern std::vector<std::unique_ptr<bell::AbstractLogger>> bellRegisteredLoggers;
+class BaseLogger {
+ private:
+  // List of registered logger backends, eg stdout, file, etc
+  std::vector<std::unique_ptr<LoggerBackend>> registeredBackends;
 
-class StdoutLogger : public bell::AbstractLogger {
+  // Mutex to protect the list of registered loggers
+  std::mutex loggerMutex;
+
  public:
-  void debug(std::string filename, int line, std::string submodule,
-             const char* format, ...) override {
-    printTimestamp();
+  BaseLogger() = default;
+  ~BaseLogger() = default;
 
-    printf(colorRed);
-    printf("D ");
-    if (enableSubmodule) {
-      printf(colorReset);
-      printf("[%s] ", submodule.c_str());
-    }
-    printFilename(filename);
-    printf(":%d: ", line);
-    va_list args;
-    va_start(args, format);
-    vprintf(format, args);
-    va_end(args);
-    printf("\n");
-  };
-
-  void error(std::string filename, int line, std::string submodule,
-             const char* format, ...) override {
-    printTimestamp();
-
-    printf(colorRed);
-    printf("E ");
-    if (enableSubmodule) {
-      printf(colorReset);
-      printf("[%s] ", submodule.c_str());
-    }
-    printFilename(filename);
-    printf(":%d: ", line);
-    printf(colorRed);
-    va_list args;
-    va_start(args, format);
-    vprintf(format, args);
-    va_end(args);
-    printf("\n");
-  };
-
-  void info(std::string filename, int line, std::string submodule,
-            const char* format, ...) override {
-    printTimestamp();
-
-    printf(colorBlue);
-    printf("I ");
-    if (enableSubmodule) {
-      printf(colorReset);
-      printf("[%s] ", submodule.c_str());
-    }
-    printFilename(filename);
-    printf(":%d: ", line);
-    printf(colorReset);
-    va_list args;
-    va_start(args, format);
-    vprintf(format, args);
-    va_end(args);
-    printf("\n");
-  };
-
-  void printTimestamp() {
-    if (enableTimestamp) {
-      auto now = std::chrono::system_clock::now();
-      time_t now_time = std::chrono::system_clock::to_time_t(now);
-      const auto nowMs = std::chrono::duration_cast<std::chrono::milliseconds>(
-                             now.time_since_epoch()) %
-                         1000;
-
-      printf(colorReset);
-      struct tm* gmt_time;
-      if (shortTime) {
-        gmt_time = localtime(&now_time);
-        std::cout << std::put_time(gmt_time, "[%H:%M:%S") << '.'
-                  << std::setfill('0') << std::setw(3) << nowMs.count() << "] ";
-      } else {
-        gmt_time = gmtime(&now_time);
-        std::cout << std::put_time(gmt_time, "[%Y-%m-%d %H:%M:%S") << '.'
-                  << std::setfill('0') << std::setw(3) << nowMs.count() << "] ";
-      }
-    }
+  // Return a reference to the singleton logger
+  static BaseLogger& instance() {
+    static BaseLogger logger;
+    return logger;
   }
 
-  static void printFilename(const std::string& filename) {
+  /**
+   * @brief Register a logger backend to be used for logging
+   * 
+   * @param logger Pointer to the logger backend
+   */
+  inline void registerBackend(std::unique_ptr<LoggerBackend> logger) {
+    std::scoped_lock lock(loggerMutex);
+    registeredBackends.push_back(std::move(logger));
+  }
+
+  template <typename... Args>
+  inline void debug(const std::string& filename, int line,
+                    const std::string& tag, const std::string& format,
+                    Args&&... args) {
+    return log(LogLevel::DEBUG, filename, line, tag, format,
+               std::forward<Args>(args)...);
+  }
+
+  template <typename... Args>
+  inline void error(const std::string& filename, int line,
+                    const std::string& tag, const std::string& format,
+                    Args&&... args) {
+    return log(LogLevel::ERROR, filename, line, tag, format,
+               std::forward<Args>(args)...);
+  }
+
+  template <typename... Args>
+  inline void info(const std::string& filename, int line,
+                   const std::string& tag, const std::string& format,
+                   Args&&... args) {
+    return log(LogLevel::INFO, filename, line, tag, format,
+               std::forward<Args>(args)...);
+  }
+
+  template <typename... Args>
+  inline void warn(const std::string& filename, int line,
+                   const std::string& tag, const std::string& format,
+                   Args&&... args) {
+    return log(LogLevel::WARN, filename, line, tag, format,
+               std::forward<Args>(args)...);
+  }
+
+  template <typename... Args>
+  inline void log(LogLevel level, const std::string& filename, int line,
+                  const std::string& tag, const std::string& format,
+                  Args&&... args) {
+    const std::string msg =
+        fmt::format(fmt::runtime(format), std::forward<Args>(args)...);
 #ifdef _WIN32
-    std::string basenameStr(filename.substr(filename.rfind("\\") + 1));
+    const std::string basenameStr = filename.substr(filename.rfind('\\') + 1);
 #else
-    std::string basenameStr(filename.substr(filename.rfind("/") + 1));
+    const std::string basenameStr = filename.substr(filename.rfind('/') + 1);
 #endif
-    unsigned long hash = 5381;
-    for (char const& c : basenameStr) {
-      hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
+
+    std::scoped_lock lock(loggerMutex);
+    // Log to all registered backends
+    for (auto& backend : registeredBackends) {
+      backend->log(level, basenameStr, line, tag, msg);
     }
-
-    printf("\033[0;%dm", allColors[hash % NColors]);
-
-    printf("%s", basenameStr.c_str());
-    printf(colorReset);
   }
+};
+
+/**
+ * @brief Logger backend that logs to stdout, with color coding for different log levels. Used as the default logger.
+ */
+class StdoutLoggerBackend : public bell::LoggerBackend {
+ public:
+  StdoutLoggerBackend(bool includeTags, bool logFullTimestamp);
+
+  void log(LogLevel level, const std::string& filename, int line,
+           const std::string& tag, const std::string& message) override;
 
  private:
+  bool includeTags;
+  bool logFullTimestamp;
+
   static constexpr const char* colorReset = "\033[0m";
-  static constexpr const char* colorRed = "\033[0;31m";
-  static constexpr const char* colorBlue = "\033[0;34m";
-  static constexpr const int NColors = 15;
-  static constexpr int allColors[NColors] = {31, 32, 33, 34, 35, 36, 37, 90,
-                                             91, 92, 93, 94, 95, 96, 97};
+
+  static constexpr std::array<uint8_t, 15> allColors = {
+      31, 32, 33, 34, 35, 36, 37, 90, 91, 92, 93, 94, 95, 96, 97};
 };
 
 /**
  * @brief Registers the Stdout logger
  * 
- * @param enableSubmoduleLogging whether to include the submodule part in the log
- * @param enableTimestampLogging enables the timestamp logging
- * @param localTimestampLogging whether to format the timestamp as local time since start, or full system time
+ * @param includeTags whether to include the tags as part of the log message
+ * @param logFullTimestamp whether to format the timestamp as local time since start, or full system time
  */
-void setDefaultLogger(bool enableSubmoduleLogging = true,
-                      bool enableTimestampLogging = true,
-                      bool localTimestampLogging = false);
+void registerDefaultLogger(bool includeTags = false,
+                           bool logFullTimestamp = false);
 
 /**
  * @brief Registers a logger implementation. Multiple loggers can be used at the same time.
  */
-void registerLogger(std::unique_ptr<bell::AbstractLogger> logger);
+void registerLoggerBackend(std::unique_ptr<bell::LoggerBackend> logger);
+
 }  // namespace bell
 
-#define BELL_LOG(type, ...)                                  \
-  {                                                          \
-    std::scoped_lock lock(bell::bellRegisteredLoggersMutex); \
-    for (auto& logger : bell::bellRegisteredLoggers) {       \
-      logger->type(__FILE__, __LINE__, __VA_ARGS__);         \
-    }                                                        \
-  }
+#define BELL_LOG(type, ...)                                               \
+  do {                                                                    \
+    bell::BaseLogger::instance().type(__FILE__, __LINE__, ##__VA_ARGS__); \
+  } while (0)

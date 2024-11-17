@@ -44,7 +44,7 @@ void UDPSocket::connect(const std::string& host, uint16_t port, int timeoutMs) {
   sockFd = socket(destinationAddress.family, SOCK_DGRAM, 0);
 
   if (sockFd < 0) {
-    BELL_LOG(error, LOG_TAG, "Could not create socket to %s, port %d. Error %d",
+    BELL_LOG(error, LOG_TAG, "Could not create socket to {}, port {}. Error {}",
              host.c_str(), port, errno);
     throw std::runtime_error("Sock create failed");
   }
@@ -61,7 +61,7 @@ void UDPSocket::connect(const std::string& host, uint16_t port, int timeoutMs) {
   if (err < 0 && errno != EINPROGRESS) {
     // Connection failed immediately
     close();
-    BELL_LOG(error, LOG_TAG, "Could not connect to %s, port %d. Error %d",
+    BELL_LOG(error, LOG_TAG, "Could not connect to {}, port {}. Error {}",
              host.c_str(), port, errno);
     throw std::runtime_error("Sock connect failed");
   }
@@ -77,12 +77,12 @@ void UDPSocket::connect(const std::string& host, uint16_t port, int timeoutMs) {
       // Timeout or error
       close();
       if (pollResult == 0) {
-        BELL_LOG(error, LOG_TAG, "Connection to %s timed out after %d ms.",
+        BELL_LOG(error, LOG_TAG, "Connection to {} timed out after {} ms.",
                  host.c_str(), timeoutMs);
         throw std::runtime_error("Sock connect timeout");
       }
 
-      BELL_LOG(error, LOG_TAG, "Polling error while connecting to %s. Error %d",
+      BELL_LOG(error, LOG_TAG, "Polling error while connecting to {}. Error {}",
                host.c_str(), errno);
       throw std::runtime_error("Sock connect poll failed");
     }
@@ -93,7 +93,7 @@ void UDPSocket::connect(const std::string& host, uint16_t port, int timeoutMs) {
     if (getsockopt(sockFd, SOL_SOCKET, SO_ERROR, &sockErr, &sockErrLen) < 0 ||
         sockErr != 0) {
       close();
-      BELL_LOG(error, LOG_TAG, "Connection to %s failed. Socket error %d",
+      BELL_LOG(error, LOG_TAG, "Connection to {} failed. Socket error {}",
                host.c_str(), sockErr);
       throw std::runtime_error("Sock connect failed");
     }
