@@ -1,6 +1,7 @@
 #include "BiquadTransform.h"
 
 // System includes
+#include <cmath>
 #include <mutex>
 
 using namespace bell::dsp;

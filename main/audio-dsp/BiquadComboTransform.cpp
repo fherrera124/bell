@@ -1,6 +1,7 @@
 #include "BiquadComboTransform.h"
 
 // System includes
+#include <cmath>
 #include <mutex>
 #include <optional>
 
