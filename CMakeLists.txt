@@ -20,3 +20,8 @@ add_library(bell STATIC ${BELL_SOURCES})
 
 target_link_libraries(bell PUBLIC ${BELL_LIBS})
 target_include_directories(bell PUBLIC ${BELL_INCLUDES} ${CMAKE_CURRENT_BINARY_DIR})
+
+# Set flags
+if(BELL_DISABLE_TAOJSON)
+    target_compile_definitions(bell PUBLIC BELL_DISABLE_TAOJSON)
+endif()

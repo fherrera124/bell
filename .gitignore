@@ -127,3 +127,6 @@ Temporary Items
 build/
 __history/
 *.bak
+
+# Python pycache
+__pycache__

@@ -1,3 +1,6 @@
 [submodule "external/fmt"]
 	path = external/fmt
 	url = git@github.com:fmtlib/fmt.git
+[submodule "external/taojson"]
+	path = external/taojson
+	url = git@github.com:feelfreelinux/taojson.git

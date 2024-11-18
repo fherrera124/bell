@@ -20,13 +20,7 @@ option(BELL_DISABLE_WEBSERVER "Disable the built-in Web server" OFF)
 option(BELL_DISABLE_SINKS "Disable all built-in audio sink implementations" OFF)
 option(BELL_SINK_ALSA "Enable ALSA audio sink" OFF)
 option(BELL_SINK_PORTAUDIO "Enable PortAudio sink" OFF)
-
-# cJSON wrapper
-option(BELL_ONLY_CJSON "Use only cJSON, not Nlohmann")
-set(BELL_EXTERNAL_CJSON "" CACHE STRING "External cJSON library target name, optional")
-
-# regex
-option(BELL_DISABLE_REGEX "Don't use std::regex (saves space)" OFF)
+option(BELL_DISABLE_TAOJSON "Don't include TaoJSON" OFF)
 
 message(STATUS "Bell options:")
 message(STATUS "    Disable unit tests: ${BELL_DISABLE_TESTS}")
@@ -48,8 +42,6 @@ if(NOT BELL_DISABLE_SINKS)
     message(STATUS "    - PortAudio sink: ${BELL_SINK_PORTAUDIO}")
 endif()
 
-message(STATUS "    Use cJSON only: ${BELL_ONLY_CJSON}")
-message(STATUS "    Disable Fmt: ${BELL_DISABLE_FMT}")
+message(STATUS "    Disable TaoJSON: ${BELL_DISABLE_TAOJSON}")
 message(STATUS "    Disable Mqtt: ${BELL_DISABLE_MQTT}")
-message(STATUS "    Disable Regex: ${BELL_DISABLE_REGEX}")
 message(STATUS "    Disable Web server: ${BELL_DISABLE_WEBSERVER}")
