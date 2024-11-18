@@ -37,7 +37,7 @@ DataSlots* Engine::process(const uint8_t* inputBuffer, size_t inputBufferLen,
   const auto* inputAsInt16 = reinterpret_cast<const int16_t*>(inputBuffer);
   const auto* inputAsInt32 = reinterpret_cast<const int32_t*>(inputBuffer);
 
-  int numChannels = format.getNumChannels();
+  uint8_t numChannels = format.getNumChannels();
 
   // Normalize data into floats, for processing
   for (size_t frameIdx = 0; frameIdx < innerDataSlots.numSamples; frameIdx++) {
@@ -75,31 +75,33 @@ DataSlots* Engine::process(const uint8_t* inputBuffer, size_t inputBufferLen,
   auto* outputData16 = reinterpret_cast<int16_t*>(outputBuffer);
   auto* outputData32 = reinterpret_cast<int32_t*>(outputBuffer);
 
-  // Denormalize frames back into PCM data
-  for (size_t frameIdx = 0; frameIdx < innerDataSlots.numSamples; frameIdx++) {
-    for (auto chan = 0; chan < innerDataSlots.sampleFormat.getNumChannels();
-         chan++) {
-      // Clip data
-      if (innerDataSlots.sampleSlots.at(chan)[frameIdx] > 1.0F) {
-        innerDataSlots.sampleSlots.at(chan)[frameIdx] = 1.0F;
-      }
+  // Cache common properties
+  const audio::BitWidth bitWidth = innerDataSlots.sampleFormat.getBitWidth();
+  const float clipMax = 1.0F;
 
-      switch (innerDataSlots.sampleFormat.getBitWidth()) {
-        case audio::BitWidth::BW_16:
-          outputData16[(frameIdx * numChannels) + chan] =
-              innerDataSlots.sampleSlots.at(chan)[frameIdx] *
-              std::numeric_limits<int16_t>::max();
-          break;
-        case audio::BitWidth::BW_32:
-          outputData32[(frameIdx * numChannels) + chan] =
-              innerDataSlots.sampleSlots.at(chan)[frameIdx] *
-              std::numeric_limits<int32_t>::max();
-          break;
-        default:
-          // Unsupported bit width
-          throw std::runtime_error(
-              "Unsupported bit width in the output format");
-          break;
+  // Validate bit width beforehand
+  if (bitWidth != audio::BitWidth::BW_16 &&
+      bitWidth != audio::BitWidth::BW_32) {
+    throw std::runtime_error("Unsupported bit width in the output format");
+  }
+
+  // Denormalize frames back into PCM data
+  for (size_t frameIdx = 0; frameIdx < innerDataSlots.numSamples; ++frameIdx) {
+    for (uint8_t chan = 0; chan < numChannels; ++chan) {
+      // Retrieve and clip sample
+      float sample = std::clamp(innerDataSlots.sampleSlots.at(chan)[frameIdx],
+                                -clipMax, clipMax);
+
+      // Calculate output index
+      const size_t outputIdx = (frameIdx * numChannels) + chan;
+
+      // Write data based on bit width
+      if (bitWidth == audio::BitWidth::BW_16) {
+        outputData16[outputIdx] =
+            static_cast<int16_t>(sample * std::numeric_limits<int16_t>::max());
+      } else if (bitWidth == audio::BitWidth::BW_32) {
+        outputData32[outputIdx] = static_cast<int32_t>(
+            sample * static_cast<float>(std::numeric_limits<int32_t>::max()));
       }
     }
   }

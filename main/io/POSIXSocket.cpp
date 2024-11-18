@@ -1,9 +1,9 @@
 #include "POSIXSocket.h"
 
+#include <fmt/format.h>
 #include <cerrno>
 #include "Logger.h"
 #include "SocketUtils.h"
-#include <fmt/format.h>
 
 // Platform specific socket includes
 #ifdef _WIN32

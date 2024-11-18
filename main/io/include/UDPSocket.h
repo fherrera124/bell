@@ -24,4 +24,4 @@ class UDPSocket : public POSIXSocket {
  private:
   const char* LOG_TAG = "UDPSocket";
 };
-}  // namespace bell
+}  // namespace bell::io

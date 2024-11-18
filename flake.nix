@@ -27,16 +27,14 @@
       };
 
       llvm = pkgs.llvmPackages_18;
-      clang-tools = pkgs.clang-tools.override {llvmPackages = llvm;};
-      iwyu = pkgs.include-what-you-use.override {llvmPackages = llvm;};
 
       common-pkgs = with pkgs;
             [
               catch2_3
               cmake
               ninja
-            ]
-            ++ [clang-tools llvm.clang llvm.libllvm iwyu];
+              clang-tools
+            ];
 
       apps = {
       };
@@ -49,9 +47,10 @@
           nativeBuildInputs = common-pkgs;
           enableParallelBuilding = true;
           doCheck = true;
+
           # Run the unit tests
           checkPhase = ''
-            ./test/umt-test
+            ./test/bell-test
           '';
         };
       };

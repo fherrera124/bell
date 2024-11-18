@@ -4,8 +4,8 @@
 #include <bit>  // for endian
 #endif
 
-#include <cstdint>  // for int16_t, int32_t, int64_t, uint16_t, uint32_t
 #include <cstddef>   // for byte
+#include <cstdint>   // for int16_t, int32_t, int64_t, uint16_t, uint32_t
 #include <iostream>  // for istream, ostream
 
 namespace bell::io {
