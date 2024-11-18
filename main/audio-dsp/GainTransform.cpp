@@ -1,5 +1,8 @@
 #include "GainTransform.h"
 
+// System includes
+#include <mutex>
+
 using namespace bell::dsp;
 
 void GainTransform::configure(float gainDb) {

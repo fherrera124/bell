@@ -1,5 +1,7 @@
 #include "BiquadTransform.h"
-#include "TransformPipeline.h"
+
+// System includes
+#include <mutex>
 
 using namespace bell::dsp;
 
