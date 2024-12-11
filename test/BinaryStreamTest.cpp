@@ -1,8 +1,9 @@
 #include <catch2/catch_test_macros.hpp>
-#include "BinaryStream.h"
-
 #include <sstream>         // for std::ostringstream
-#include "MemoryStream.h"  // for bell::IMemoryStream
+
+
+#include "bell/io/BinaryStream.h"
+#include "bell/io/MemoryStream.h"  // for bell::IMemoryStream
 
 TEST_CASE("BinaryStream encodes and decodes data properly", "[BinaryStream]") {
   // Static so we retain value through the test

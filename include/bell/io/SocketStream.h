@@ -5,7 +5,7 @@
 #include <memory>    // for unique_ptr, operator!=
 #include <string>    // for char_traits, string
 
-#include "Socket.h"  // for Socket
+#include "bell/io/Socket.h"  // for Socket
 
 namespace bell::io {
 class SocketBuffer : public std::streambuf {

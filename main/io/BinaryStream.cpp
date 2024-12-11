@@ -1,4 +1,4 @@
-#include <BinaryStream.h>
+#include "bell/io/BinaryStream.h"
 #include <stdexcept>  // for runtime_error
 
 using namespace bell::io;

@@ -1,7 +1,7 @@
-#include "TCPSocket.h"
+#include "bell/io/TCPSocket.h"
 
-#include "Logger.h"
-#include "SocketUtils.h"
+#include "bell/Logger.h"
+#include "bell/io/SocketUtils.h"
 
 // Platform specific socket includes
 #ifdef _WIN32

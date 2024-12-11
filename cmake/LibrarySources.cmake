@@ -7,7 +7,8 @@ endif()
 set(BELL_IO_DIR "${CMAKE_CURRENT_SOURCE_DIR}/main/io")
 set(BELL_UTILS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/main/utils")
 
-list(APPEND BELL_INCLUDES "main/utils/include" "main/io/include" "main/audio/include" "main/audio-dsp/include")
+# All includes are referenced from the root directory as "bell/"
+list(APPEND BELL_INCLUDES "include")
 
 # Main library sources
 file(GLOB BELL_SOURCES

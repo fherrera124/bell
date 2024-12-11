@@ -1,6 +1,6 @@
-#include "AudioTypes.h"
-#include "Engine.h"
-#include "Logger.h"
+#include "bell/Logger.h"
+#include "bell/audio/Types.h"
+#include "bell/dsp/Engine.h"
 
 // DSP engine
 bell::dsp::Engine dspEngine;

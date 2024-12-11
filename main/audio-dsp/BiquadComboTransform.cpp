@@ -1,4 +1,4 @@
-#include "BiquadComboTransform.h"
+#include "bell/dsp/BiquadComboTransform.h"
 
 // System includes
 #include <cmath>
@@ -6,7 +6,7 @@
 #include <optional>
 
 // Bell includes
-#include "BiquadTransform.h"
+#include "bell/dsp/BiquadTransform.h"
 
 using namespace bell::dsp;
 

@@ -2,7 +2,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <sys/socket.h>
-#include "SocketUtils.h"
+#include "bell/io/SocketUtils.h"
 
 TEST_CASE("bell::io::SocketUtils tests", "[bell::io::SocketUtils]") {
   SECTION("resolveDomain properly resolves domains") {

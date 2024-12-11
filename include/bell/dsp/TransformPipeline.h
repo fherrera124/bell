@@ -6,7 +6,7 @@
 #include <vector>
 
 // bell includes
-#include "AudioTypes.h"
+#include "bell/audio/Types.h"
 
 #ifndef BELL_DISABLE_TAOJSON
 // Used for JSON deserialization of the transforms

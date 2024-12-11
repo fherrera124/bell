@@ -4,7 +4,7 @@
         "--clang-tidy",
         "-j=8",
         "--pch-storage=memory",
-        "--query-driver=/**/bin/xtensa-esp32-elf-*"
+        // "--query-driver=/**/bin/xtensa-esp32-elf-*"
     ],
     "C_Cpp.intelliSenseEngine": "disabled",
     "editor.tabSize": 2

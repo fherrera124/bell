@@ -1,9 +1,9 @@
-#include "TransformPipeline.h"
+#include "bell/dsp/TransformPipeline.h"
 
 // Transform types
-#include "BiquadComboTransform.h"
-#include "BiquadTransform.h"
-#include "GainTransform.h"
+#include "bell/dsp/BiquadComboTransform.h"
+#include "bell/dsp/BiquadTransform.h"
+#include "bell/dsp/GainTransform.h"
 
 #ifndef BELL_DISABLE_TAOJSON
 // Used for JSON deserialization of the transforms
@@ -11,7 +11,7 @@
 #include <tao/json/contrib/traits.hpp>
 #endif
 
-#include "Logger.h"
+#include "bell/Logger.h"
 
 using namespace bell::dsp;
 

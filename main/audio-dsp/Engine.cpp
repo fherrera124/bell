@@ -1,5 +1,5 @@
-#include "Engine.h"
-#include "AudioTypes.h"
+#include "bell/dsp/Engine.h"
+#include "bell/audio/Types.h"
 
 using namespace bell::dsp;
 
