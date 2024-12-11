@@ -24,6 +24,9 @@ enum class SampleRate : uint32_t {
 // Class for the audio format of audio samples.
 class Format {
  public:
+  // Default constructor
+  Format() : ch(2), bw(BitWidth::BW_16), sr(SampleRate::SR_44100HZ) {}
+
   Format(uint8_t numChannels, BitWidth bitWidth, SampleRate sampleRate)
       : ch(numChannels), bw(bitWidth), sr(sampleRate) {}
 

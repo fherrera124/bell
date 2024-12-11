@@ -15,5 +15,5 @@ file(GLOB BELL_SOURCES
     "main/io/*.cpp" # bell::io
     "main/utils/*.cpp" # bell::utils
     "main/audio/*.cpp" # bell::audio
-    "main/audio-dsp/*.cpp" # bell::dsp
+    "main/dsp/*.cpp" # bell::dsp
 )
