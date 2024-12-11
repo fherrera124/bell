@@ -11,6 +11,7 @@ add_executable(bell-test
   main.cpp
   BinaryStreamTest.cpp
   SocketsTest.cpp
+  URIParserTest.cpp
 )
 target_compile_options(bell-test PRIVATE -Wall -Wextra -Werror)
 target_link_libraries(bell-test bell Catch2::Catch2)
