@@ -1,7 +1,7 @@
 
 #pragma once
 
-#include <stddef.h>     // for size_t
+#include <cstddef>      // for size_t
 #include <cstdint>      // for uint8_t, int32_t
 #include <memory>       // for make_unique, unique_ptr
 #include <string>       // for string
@@ -10,43 +10,31 @@
 #include <vector>       // for vector
 
 #include "SocketStream.h"  // for SocketStream
-#include "URLParser.h"     // for URLParser
-#ifndef BELL_DISABLE_FMT
-#include "fmt/core.h"  // for format
-#endif
-#include "picohttpparser.h"  // for phr_header
+#include "fmt/core.h"      // for format
+// #include "picohttpparser.h"  // for phr_header
 
-namespace bell {
+namespace bell::io {
 class HTTPClient {
  public:
   // most basic header type, represents by a key-val
-  typedef std::pair<std::string, std::string> ValueHeader;
+  using ValueHeader = std::pair<std::string, std::string>;
 
-  typedef std::vector<ValueHeader> Headers;
+  using Headers = std::vector<ValueHeader>;
 
   // Helper over ValueHeader, formatting a HTTP bytes range
   struct RangeHeader {
     static ValueHeader range(int32_t from, int32_t to) {
-#ifndef BELL_DISABLE_FMT
       return ValueHeader{"Range", fmt::format("bytes={}-{}", from, to)};
-#else
-      return ValueHeader{
-          "Range", "bytes=" + std::to_string(from) + "-" + std::to_string(to)};
-#endif
     }
 
     static ValueHeader last(int32_t nbytes) {
-#ifndef BELL_DISABLE_FMT
       return ValueHeader{"Range", fmt::format("bytes=-{}", nbytes)};
-#else
-      return ValueHeader{"Range", "bytes=-" + std::to_string(nbytes)};
-#endif
     }
   };
 
   class Response {
    public:
-    Response(){};
+    Response() = default;
     ~Response();
 
     /**
@@ -64,26 +52,22 @@ class HTTPClient {
     std::vector<uint8_t> bytes();
 
     std::string_view header(const std::string& headerName);
-    bell::SocketStream& stream() { return this->socketStream; }
-
+    bell::io::SocketStream& stream();
     size_t contentLength();
     size_t totalLength();
 
    private:
-    bell::URLParser urlParser;
-    bell::SocketStream socketStream;
+    bell::io::SocketStream socketStream;
 
-    struct phr_header phResponseHeaders[32];
     const size_t HTTP_BUF_SIZE = 1024;
 
     std::vector<uint8_t> httpBuffer = std::vector<uint8_t>(HTTP_BUF_SIZE);
     std::vector<uint8_t> rawBody = std::vector<uint8_t>();
-    size_t httpBufferAvailable;
-
+    size_t httpBufferAvailable = 0;
     size_t contentSize = 0;
     bool hasContentSize = false;
 
-    Headers responseHeaders;
+    Headers responseHeaders = {};
 
     void readResponseHeaders();
     void readRawBody();
@@ -101,7 +85,7 @@ class HTTPClient {
                                        Headers headers = {}) {
     auto response = std::make_unique<Response>();
     response->connect(url);
-    response->get(url, headers);
+    response->get(url, std::move(headers));
     return response;
   }
 
@@ -110,7 +94,7 @@ class HTTPClient {
                                         const std::vector<uint8_t>& body = {}) {
     auto response = std::make_unique<Response>();
     response->connect(url);
-    response->post(url, headers, body);
+    response->post(url, std::move(headers), body);
     return response;
   }
 };
