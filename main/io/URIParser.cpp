@@ -1,81 +1,98 @@
 #include "bell/io/URIParser.h"
 
 // System includes
-#include <sstream>
+#include <cctype>
 #include <string>
 
 using namespace bell;
 
 namespace {
 const std::string hexDigitsStr = "0123456789ABCDEF";
-};
+
+char hex2int(const char* str) {
+  unsigned char res = 0;
+  for (int i = 0; i < 2; ++i) {
+    char c = std::toupper(static_cast<unsigned char>(str[i]));
+    int v = 0;
+    if (c >= '0' && c <= '9') {
+      v = c - '0';  // Convert '0'-'9' to 0-9
+    } else if (c >= 'A' && c <= 'F') {
+      v = c - 'A' + 10;  // Convert 'A'-'F' to 10-15
+    } else {
+      // Invalid character
+      return 0;
+    }
+    res = static_cast<unsigned char>((res << 4) | v);
+  }
+  return static_cast<char>(res);
+}
+};  // namespace
 
 std::string bell::uri::encode(const std::string_view value) {
-  std::stringstream result;
+  std::string result;
+  result.reserve(value.size() * 3);
 
+  const std::string unreserved = "-_.~";
   for (char ch : value) {
-    if ((ch >= '0' && ch <= '9') || (ch >= 'A' && ch <= 'Z') ||
-        (ch >= 'a' && ch <= 'z') || ch == '-' || ch == '_' || ch == '!' ||
-        ch == '\'' || ch == '(' || ch == ')' || ch == '*' || ch == '~' ||
-        ch == '.') {
-      result.put(ch);
+    if (std::isalnum(static_cast<unsigned char>(ch)) ||
+        unreserved.find(ch) != std::string::npos) {
+      result.push_back(ch);
     } else {
-      result.put('%');
-      result.put(hexDigitsStr[ch >> 4]);
-      result.put(hexDigitsStr[ch & 0xF]);
+      unsigned char uch = static_cast<unsigned char>(ch);
+      result.push_back('%');
+      result.push_back(hexDigitsStr[uch >> 4]);
+      result.push_back(hexDigitsStr[uch & 0xF]);
     }
   }
-  return result.str();
+  return result;
 }
 
 std::string bell::uri::decode(const std::string_view value) {
-  std::stringstream result;
-
+  std::string result;
+  result.reserve(value.size());
   for (std::size_t i = 0; i < value.size(); ++i) {
     char ch = value[i];
-    if (ch == '%' && i + 2 < value.size()) {
-      std::string_view hex = value.substr(i + 1, 2);
-      char dec = static_cast<char>(std::strtol(hex.data(), nullptr, 16));
-      result.put(dec);
+    if (ch == '%' && i + 2 < value.size() && std::isxdigit(value[i + 1]) &&
+        std::isxdigit(value[i + 2])) {
+      char dec = hex2int(value.substr(i + 1).data());
+      result.push_back(dec);
       i += 2;
-    } else if (ch == '+') {
-      result.put(' ');
     } else {
-      result.put(ch);
+      result.push_back(ch);
     }
   }
-  return result.str();
+  return result;
 }
 
 std::optional<bell::uri::ParsedURI> bell::uri::parse(std::string_view uri) {
   bell::uri::ParsedURI result;
 
   // Parse the scheme
-  auto scheme_end = uri.find("://");
-  if (scheme_end == std::string_view::npos || scheme_end == 0) {
+  auto schemeEnd = uri.find("://");
+  if (schemeEnd == std::string_view::npos || schemeEnd == 0) {
     return std::nullopt;  // No scheme found or scheme is empty
   }
 
-  result.scheme = std::string(uri.substr(0, scheme_end));
-  uri.remove_prefix(scheme_end + 3);
+  result.scheme = std::string(uri.substr(0, schemeEnd));
+  uri.remove_prefix(schemeEnd + 3);
 
   // Parse the authority part (host and port)
-  auto authority_end = uri.find_first_of("/?");
-  if (authority_end == std::string_view::npos)
-    authority_end = uri.length();  // End of string, if no path/query present
+  auto authorityEnd = uri.find_first_of("/?");
+  if (authorityEnd == std::string_view::npos)
+    authorityEnd = uri.length();  // End of string, if no path/query present
 
-  auto authority = uri.substr(0, authority_end);
+  auto authority = uri.substr(0, authorityEnd);
 
-  auto colon_pos = authority.find(':');
-  if (colon_pos != std::string_view::npos) {
+  auto colonPos = authority.find(':');
+  if (colonPos != std::string_view::npos) {
     // Host is mandatory, port is optional
-    if (colon_pos == 0 || colon_pos == authority.length() - 1) {
+    if (colonPos == 0 || colonPos == authority.length() - 1) {
       return std::nullopt;  // Malformed authority
     }
-    result.host = std::string(authority.substr(0, colon_pos));
+    result.host = std::string(authority.substr(0, colonPos));
 
     try {
-      result.port = std::stoi(std::string(authority.substr(colon_pos + 1)));
+      result.port = std::stoi(std::string(authority.substr(colonPos + 1)));
     } catch (const std::exception&) {
       return std::nullopt;  // Invalid port
     }
@@ -86,13 +103,13 @@ std::optional<bell::uri::ParsedURI> bell::uri::parse(std::string_view uri) {
     result.host = std::string(authority);
   }
 
-  uri.remove_prefix(authority_end);
+  uri.remove_prefix(authorityEnd);
 
   // Parse the path
   if (!uri.empty() && uri.front() == '/') {
-    auto path_end = uri.find('?');
-    result.path = std::string(uri.substr(0, path_end));
-    uri.remove_prefix(path_end);
+    auto pathEnd = uri.find('?');
+    result.path = std::string(uri.substr(0, pathEnd));
+    uri.remove_prefix(pathEnd);
   } else {
     result.path = "/";  // Default path if none specified
   }
