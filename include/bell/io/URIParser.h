@@ -20,7 +20,7 @@ std::string encode(std::string_view value);
 std::string decode(std::string_view value);
 
 // Struct to hold the parsed URL components
-struct ParsedURI {
+struct URI {
   std::optional<std::string> scheme;  // (http, https, etc.)
   std::optional<std::string> host;    // Hostname or IP address
   std::optional<int> port;            // Port number
@@ -34,6 +34,6 @@ struct ParsedURI {
  * @param uri The URI to parse
  * @return std::optional<ParsedURI> The parsed URI components, or std::nullopt if parsing failed
  */
-std::optional<ParsedURI> parse(std::string_view uri);
+std::optional<URI> parse(std::string_view uri);
 
-}  // namespace bell::url
+}  // namespace bell::uri

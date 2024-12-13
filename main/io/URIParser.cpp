@@ -64,8 +64,8 @@ std::string bell::uri::decode(const std::string_view value) {
   return result;
 }
 
-std::optional<bell::uri::ParsedURI> bell::uri::parse(std::string_view uri) {
-  bell::uri::ParsedURI result;
+std::optional<bell::uri::URI> bell::uri::parse(std::string_view uri) {
+  bell::uri::URI result;
 
   // Parse the scheme
   auto schemeEnd = uri.find("://");
