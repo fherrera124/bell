@@ -35,7 +35,11 @@ ValueHeader rangeHeader(std::optional<int32_t> start,
 class Response {
  public:
   explicit Response(std::unique_ptr<bell::io::SocketStream> socketStream)
-      : socketStream(std::move(socketStream)) {}
+      : socketStream(std::move(socketStream)) {
+    // Reserve the response buffer
+    this->responseBuffer.reserve(reservedResponseBufferLen);
+  }
+
   ~Response();
 
   void readHeaders();
@@ -61,11 +65,19 @@ class Response {
  private:
   std::unique_ptr<bell::io::SocketStream> socketStream;
   bool isValid = true;
+
+  // Amount of bytes to reserve for the HTTP response
+  const static size_t reservedResponseBufferLen = 2048;
+
+  // Used as a buffer when the response buffer is not provided from
+  std::vector<std::byte> responseBuffer;
 };
 
 class Connection {
  public:
-  explicit Connection(const std::string& url, int timeoutMs = 0);
+  explicit Connection(const std::string& url, int timeoutMs = 0,
+                      std::byte* responseBuffer = nullptr,
+                      size_t responseBufferSize = 0);
   ~Connection();
 
   void sendRequest(const std::string& method, const Headers& extraHeaders,
