@@ -22,6 +22,9 @@ using ValueHeader = std::pair<std::string, std::string>;
 // Type definition for a list of HTTP headers
 using Headers = std::vector<ValueHeader>;
 
+// Default timeout for HTTP operations, in milliseconds
+const int httpOperationTimeout = 1000;
+
 /**
  * @brief Constructs a HTTP Range header with the given range.
  * 
@@ -38,21 +41,73 @@ class Response {
       : socketStream(std::move(socketStream)) {
     // Reserve the response buffer
     this->responseBuffer.reserve(reservedResponseBufferLen);
+
+    // Read the headers
+    readHeaders();
   }
 
   ~Response();
 
-  void readHeaders();
+  /**
+   * @brief Get all headers from the response
+   * @remark This method will return a copy of all the headers in the response. Calling getHeader() is more efficient if you only need a single header.
+   * 
+   * @return Headers List of all headers in the response
+   */
+  Headers getAllHeaders() const;
 
-  void readBody();
+  /**
+   * @brief Return the value of the header with the given name
+   * 
+   * @param headerName Name of the header to get, case-insensitive
+   * @return std::string_view Value of the header, or an empty string_view if the header is not found
+   */
+  std::string_view getHeader(const std::string& headerName) const;
 
-  Headers getAllHeaders();
+  /**
+   * @brief Returns the content length of the response, as specified in the Content-Length header
+   * 
+   * @return size_t Content length of the response, or 0 if the header is not present
+   */
+  size_t getContentLength() const;
 
-  std::string_view getHeader(const std::string& headerName);
+  /**
+   * @brief Returns the status code of the response
+   * 
+   * @return int Status code of the response, or 0 if the status code is not available
+   */
+  int getStatusCode() const;
 
-  size_t getContentLength();
+  /**
+   * @brief Returns the body of the response as a string_view
+   * @remark This method will read the body from the socket stream if it has not been read yet. 
+   *
+   * @return std::string_view
+   */
+  std::string_view getBodyStringView();
 
-  int getStatusCode();
+  /**
+   * @brief Returns the body of the response as a vector of bytes
+   * @remark This method will read the body from the socket stream if it has not been read yet.
+   * 
+   * @return std::vector<std::byte> Vector of bytes representing the body
+   */
+  std::vector<std::byte> getBodyBytes();
+
+  /**
+   * @brief Returns a pointer to the body of the response. The length of the body can be obtained using getBodyBytesLength().
+   * @remark This method will read the body from the socket stream if it has not been read yet.
+   * 
+   * @return const char* Pointer to the body of the response
+   */
+  const char* getBodyBytesPtr();
+
+  /**
+   * @brief Returns the amount of bytes stored in the body buffer, which can be obtained using getBodyBytesPtr().
+   * 
+   * @return size_t Amount of bytes stored in the body buffer, or 0 if the body has not been read yet
+   */
+  size_t getBodyBytesLength();
 
   /**
    * @brief Returns the underlying socket stream, which can be used to read the response body directly.
@@ -66,25 +121,61 @@ class Response {
   std::unique_ptr<bell::io::SocketStream> socketStream;
   bool isValid = true;
 
+  // picohttpparser headers
+  std::vector<phr_header> phResponseHeaders;
+
   // Amount of bytes to reserve for the HTTP response
   const static size_t reservedResponseBufferLen = 2048;
 
   // Used as a buffer when the response buffer is not provided from
-  std::vector<std::byte> responseBuffer;
+  std::vector<char> responseBuffer;
+
+  // Response status code
+  int statusCode = 0;
+
+  // Cached content length
+  size_t contentLength = 0;
+
+  // Actual amount of bytes read
+  size_t readContentLength = 0;
+
+  // Reads the headers from the socket stream
+  void readHeaders();
+
+  // Reads the body from the socket stream
+  void readBody();
 };
 
 class Connection {
  public:
-  explicit Connection(const std::string& url, int timeoutMs = 0,
-                      std::byte* responseBuffer = nullptr,
-                      size_t responseBufferSize = 0);
+  explicit Connection(const std::string& url,
+                      int timeoutMs = httpOperationTimeout);
   ~Connection();
 
+  /**
+   * @brief Sends a HTTP request to the server, with the given method and headers.
+   * 
+   * @param method HTTP method to use, e.g. "GET" or "POST"
+   * @param extraHeaders Additional headers to include in the request
+   * @param expectedContentLength Expected content length in bytes, or 0 if the request does not have a body. This is used to set the Content-Length header, if present.
+   */
   void sendRequest(const std::string& method, const Headers& extraHeaders,
                    size_t expectedContentLength);
 
+  /**
+   * @brief Sends the full body of the request to the server. Call this method after sendRequest() if the request has a body.
+   * 
+   * @param body Pointer to the body of the request
+   * @param length Length of the body in bytes
+   */
   void sendFullBody(const std::byte* body, size_t length);
 
+  /**
+   * @brief Returns the response object.This method should be called after sendRequest() and sendFullBody().
+   * @remark This method will return a unique pointer to the response object, transferring ownership to the caller.
+   *
+   * @return std::unique_ptr<Response> Pointer to the response object
+   */
   std::unique_ptr<Response> getResponse();
 
   // Other connection-related methods
@@ -104,88 +195,59 @@ class Connection {
   // Default user agent
   std::string userAgent = "bell/0.1";
 };
-// class HTTPClient {
-//  public:
-//   // most basic header type, represents by a key-val
-//   using ValueHeader = std::pair<std::string, std::string>;
 
-//   using Headers = std::vector<ValueHeader>;
+/**
+ * @brief Makes a GET request to the given URL.
+ * 
+ * @param url URL to make the request to
+ * @param headers Headers to include in the request
+ * @param timeoutMs Timeout in milliseconds
+ *
+ * @return std::unique_ptr<Response> Pointer to the response object
+ */
+inline std::unique_ptr<Response> get(const std::string& url,
+                                     const Headers& headers = {},
+                                     int timeoutMs = httpOperationTimeout) {
+  auto connection = std::make_unique<Connection>(url, timeoutMs);
+  connection->sendRequest("GET", headers, 0);
+  return connection->getResponse();
+}
 
-//   // Helper over ValueHeader, formatting a HTTP bytes range
-//   struct RangeHeader {
-//     static ValueHeader range(int32_t from, int32_t to) {
-//       return ValueHeader{"Range", fmt::format("bytes={}-{}", from, to)};
-//     }
+/**
+ * @brief Makes a POST request to the given URL.
+ * 
+ * @param url URL to make the request to
+ * @param headers Headers to include in the request
+ * @param body Body to include in the request, passed as a pointer to a byte array
+ * @param length Length of the body
+ * @param timeoutMs Timeout in milliseconds
+ *
+ * @return std::unique_ptr<Response> Pointer to the response object 
+ */
+inline std::unique_ptr<Response> postRawPtr(
+    const std::string& url, Headers headers = {},
+    const std::byte* body = nullptr, size_t length = 0,
+    int timeoutMs = httpOperationTimeout) {
+  auto connection = std::make_unique<Connection>(url, timeoutMs);
+  connection->sendRequest("POST", headers, length);
+  connection->sendFullBody(body, length);
+  return connection->getResponse();
+}
 
-//     static ValueHeader last(int32_t nbytes) {
-//       return ValueHeader{"Range", fmt::format("bytes=-{}", nbytes)};
-//     }
-//   };
-
-//   class Response {
-//    public:
-//     Response() = default;
-//     ~Response();
-
-//     /**
-//     * Initializes a connection with a given url.
-//     */
-//     void connect(const std::string& url);
-
-//     void rawRequest(const std::string& method, const std::string& url,
-//                     const std::vector<uint8_t>& content, Headers& headers);
-//     void get(const std::string& url, Headers headers = {});
-//     void post(const std::string& url, Headers headers = {},
-//               const std::vector<uint8_t>& body = {});
-
-//     std::string_view body();
-//     std::vector<uint8_t> bytes();
-
-//     std::string_view header(const std::string& headerName);
-//     bell::io::SocketStream& stream();
-//     size_t contentLength();
-//     size_t totalLength();
-
-//    private:
-//     bell::io::SocketStream socketStream;
-
-//     const size_t HTTP_BUF_SIZE = 1024;
-
-//     std::vector<uint8_t> httpBuffer = std::vector<uint8_t>(HTTP_BUF_SIZE);
-//     std::vector<uint8_t> rawBody = std::vector<uint8_t>();
-//     size_t httpBufferAvailable = 0;
-//     size_t contentSize = 0;
-//     bool hasContentSize = false;
-
-//     Headers responseHeaders = {};
-
-//     void readResponseHeaders();
-//     void readRawBody();
-//   };
-
-//   enum class Method : uint8_t { GET = 0, POST = 1 };
-
-//   struct Request {
-//     std::string url;
-//     Method method;
-//     Headers headers;
-//   };
-
-//   static std::unique_ptr<Response> get(const std::string& url,
-//                                        Headers headers = {}) {
-//     auto response = std::make_unique<Response>();
-//     response->connect(url);
-//     response->get(url, std::move(headers));
-//     return response;
-//   }
-
-//   static std::unique_ptr<Response> post(const std::string& url,
-//                                         Headers headers = {},
-//                                         const std::vector<uint8_t>& body = {}) {
-//     auto response = std::make_unique<Response>();
-//     response->connect(url);
-//     response->post(url, std::move(headers), body);
-//     return response;
-//   }
-// };
+/**
+ * @brief Makes a GET request to the given URL.
+ * 
+ * @param url URL to make the request to
+ * @param headers Headers to include in the request
+ * @param body Body to include in the request, passed as a vector of bytes
+ * @param timeoutMs Timeout in milliseconds
+ *
+ * @return std::unique_ptr<Response> Pointer to the response object
+ */
+inline std::unique_ptr<Response> post(const std::string& url,
+                                      const Headers& headers = {},
+                                      const std::vector<std::byte>& body = {},
+                                      int timeoutMs = httpOperationTimeout) {
+  return postRawPtr(url, headers, body.data(), body.size(), timeoutMs);
+}
 }  // namespace bell::http
