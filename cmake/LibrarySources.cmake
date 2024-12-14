@@ -17,3 +17,9 @@ file(GLOB BELL_SOURCES
     "main/audio/*.cpp" # bell::audio
     "main/dsp/*.cpp" # bell::dsp
 )
+
+# Add platform-specific sources
+if(APPLE)
+    file(GLOB BELL_SOURCES_APPLE "main/platform/apple/*.cpp")
+    list(APPEND BELL_SOURCES ${BELL_SOURCES_APPLE})
+endif()
