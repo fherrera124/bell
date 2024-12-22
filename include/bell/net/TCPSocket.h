@@ -1,8 +1,8 @@
 #pragma once
 
-#include "bell/io/POSIXSocket.h"
+#include "bell/net/POSIXSocket.h"
 
-namespace bell::io {
+namespace bell::net {
 /**
  * @brief TCP implementation of the bell::Socket
  */
@@ -19,4 +19,4 @@ class TCPSocket : public POSIXSocket {
  private:
   const char* LOG_TAG = "TCPSocket";
 };
-}  // namespace bell::io
+}  // namespace bell::net

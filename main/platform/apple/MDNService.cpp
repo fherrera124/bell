@@ -1,6 +1,7 @@
 #include "bell/mdns/Service.h"
 
 // System includes
+#include <string>
 #include <utility>
 
 // Library includes

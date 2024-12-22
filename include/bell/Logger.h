@@ -1,6 +1,7 @@
 #pragma once
 
 // System includes
+#include <array>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -23,7 +24,7 @@ class LoggerBackend {
 
   /**
    * @brief Implement this function to log a message to the underlying logger
-   * 
+   *
    * @param level log level
    * @param filename Filename of the caller, cleaned up to only include the basename
    * @param line Line number of the caller
@@ -54,7 +55,7 @@ class BaseLogger {
 
   /**
    * @brief Register a logger backend to be used for logging
-   * 
+   *
    * @param logger Pointer to the logger backend
    */
   inline void registerBackend(std::unique_ptr<LoggerBackend> logger) {
@@ -136,7 +137,7 @@ class StdoutLoggerBackend : public bell::LoggerBackend {
 
 /**
  * @brief Registers the Stdout logger
- * 
+ *
  * @param includeTags whether to include the tags as part of the log message
  * @param logFullTimestamp whether to format the timestamp as local time since start, or full system time
  */

@@ -1,10 +1,10 @@
-#include "bell/io/SocketStream.h"
+#include "bell/net/SocketStream.h"
 
 #include <cstdint>  // for uint8_t
 #include <cstdio>   // for NULL, ssize_t
 #include <memory>
 
-using namespace bell::io;
+using namespace bell::net;
 
 int SocketBuffer::open(std::unique_ptr<Socket> socket, int operationTimeoutMs) {
   if (internalSocket != nullptr) {

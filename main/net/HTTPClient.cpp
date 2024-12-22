@@ -1,4 +1,4 @@
-#include "bell/io/HTTPClient.h"
+#include "bell/net/HTTPClient.h"
 
 // System includes
 #include <ios>
@@ -7,16 +7,16 @@
 #include "picohttpparser.h"
 
 // Own includes
-#include "bell/io/TCPSocket.h"
-#include "bell/io/URIParser.h"
+#include "bell/net/TCPSocket.h"
+#include "bell/net/URIParser.h"
 
-using namespace bell;
+using namespace bell::net;
 namespace {
 // HTTP newline
 const char* requestNewLine = "\r\n";
 }  // namespace
 
-void http::Response::readHeaders() {
+void HTTPResponse::readHeaders() {
   if (!isValid || socketStream == nullptr) {
     throw std::runtime_error("Response is not valid");
   }
@@ -63,7 +63,7 @@ void http::Response::readHeaders() {
   }
 }
 
-void http::Response::readBody() {
+void HTTPResponse::readBody() {
   if (!isValid || socketStream == nullptr) {
     throw std::runtime_error("Response is not valid");
   }
@@ -90,26 +90,26 @@ void http::Response::readBody() {
   readContentLength += socketStream->gcount();
 }
 
-size_t http::Response::getContentLength() const {
+size_t HTTPResponse::getContentLength() const {
   return contentLength;
 }
 
-int http::Response::getStatusCode() const {
+int HTTPResponse::getStatusCode() const {
   return statusCode;
 }
 
-http::Response::~Response() {
+HTTPResponse::~HTTPResponse() {
   if (socketStream != nullptr) {
     socketStream->close();
   }
 }
 
-std::unique_ptr<io::SocketStream> http::Response::getStream() {
+std::unique_ptr<SocketStream> HTTPResponse::getStream() {
   isValid = false;  // Invalidate the response object
   return std::move(socketStream);
 }
 
-std::string_view http::Response::getBodyStringView() {
+std::string_view HTTPResponse::getBodyStringView() {
   if (readContentLength == 0) {
     readBody();
   }
@@ -118,7 +118,7 @@ std::string_view http::Response::getBodyStringView() {
           readContentLength};
 }
 
-std::vector<std::byte> http::Response::getBodyBytes() {
+std::vector<std::byte> HTTPResponse::getBodyBytes() {
   if (readContentLength == 0) {
     readBody();
   }
@@ -131,7 +131,7 @@ std::vector<std::byte> http::Response::getBodyBytes() {
   };
 }
 
-const char* http::Response::getBodyBytesPtr() {
+const char* HTTPResponse::getBodyBytesPtr() {
   if (readContentLength == 0) {
     readBody();
   }
@@ -139,7 +139,7 @@ const char* http::Response::getBodyBytesPtr() {
   return responseBuffer.data() + responseBuffer.size() - readContentLength;
 }
 
-size_t http::Response::getBodyBytesLength() {
+size_t HTTPResponse::getBodyBytesLength() {
   if (readContentLength == 0) {
     readBody();
   }
@@ -147,8 +147,7 @@ size_t http::Response::getBodyBytesLength() {
   return readContentLength;
 }
 
-std::string_view http::Response::getHeader(
-    const std::string& headerName) const {
+std::string_view HTTPResponse::getHeader(const std::string& headerName) const {
   for (const auto& header : phResponseHeaders) {
     if (header.name_len == headerName.size() &&
         std::equal(headerName.begin(), headerName.end(), header.name,
@@ -163,8 +162,8 @@ std::string_view http::Response::getHeader(
   return {};
 }
 
-http::Headers http::Response::getAllHeaders() const {
-  Headers headers;
+HTTPHeaders HTTPResponse::getAllHeaders() const {
+  HTTPHeaders headers;
   for (const auto& header : phResponseHeaders) {
     headers.emplace_back(std::string(header.name, header.name_len),
                          std::string(header.value, header.value_len));
@@ -172,8 +171,8 @@ http::Headers http::Response::getAllHeaders() const {
   return headers;
 }
 
-http::ValueHeader http::rangeHeader(std::optional<int32_t> start,
-                                    std::optional<int32_t> end) {
+HTTPValueHeader httpRangeHeader(std::optional<int32_t> start,
+                                std::optional<int32_t> end) {
   std::string header = "bytes=";
   if (start.has_value()) {
     header += std::to_string(start.value());
@@ -185,15 +184,15 @@ http::ValueHeader http::rangeHeader(std::optional<int32_t> start,
   return std::make_pair("Range", header);
 }
 
-http::Connection::~Connection() {
+HTTPConnection::~HTTPConnection() {
   if (socketStream != nullptr) {
     socketStream->close();
   }
 }
 
-http::Connection::Connection(const std::string& url, int timeoutMs) {
+HTTPConnection::HTTPConnection(const std::string& url, int timeoutMs) {
   // Try to parse the URL
-  auto parsedUri = uri::parse(url);
+  auto parsedUri = parseURI(url);
   if (!parsedUri.has_value()) {
     throw std::runtime_error("Invalid URL");
   }
@@ -203,18 +202,17 @@ http::Connection::Connection(const std::string& url, int timeoutMs) {
 
   // Create a socket to the host
   // TODO: Add TLS support here
-  auto socket = std::make_unique<io::TCPSocket>();
+  auto socket = std::make_unique<TCPSocket>();
   socket->connect(parsedUri->host.value(), parsedUri->port.value_or(80),
                   timeoutMs);
 
   // Wrap the socket in a socket stream
-  socketStream =
-      std::make_unique<io::SocketStream>(std::move(socket), timeoutMs);
+  socketStream = std::make_unique<SocketStream>(std::move(socket), timeoutMs);
 }
 
-void http::Connection::sendRequest(const std::string& method,
-                                   const Headers& extraHeaders,
-                                   size_t expectedContentLength) {
+void HTTPConnection::sendRequest(const std::string& method,
+                                 const HTTPHeaders& extraHeaders,
+                                 size_t expectedContentLength) {
 
   if (requestSent) {
     throw std::runtime_error("Request already sent");
@@ -263,7 +261,7 @@ void http::Connection::sendRequest(const std::string& method,
   // The request is now sent. If the request has a body, it should immediately be sent after this.
 }
 
-void http::Connection::sendFullBody(const std::byte* body, size_t length) {
+void HTTPConnection::sendFullBody(const std::byte* body, size_t length) {
   if (!requestSent) {
     throw std::runtime_error("Request not sent yet");
   }
@@ -279,7 +277,7 @@ void http::Connection::sendFullBody(const std::byte* body, size_t length) {
   socketStream->flush();
 }
 
-std::unique_ptr<http::Response> http::Connection::getResponse() {
+std::unique_ptr<HTTPResponse> HTTPConnection::getResponse() {
   if (!requestSent) {
     throw std::runtime_error("Request not sent yet");
   }
@@ -289,5 +287,5 @@ std::unique_ptr<http::Response> http::Connection::getResponse() {
   }
 
   // Read the response
-  return std::make_unique<Response>(std::move(socketStream));
+  return std::make_unique<HTTPResponse>(std::move(socketStream));
 }

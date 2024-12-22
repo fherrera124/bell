@@ -1,10 +1,10 @@
-#include "bell/io/URIParser.h"
+#include "bell/net/URIParser.h"
 
 // System includes
 #include <cctype>
 #include <string>
 
-using namespace bell;
+using namespace bell::net;
 
 namespace {
 const std::string hexDigitsStr = "0123456789ABCDEF";
@@ -28,7 +28,7 @@ char hex2int(const char* str) {
 }
 };  // namespace
 
-std::string bell::uri::encode(const std::string_view value) {
+std::string bell::net::encodeURLEncoded(const std::string_view value) {
   std::string result;
   result.reserve(value.size() * 3);
 
@@ -47,7 +47,7 @@ std::string bell::uri::encode(const std::string_view value) {
   return result;
 }
 
-std::string bell::uri::decode(const std::string_view value) {
+std::string bell::net::decodeURLEncoded(const std::string_view value) {
   std::string result;
   result.reserve(value.size());
   for (std::size_t i = 0; i < value.size(); ++i) {
@@ -64,8 +64,8 @@ std::string bell::uri::decode(const std::string_view value) {
   return result;
 }
 
-std::optional<bell::uri::URI> bell::uri::parse(std::string_view uri) {
-  bell::uri::URI result;
+std::optional<bell::net::URI> bell::net::parseURI(std::string_view uri) {
+  bell::net::URI result;
 
   // Parse the scheme
   auto schemeEnd = uri.find("://");

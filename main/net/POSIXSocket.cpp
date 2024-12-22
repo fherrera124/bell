@@ -1,10 +1,10 @@
-#include "bell/io/POSIXSocket.h"
+#include "bell/net/POSIXSocket.h"
 
 #include <fmt/format.h>
 #include <cerrno>
 
 #include "bell/Logger.h"
-#include "bell/io/SocketUtils.h"
+#include "bell/net/IpAddress.h"
 
 // Platform specific socket includes
 #ifdef _WIN32
@@ -27,7 +27,7 @@
 #include <fcntl.h>
 #include <poll.h>
 
-using namespace bell::io;
+using namespace bell::net;
 
 void POSIXSocket::setBlocking(bool blocking) {
   isBlocking = blocking;
@@ -153,18 +153,17 @@ void POSIXSocket::bind(const std::string& address, uint16_t port) {
     close();
   }
 
-  SocketUtils::ResolvedAddress resolved =
-      SocketUtils::resolveDomain(address, SOCK_STREAM);
+  IpAddress resolved = IpAddress::resolveDomain(address, SOCK_STREAM);
   resolved.setPort(port);
 
-  sockFd = socket(resolved.family, SOCK_STREAM, IPPROTO_IP);
+  sockFd = socket(resolved.getFamily(), SOCK_STREAM, IPPROTO_IP);
   if (sockFd < 0) {
     throw std::runtime_error("Could not create socket " +
                              std::string(strerror(errno)));
   }
 
-  if (::bind(sockFd, reinterpret_cast<struct sockaddr*>(&resolved.addr),
-             resolved.addrLen) != 0) {
+  if (::bind(sockFd, resolved.getSockAddrPtr(), resolved.getSockAddrLen()) !=
+      0) {
     throw std::runtime_error(fmt::format("Bind failed: {}", strerror(errno)));
   }
 

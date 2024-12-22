@@ -5,15 +5,15 @@
 #include <memory>    // for unique_ptr, operator!=
 #include <string>    // for char_traits, string
 
-#include "bell/io/Socket.h"  // for Socket
+#include "bell/net/Socket.h"  // for Socket
 
-namespace bell::io {
+namespace bell::net {
 class SocketBuffer : public std::streambuf {
  private:
   std::unique_ptr<Socket> internalSocket;
 
   // Timeout for socket operations in milliseconds, 0 means that the socket is blocking
-  int operationTimeoutMs;
+  int operationTimeoutMs = 0;
 
   static const int bufLen = 1024;
   std::array<char, bufLen> ibuf{};
@@ -38,7 +38,7 @@ class SocketBuffer : public std::streambuf {
     return internalSocket != nullptr && internalSocket->isOpen();
   }
 
-  ~SocketBuffer() { close(); }
+  ~SocketBuffer() override { close(); }
 
  protected:
   int sync() override;
@@ -77,4 +77,4 @@ class SocketStream : public std::iostream {
 
   bool isOpen() { return socketBuf.isOpen(); }
 };
-}  // namespace bell::io
+}  // namespace bell::net

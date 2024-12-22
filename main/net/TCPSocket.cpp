@@ -1,7 +1,7 @@
-#include "bell/io/TCPSocket.h"
+#include "bell/net/TCPSocket.h"
 
 #include "bell/Logger.h"
-#include "bell/io/SocketUtils.h"
+#include "bell/net/IpAddress.h"
 
 // Platform specific socket includes
 #ifdef _WIN32
@@ -24,7 +24,7 @@
 #include <fcntl.h>
 #include <poll.h>
 
-using namespace bell::io;
+using namespace bell::net;
 
 TCPSocket::~TCPSocket() {
   close();
@@ -38,10 +38,10 @@ void TCPSocket::connect(const std::string& host, uint16_t port, int timeoutMs) {
     close();
   }
 
-  destinationAddress = SocketUtils::resolveDomain(host, SOCK_STREAM);
+  destinationAddress = IpAddress::resolveDomain(host, SOCK_STREAM);
   destinationAddress.setPort(port);
 
-  sockFd = socket(destinationAddress.family, SOCK_STREAM, IPPROTO_IP);
+  sockFd = socket(destinationAddress.getFamily(), SOCK_STREAM, IPPROTO_IP);
 
   if (sockFd < 0) {
     BELL_LOG(error, LOG_TAG, "Could not create socket to {}, port {}. Error {}",
@@ -54,9 +54,8 @@ void TCPSocket::connect(const std::string& host, uint16_t port, int timeoutMs) {
   // Required for the connect call
   setBlocking(false);
 
-  err = ::connect(sockFd,
-                  reinterpret_cast<struct sockaddr*>(&destinationAddress.addr),
-                  destinationAddress.addrLen);
+  err = ::connect(sockFd, destinationAddress.getSockAddrPtr(),
+                  destinationAddress.getSockAddrLen());
 
   if (err < 0 && errno != EINPROGRESS) {
     // Connection failed immediately

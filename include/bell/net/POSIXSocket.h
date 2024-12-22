@@ -1,17 +1,15 @@
 #pragma once
 
-#include "bell/io/Socket.h"
-#include "bell/io/SocketUtils.h"
+#include "bell/net/IpAddress.h"
+#include "bell/net/Socket.h"
 
-namespace bell::io {
+namespace bell::net {
 /**
  * @brief Common socket implementation for UDP and TCP sockets, later extended by specific implementations.
  */
 class POSIXSocket : public Socket {
  public:
   POSIXSocket() = default;  ///< Default constructor.
-  virtual ~POSIXSocket() =
-      default;  ///< Virtual destructor for proper cleanup in derived classes.
 
   // Socket interface overrides
   void wrapFd(int fd) override;
@@ -44,6 +42,6 @@ class POSIXSocket : public Socket {
   bool isListening = false;
 
   // Destination address, as resolved by the connect method
-  SocketUtils::ResolvedAddress destinationAddress;
+  IpAddress destinationAddress;
 };
-}  // namespace bell::io
+}  // namespace bell::net

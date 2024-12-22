@@ -1,10 +1,10 @@
 #pragma once
 
-#include "bell/io/POSIXSocket.h"
+#include "bell/net/POSIXSocket.h"
 
-namespace bell::io {
+namespace bell::net {
 /**
- * @brief UDP implementation of the bell::Socket
+ * @brief UDP implementation of the net::Socket
  */
 class UDPSocket : public POSIXSocket {
  public:
@@ -24,4 +24,4 @@ class UDPSocket : public POSIXSocket {
  private:
   const char* LOG_TAG = "UDPSocket";
 };
-}  // namespace bell::io
+}  // namespace bell::net
