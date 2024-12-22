@@ -2,6 +2,7 @@
 
 // System includes
 #include <array>
+#include <mutex>
 #include <unordered_map>
 #include <vector>
 

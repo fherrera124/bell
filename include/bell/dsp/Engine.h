@@ -2,6 +2,7 @@
 
 // System includes
 #include <memory>
+#include <mutex>
 
 // Library includes
 #include "TransformPipeline.h"
@@ -14,14 +15,14 @@ class Engine {
 
   /**
    * @brief Set the pipeline to be used for processing audio samples. If a pipeline is already set, it will be replaced.
-   * 
+   *
    * @param pipeline Pointer to the pipeline to use
    */
   void applyPipeline(const std::shared_ptr<TransformPipeline>& pipeline);
 
   /**
    * @brief Process audio samples using the pipeline set by applyPipeline.
-   * 
+   *
    * @param inputBuffer Pointer to the input audio samples, in the format specified by format
    * @param inputBufferLen Length of the input buffer
    * @param outputBuffer Pointer to the output buffer, where the processed audio samples will be written. Must be large enough to hold the processed samples,
