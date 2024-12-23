@@ -75,13 +75,13 @@ const char* dnsSdErrorToString(DNSServiceErrorType errorCode) {
 class implMDNSBrowser : public mdns::Browser {
  public:
   implMDNSBrowser(const std::string& regType, const std::string& regDomain,
-                  int interfaceIndex, const DiscoveryEventCallback& onEvent,
+                  int interfaceIndex, DiscoveryEventCallback onEvent,
                   bool autoResolveService = true,
                   bool autoResolveAddresses = true, bool resolveIpv6 = true)
       : autoResolveService(autoResolveService),
         autoResolveAddresses(autoResolveAddresses),
         resolveIpv6(resolveIpv6),
-        onEvent(onEvent) {
+        onEvent(std::move(onEvent)) {
     // Create the service reference
     DNSServiceErrorType err = DNSServiceCreateConnection(&rootRef);
     if (err != kDNSServiceErr_NoError) {
