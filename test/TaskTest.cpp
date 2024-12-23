@@ -28,8 +28,8 @@ TEST_CASE("bell::utils::Task tests", "[bell::utils::Task]") {
     // Allow some time for the task to run
     bell::utils::sleepMs(100);
 
-    // Checking if taskLoop was called at least once
-    CHECK(task.getLoopCounter() > 0);
+    // Called at least once
+    REQUIRE(task.getLoopCounter() > 0);
 
     // Stop the task and give it time to terminate
     task.stopTask();
@@ -38,6 +38,6 @@ TEST_CASE("bell::utils::Task tests", "[bell::utils::Task]") {
     bell::utils::sleepMs(100);
 
     // Ensure taskLoop is not called anymore after stopping
-    CHECK(task.getLoopCounter() == loopCountAfterStop);
+    REQUIRE(task.getLoopCounter() == loopCountAfterStop);
   }
 }
