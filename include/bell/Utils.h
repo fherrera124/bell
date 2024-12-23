@@ -7,4 +7,7 @@
 namespace bell::utils {
 // @brief Constructs a timeval struct from milliseconds
 timeval millisecondsToTimeval(uint32_t milliseconds);
+
+// @brief Sleeps for the specified number of milliseconds
+void sleepMs(uint32_t milliseconds);
 }  // namespace bell::utils

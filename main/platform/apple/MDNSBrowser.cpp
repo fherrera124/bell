@@ -3,6 +3,7 @@
 // System includes
 #include <iostream>
 #include <stdexcept>
+#include <string>
 
 // Library includes
 #include "bell/net/IpAddress.h"
@@ -13,6 +14,62 @@
 #include "bell/Utils.h"
 
 using namespace bell;
+
+namespace {
+// @brief Converts a DNSServiceErrorType to a human-readable string
+const char* dnsSdErrorToString(DNSServiceErrorType errorCode) {
+  switch (errorCode) {
+    case kDNSServiceErr_NoError:
+      return "kDNSServiceErr_NoError";
+    case kDNSServiceErr_Unknown:
+      return "kDNSServiceErr_Unknown";
+    case kDNSServiceErr_NoSuchName:
+      return "kDNSServiceErr_NoSuchName";
+    case kDNSServiceErr_NoMemory:
+      return "kDNSServiceErr_NoMemory";
+    case kDNSServiceErr_BadParam:
+      return "kDNSServiceErr_BadParam";
+    case kDNSServiceErr_BadReference:
+      return "kDNSServiceErr_BadReference";
+    case kDNSServiceErr_BadState:
+      return "kDNSServiceErr_BadState";
+    case kDNSServiceErr_BadFlags:
+      return "kDNSServiceErr_BadFlags";
+    case kDNSServiceErr_Unsupported:
+      return "kDNSServiceErr_Unsupported";
+    case kDNSServiceErr_NotInitialized:
+      return "kDNSServiceErr_NotInitialized";
+    case kDNSServiceErr_AlreadyRegistered:
+      return "kDNSServiceErr_AlreadyRegistered";
+    case kDNSServiceErr_NameConflict:
+      return "kDNSServiceErr_NameConflict";
+    case kDNSServiceErr_Invalid:
+      return "kDNSServiceErr_Invalid";
+    case kDNSServiceErr_Firewall:
+      return "kDNSServiceErr_Firewall";
+    case kDNSServiceErr_Incompatible:
+      return "kDNSServiceErr_Incompatible";
+    case kDNSServiceErr_BadInterfaceIndex:
+      return "kDNSServiceErr_BadInterfaceIndex";
+    case kDNSServiceErr_Refused:
+      return "kDNSServiceErr_Refused";
+    case kDNSServiceErr_NoSuchRecord:
+      return "kDNSServiceErr_NoSuchRecord";
+    case kDNSServiceErr_NoAuth:
+      return "kDNSServiceErr_NoAuth";
+    case kDNSServiceErr_NoSuchKey:
+      return "kDNSServiceErr_NoSuchKey";
+    case kDNSServiceErr_NATTraversal:
+      return "kDNSServiceErr_NATTraversal";
+    case kDNSServiceErr_DoubleNAT:
+      return "kDNSServiceErr_DoubleNAT";
+    case kDNSServiceErr_BadTime:
+      return "kDNSServiceErr_BadTime";
+    default:
+      return "Unknown";
+  }
+}
+}  // namespace
 
 // MacOS implementation of mdns::Browser, using the Apple Bonjour API
 class implMDNSBrowser : public mdns::Browser {
@@ -29,7 +86,8 @@ class implMDNSBrowser : public mdns::Browser {
     DNSServiceErrorType err = DNSServiceCreateConnection(&rootRef);
     if (err != kDNSServiceErr_NoError) {
       throw std::runtime_error(
-          fmt::format("Failed to create dns-sd connection, errcode={}", err));
+          fmt::format("Failed to create dns-sd connection, err={}",
+                      dnsSdErrorToString(err)));
     }
 
     // Create copy of the root ref for the browse call
@@ -42,7 +100,8 @@ class implMDNSBrowser : public mdns::Browser {
                            browseReplyShim, this);
     if (err != kDNSServiceErr_NoError) {
       throw std::runtime_error(
-          fmt::format("Failed to start service discovery, errcode={}", err));
+          fmt::format("Failed to start service discovery, errcode={}",
+                      dnsSdErrorToString(err)));
     }
 
     sockFd = DNSServiceRefSockFD(rootRef);
@@ -110,7 +169,8 @@ class implMDNSBrowser : public mdns::Browser {
 
         if (err != kDNSServiceErr_NoError) {
           throw std::runtime_error(
-              fmt::format("Failed to process dns-sd results, errcode={}", err));
+              fmt::format("Failed to process dns-sd results, errcode={}",
+                          dnsSdErrorToString(err)));
         }
       }
     } else if (result < 0) {
@@ -148,7 +208,7 @@ class implMDNSBrowser : public mdns::Browser {
         if (err != kDNSServiceErr_NoError) {
           BELL_LOG(error, LOG_TAG,
                    "Failed to resolve service. Name={}, errcode={}",
-                   recordPtr->record.name, err);
+                   recordPtr->record.name, dnsSdErrorToString(err));
           onEvent(mdns::EventType::ServiceResolveFailed, recordPtr->record);
         }
 
@@ -176,7 +236,7 @@ class implMDNSBrowser : public mdns::Browser {
         if (err != kDNSServiceErr_NoError) {
           BELL_LOG(error, LOG_TAG,
                    "Failed to resolve service's address. Name={}, errcode={}",
-                   recordPtr->record.name, err);
+                   recordPtr->record.name, dnsSdErrorToString(err));
           onEvent(mdns::EventType::AddressResolveFailed, recordPtr->record);
         }
 
@@ -194,7 +254,7 @@ class implMDNSBrowser : public mdns::Browser {
     if (errorCode != kDNSServiceErr_NoError) {
       BELL_LOG(error, LOG_TAG,
                "Failed to resolve service's address. Name={}, errcode={}",
-               recordPtr->record.name, errorCode);
+               recordPtr->record.name, dnsSdErrorToString(errorCode));
       onEvent(mdns::EventType::AddressResolveFailed, recordPtr->record);
       return;
     }
@@ -217,7 +277,7 @@ class implMDNSBrowser : public mdns::Browser {
 
     if (errorCode != kDNSServiceErr_NoError) {
       BELL_LOG(error, LOG_TAG, "Failed to resolve service. Name={}, errcode={}",
-               recordPtr->record.name, errorCode);
+               recordPtr->record.name, dnsSdErrorToString(errorCode));
       onEvent(mdns::EventType::ServiceResolveFailed, recordPtr->record);
       return;
     }
@@ -251,7 +311,8 @@ class implMDNSBrowser : public mdns::Browser {
                    const char* regType, const char* replyDomain) {
     if (errorCode != kDNSServiceErr_NoError) {
       throw std::runtime_error(
-          fmt::format("Failed to browse for services, errcode={}", errorCode));
+          fmt::format("Failed to browse for services, errcode={}",
+                      dnsSdErrorToString(errorCode)));
     }
 
     // Try to find the service in the list
@@ -341,7 +402,7 @@ class implMDNSBrowser : public mdns::Browser {
   bool autoResolveService;
   bool autoResolveAddresses;
   bool resolveIpv6;
-  const DiscoveryEventCallback& onEvent;
+  DiscoveryEventCallback onEvent;
 
   // dns-sd browser reference
   DNSServiceRef rootRef = nullptr;
