@@ -1,13 +1,12 @@
 #include <unistd.h>
 #include <catch2/catch_test_macros.hpp>
 
-#include <iostream>
 #include <mutex>
 #include <thread>
 
-#include "bell/Utils.h"
 #include "bell/mdns/Browser.h"
 #include "bell/mdns/Service.h"
+#include "bell/utils/Utils.h"
 
 namespace {
 // Set to false to stop the browser runner thread

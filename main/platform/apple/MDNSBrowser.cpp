@@ -11,7 +11,7 @@
 
 // Bell includes
 #include "bell/Logger.h"
-#include "bell/Utils.h"
+#include "bell/utils/Utils.h"
 
 using namespace bell;
 

@@ -1,19 +1,23 @@
 
 #pragma once
 
-#include <cstddef>  // for size_t
-#include <cstdint>  // for uint8_t, int32_t
-#include <memory>   // for make_unique, unique_ptr
+// System includes
+#include <cstddef>
+#include <cstdint>
+#include <memory>
 #include <optional>
-#include <string>       // for string
-#include <string_view>  // for string_view
-#include <utility>      // for pair
-#include <vector>       // for vector
+#include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
 
-#include "SocketStream.h"  // for SocketStream
-#include "bell/net/URIParser.h"
-#include "fmt/core.h"  // for format
+// Library includes
+#include "fmt/format.h"
 #include "picohttpparser.h"
+
+// Own includes
+#include "bell/net/SocketStream.h"
+#include "bell/net/URIParser.h"
 
 namespace bell::net {
 // Type definition for HTTP headers
