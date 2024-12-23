@@ -21,3 +21,8 @@ if(APPLE)
     file(GLOB BELL_SOURCES_APPLE "main/platform/apple/*.cpp")
     list(APPEND BELL_SOURCES ${BELL_SOURCES_APPLE})
 endif()
+
+if(UNIX)
+    file(GLOB BELL_SOURCES_POSIX "main/platform/posix/*.cpp")
+    list(APPEND BELL_SOURCES ${BELL_SOURCES_POSIX})
+endif()
