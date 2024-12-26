@@ -52,7 +52,7 @@ void TCPSocket::connect(const std::string& host, uint16_t port, int timeoutMs) {
   isClosed = false;
 
   // Required for the connect call
-  setBlocking(false);
+  setBlocking(timeoutMs == 0);
 
   err = ::connect(sockFd, destinationAddress.getSockAddrPtr(),
                   destinationAddress.getSockAddrLen());
@@ -102,7 +102,20 @@ void TCPSocket::connect(const std::string& host, uint16_t port, int timeoutMs) {
   setBlocking(isBlocking);
 }
 
-std::unique_ptr<Socket> TCPSocket::accept() {
+void TCPSocket::listen(int backlog) {
+  if (!isOpen()) {
+    throw std::runtime_error("Socket is not open");
+  }
+
+  if (::listen(sockFd, backlog) != 0) {
+    throw std::runtime_error(fmt::format("Listen failed, {}", strerror(errno)));
+  }
+
+  isListening = true;
+  BELL_LOG(info, LOG_TAG, "Listening on socket fd={}", sockFd);
+}
+
+std::unique_ptr<TCPSocket> TCPSocket::accept() {
   struct sockaddr_in clientAddr {};
   socklen_t addrLen = sizeof(clientAddr);
 
@@ -110,7 +123,8 @@ std::unique_ptr<Socket> TCPSocket::accept() {
   int clientFd = ::accept(
       sockFd, reinterpret_cast<struct sockaddr*>(&clientAddr), &addrLen);
   if (clientFd < 0) {
-    throw std::runtime_error("Socket accept failed");
+    throw std::runtime_error(
+        fmt::format("Socket accept failed, {}", strerror(errno)));
   }
 
   // Create a new TCPSocket object for the accepted connection

@@ -26,18 +26,6 @@ class Socket {
   Socket& operator=(Socket&&) noexcept = default;
 
   /**
-   * @brief Resolve the provided host and port, and attempt to create a socket connected there.
-   *
-   * This method resolves the hostname and attempts to connect to the specified port.
-   * It must be implemented by derived classes according to the specific socket type.
-   *
-   * @param host String containing a hostname or IP address to connect to.
-   * @param port The port number to connect to on the specified host.
-   * @param timeout The maximum time to wait for the connection to be established, in milliseconds. This parameter is ignored, if the socket is set to a blocking mode.
-   */
-  virtual void connect(const std::string& host, uint16_t port, int timeout) = 0;
-
-  /**
    * @brief Set the blocking mode of the socket.
    *
    * @param blocking True to set the socket to blocking mode, false for non-blocking.
@@ -101,20 +89,6 @@ class Socket {
    * @param port The port number to bind to.
    */
   virtual void bind(const std::string& address, uint16_t port) = 0;
-
-  /**
-   * @brief Listen for incoming connections on the socket.
-   *
-   * @param backlog The maximum number of pending connections to allow.
-   */
-  virtual void listen(int backlog) = 0;
-
-  /**
-   * @brief Accept an incoming connection on the socket.
-   *
-   * @return std::unique_ptr<Socket> A unique pointer to the accepted socket.
-   */
-  virtual std::unique_ptr<Socket> accept() = 0;
 
   /**
    * @brief Get the local address and port of the socket.

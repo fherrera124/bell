@@ -135,40 +135,44 @@ void POSIXSocket::close() {
   }
 }
 
-void POSIXSocket::listen(int backlog) {
-  if (!isOpen()) {
-    throw std::runtime_error("Socket is not open");
-  }
-
-  if (::listen(sockFd, backlog) != 0) {
-    throw std::runtime_error("Listen failed");
-  }
-
-  isListening = true;
-  BELL_LOG(info, LOG_TAG, "Listening on socket {}", sockFd);
-}
-
 void POSIXSocket::bind(const std::string& address, uint16_t port) {
   if (isOpen()) {
     close();
   }
 
-  IpAddress resolved = IpAddress::resolveDomain(address, SOCK_STREAM);
+  IpAddress resolved = IpAddress::resolveDomain(address, sockType);
   resolved.setPort(port);
 
-  sockFd = socket(resolved.getFamily(), SOCK_STREAM, IPPROTO_IP);
+  sockFd = socket(resolved.getFamily(), sockType, IPPROTO_IP);
   if (sockFd < 0) {
     throw std::runtime_error("Could not create socket " +
                              std::string(strerror(errno)));
   }
 
+  isClosed = false;
+
+  // Set REUSEADDR option
+  setOption(SOL_SOCKET, SO_REUSEADDR, 1);
+
   if (::bind(sockFd, resolved.getSockAddrPtr(), resolved.getSockAddrLen()) !=
       0) {
+    isClosed = true;
     throw std::runtime_error(fmt::format("Bind failed: {}", strerror(errno)));
   }
 
-  isClosed = false;
   BELL_LOG(info, LOG_TAG, "Bound to {}:{}", address.c_str(), port);
+}
+
+void POSIXSocket::setOptionImpl(int level, int optionName,
+                                const void* optionValue, socklen_t optionLen) {
+  if (!isOpen()) {
+    throw std::runtime_error("Socket is not open");
+  }
+
+  if (setsockopt(getFd(), level, optionName, optionValue, optionLen) == -1) {
+    throw std::runtime_error(
+        fmt::format("Failed to set socket option: {}", strerror(errno)));
+  }
 }
 
 std::string POSIXSocket::getLocalAddress() const {
