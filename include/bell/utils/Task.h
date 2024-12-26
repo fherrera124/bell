@@ -58,13 +58,13 @@ class Task {
   // @brief Starts the task's execution. This method is implemented per-platform.
   bool startTask();
 
- private:
-  class Impl;
-  std::unique_ptr<Impl> pImpl;
-
   // Used to keep track of the task state during runTask execution
   std::mutex taskRunningMutex;
   std::atomic<bool> taskRunning = false;
+
+ private:
+  class Impl;
+  std::unique_ptr<Impl> pImpl;
 };
 
 }  // namespace bell::utils

@@ -38,6 +38,8 @@ class SocketBuffer : public std::streambuf {
     return internalSocket != nullptr && internalSocket->isOpen();
   }
 
+  int getFd() { return internalSocket->getFd(); }
+
   ~SocketBuffer() override { close(); }
 
  protected:
@@ -63,6 +65,8 @@ class SocketStream : public std::iostream {
       : std::iostream(&socketBuf) {
     open(std::move(socket), operationTimeoutMs);
   }
+
+  int getFd() { return socketBuf.getFd(); }
 
   SocketBuffer* rdbuf() { return &socketBuf; }
 
