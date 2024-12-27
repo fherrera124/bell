@@ -39,9 +39,10 @@ class HTTPReader {
 
   HTTPMethod getMethod() const;
 
-  void invalidate();
+  size_t getContentLength() const;
 
  private:
+  static const int maxRequestLen = 4 * 1024;
   HTTPType readerType;
   std::istream* istream;
   std::vector<char> internalBuffer;
