@@ -1,5 +1,7 @@
 #include "bell/net/SocketStream.h"
 
+#include "bell/Logger.h"
+
 #include <cstdint>  // for uint8_t
 #include <cstdio>   // for NULL, ssize_t
 #include <memory>
@@ -29,15 +31,15 @@ int SocketBuffer::close() {
 }
 
 int SocketBuffer::sync() {
-  ssize_t bw;
-  ssize_t n = pptr() - pbase();
+  size_t n = pptr() - pbase();
   try {
     while (n > 0) {
-      bw = internalSocket->write(reinterpret_cast<uint8_t*>(pptr() - n), n,
-                                 operationTimeoutMs);
+      auto bw = internalSocket->write(reinterpret_cast<uint8_t*>(pptr() - n), n,
+                                      operationTimeoutMs);
       n -= bw;
     }
-  } catch (...) {
+  } catch (const std::exception& e) {
+    BELL_LOG(error, "SocketBuffer", "Error writing to socket: {}", e.what());
     setp(pptr() - n, obuf.data() + bufLen);
     pbump(n);
     return -1;
@@ -90,9 +92,7 @@ std::streamsize SocketBuffer::xsgetn(char_type* _s, std::streamsize _n) {
       }
       remain -= br;
     }
-  } catch (...) {
-    return (_n - remain);
-  }
+  } catch (...) { return (_n - remain); }
   return _n;
 }
 
@@ -113,9 +113,7 @@ std::streamsize SocketBuffer::xsputn(const char_type* _s, std::streamsize _n) {
                                  operationTimeoutMs);
       remain -= bw;
     }
-  } catch (...) {
-    return (_n - remain);
-  }
+  } catch (...) { return (_n - remain); }
   if (remain > 0) {
     traits_type::copy(pptr(), end - remain, remain);
     pbump(remain);

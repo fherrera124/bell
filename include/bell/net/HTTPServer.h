@@ -3,6 +3,7 @@
 #include <array>
 #include <vector>
 
+#include "bell/net/HTTPCommon.h"
 #include "bell/net/SocketStream.h"
 #include "bell/net/TCPSocket.h"
 #include "bell/utils/Task.h"
@@ -17,20 +18,13 @@ class HTTPServer : bell::utils::Task {
  private:
   const char* LOG_TAG = "HTTPServer";
 
-  struct ClientConnection {
-    static constexpr size_t bufferSize = 1024;
-
-    std::unique_ptr<bell::net::SocketStream> socket;
-    std::array<uint8_t, bufferSize> requestBuffer{};
-  };
-
   int maxConnections;
 
   std::unique_ptr<bell::net::TCPSocket> listenSocket;
 
-  void acceptConnection();
+  // void acceptConnection();
 
-  void readFromClient(const ClientConnection& connection);
+  // void readFromClient(const Connection& connection);
 
   void taskLoop() override;
 
@@ -38,6 +32,9 @@ class HTTPServer : bell::utils::Task {
   int maxFd = 0;
   fd_set masterFdSet{};
 
-  std::vector<ClientConnection> clientSockets{};
+  const int maxReadBufferSize = 16 * 1024;
+  std::vector<char> readBuffer{};
+
+  // std::vector<Connection> connections{};
 };
 }  // namespace bell::net
