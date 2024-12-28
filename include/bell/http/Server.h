@@ -3,15 +3,14 @@
 #include <array>
 #include <vector>
 
-#include "bell/net/HTTPCommon.h"
 #include "bell/net/SocketStream.h"
 #include "bell/net/TCPSocket.h"
 #include "bell/utils/Task.h"
 
-namespace bell::net {
-class HTTPServer : bell::utils::Task {
+namespace bell::http {
+class Server : bell::utils::Task {
  public:
-  HTTPServer(int maxConnections = 5);
+  Server(int maxConnections = 5);
 
   void listen(int port = 8080);
 
@@ -22,9 +21,14 @@ class HTTPServer : bell::utils::Task {
 
   std::unique_ptr<bell::net::TCPSocket> listenSocket;
 
-  // void acceptConnection();
+  struct Connection {
+    std::unique_ptr<bell::net::SocketStream> socket;
+    int fd;
+  };
 
-  // void readFromClient(const Connection& connection);
+  void acceptConnection();
+
+  void readFromClient(const Connection& connection);
 
   void taskLoop() override;
 

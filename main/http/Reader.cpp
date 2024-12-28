@@ -1,31 +1,13 @@
-#include "bell/net/HTTPCommon.h"
-
-#include <iostream>
-#include <unordered_map>
-#include "picohttpparser.h"
+#include "bell/http/Reader.h"
+#include "bell/http/Common.h"
 
 using namespace bell;
 
-namespace {
-const std::unordered_map<std::string_view, net::HTTPMethod> strMethodMap = {
-    {"GET", net::HTTPMethod::GET},   {"POST", net::HTTPMethod::POST},
-    {"PUT", net::HTTPMethod::PUT},   {"DELETE", net::HTTPMethod::DELETE},
-    {"HEAD", net::HTTPMethod::HEAD}, {"OPTIONS", net::HTTPMethod::OPTIONS},
-};
-}
-
-net::HTTPMethod net::parseHTTPMethod(std::string_view method) {
-  auto it = strMethodMap.find(method);
-  if (it != strMethodMap.end()) {
-    return it->second;
-  }
-
-  return net::HTTPMethod::INVALID;
-}
-
-net::HTTPReader::HTTPReader(HTTPType readerType, std::istream* istream,
-                            std::vector<char>* externalBuffer)
-    : readerType(readerType), istream(istream), bufferPtr(externalBuffer) {
+http::Reader::Reader(Direction readerDirection, std::istream* istream,
+                     std::vector<char>* externalBuffer)
+    : readerDirection(readerDirection),
+      istream(istream),
+      bufferPtr(externalBuffer) {
   if (bufferPtr == nullptr) {
     // External buffer not provided, use internal buffer
     bufferPtr = &internalBuffer;
@@ -36,7 +18,7 @@ net::HTTPReader::HTTPReader(HTTPType readerType, std::istream* istream,
   headersValid = false;
 }
 
-void net::HTTPReader::readHeaders() {
+void http::Reader::readHeaders() {
   if (headersValid) {
     throw std::runtime_error("Headers already read");
   }
@@ -77,7 +59,7 @@ void net::HTTPReader::readHeaders() {
       phrHeaders.push_back({});
       numHeaders = phrHeaders.size();
 
-      if (readerType == HTTPType::Request) {
+      if (readerDirection == Direction::Request) {
         lastPhrResult =
             phr_parse_request(bufferPtr->data(), bufferPtr->size(), &methodPtr,
                               &methodLen, &pathPtr, &pathLen, &minorVersion,
@@ -115,7 +97,7 @@ void net::HTTPReader::readHeaders() {
     contentLength = std::stoi(std::string(contentLengthHeader));
   }
 
-  if (readerType == HTTPType::Response) {
+  if (readerDirection == Direction::Response) {
     statusCode = parsedStatusCode;
     statusMessage = std::string(statusMessagePtr, statusMessageLen);
 
@@ -124,7 +106,7 @@ void net::HTTPReader::readHeaders() {
     }
   } else {
     path = std::string_view(pathPtr, pathLen);
-    method = net::parseHTTPMethod({methodPtr, methodLen});
+    method = parseMethod({methodPtr, methodLen});
 
     if (minorVersion == 1 && getHeader("Host").empty()) {
       throw std::runtime_error("Host header required for HTTP/1.1");
@@ -132,12 +114,11 @@ void net::HTTPReader::readHeaders() {
   }
 }
 
-size_t net::HTTPReader::getContentLength() const {
+size_t http::Reader::getContentLength() const {
   return contentLength.value();
 }
 
-std::string_view net::HTTPReader::getHeader(
-    const std::string& headerName) const {
+std::string_view http::Reader::getHeader(const std::string& headerName) const {
   for (const auto& header : phrHeaders) {
     if (header.name_len == headerName.size() &&
         std::equal(headerName.begin(), headerName.end(), header.name,
@@ -152,8 +133,8 @@ std::string_view net::HTTPReader::getHeader(
   return {};
 }
 
-net::Headers net::HTTPReader::getAllHeaders() const {
-  net::Headers headers{};
+http::Headers http::Reader::getAllHeaders() const {
+  Headers headers{};
   for (const auto& header : phrHeaders) {
     headers.emplace_back(std::string(header.name, header.name_len),
                          std::string(header.value, header.value_len));
@@ -161,30 +142,89 @@ net::Headers net::HTTPReader::getAllHeaders() const {
   return headers;
 }
 
-void net::HTTPReader::ensureValid(net::HTTPType expectedType) const {
+std::string_view http::Reader::getBodyStringView() {
+  if (readContentLength == 0) {
+    readBody();
+  }
+
+  return {bufferPtr->data() + bufferPtr->size() - readContentLength,
+          readContentLength};
+}
+
+std::vector<std::byte> http::Reader::getBodyBytes() {
+  if (readContentLength == 0) {
+    readBody();
+  }
+
+  return {
+      reinterpret_cast<std::byte*>(bufferPtr->data() +
+                                   bufferPtr->size() - readContentLength),
+      reinterpret_cast<std::byte*>(bufferPtr->data() +
+                                   bufferPtr->size()),
+  };
+}
+
+const char* http::Reader::getBodyBytesPtr() {
+  if (readContentLength == 0) {
+    readBody();
+  }
+
+  return bufferPtr->data() + bufferPtr->size() - readContentLength;
+}
+
+size_t http::Reader::getBodyBytesLength() {
+  if (readContentLength == 0) {
+    readBody();
+  }
+
+  return readContentLength;
+}
+
+
+void http::Reader::readBody() {
+  ensureValid(readerDirection);
+
+  if (contentLength == 0 || readContentLength == contentLength) {
+    return;  // Nothing to read
+  }
+
+  // Ensure that the response buffer has enough space to read the content
+  bufferPtr->resize(bufferPtr->size() + contentLength.value() -
+                    readContentLength);
+
+  // Read the content
+  istream->read(
+      bufferPtr->data() + bufferPtr->size() - contentLength.value(),
+      static_cast<std::streamsize>(contentLength.value() - readContentLength));
+
+  // Update the read content length
+  readContentLength += istream->gcount();
+}
+
+void http::Reader::ensureValid(Direction expectedDirection) const {
   if (!headersValid) {
     throw std::runtime_error("HTTP headers not read yet. Call readHeaders()");
   }
 
-  if (readerType != expectedType) {
+  if (readerDirection != expectedDirection) {
     throw std::runtime_error("This method is not valid for this reader type");
   }
 }
 
-int net::HTTPReader::getStatusCode() const {
-  ensureValid(HTTPType::Response);
+int http::Reader::getStatusCode() const {
+  ensureValid(Direction::Response);
 
   return statusCode.value();
 }
 
-net::HTTPMethod net::HTTPReader::getMethod() const {
-  ensureValid(HTTPType::Request);
+http::Method http::Reader::getMethod() const {
+  ensureValid(Direction::Request);
 
   return method.value();
 }
 
-std::string_view net::HTTPReader::getPath() const {
-  ensureValid(HTTPType::Request);
+std::string_view http::Reader::getPath() const {
+  ensureValid(Direction::Request);
 
   return path.value();
 }

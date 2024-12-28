@@ -11,6 +11,7 @@ list(APPEND BELL_INCLUDES "include")
 file(GLOB BELL_SOURCES
     "main/io/*.cpp" # bell::io
     "main/net/*.cpp" # bell::net
+    "main/http/*.cpp" # bell::http
     "main/utils/*.cpp" # bell::utils
     "main/audio/*.cpp" # bell::audio
     "main/dsp/*.cpp" # bell::dsp

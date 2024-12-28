@@ -4,9 +4,10 @@
 #include <sstream>
 
 // Code under test
-#include "bell/net/HTTPCommon.h"
+#include "bell/http/Client.h"
+#include "bell/http/Reader.h"
 
-TEST_CASE("bell::net::HTTPReader tests", "[bell::net::HTTPReader]") {
+TEST_CASE("bell::http::Reader tests", "[bell::http::Reader]") {
   // HTTP response parsing tests
   SECTION("Parses correct HTTP responses") {
     std::istringstream mockResponse(
@@ -16,7 +17,7 @@ TEST_CASE("bell::net::HTTPReader tests", "[bell::net::HTTPReader]") {
         "\r\n"
         "Hello-world");
 
-    bell::net::HTTPReader reader(bell::net::HTTPType::Response, &mockResponse);
+    bell::http::Reader reader(bell::http::Direction::Response, &mockResponse);
     REQUIRE_NOTHROW(reader.readHeaders());
 
     // Should properly parse the response
@@ -44,7 +45,7 @@ TEST_CASE("bell::net::HTTPReader tests", "[bell::net::HTTPReader]") {
         "Content-Length: 11\r\n"
         "\r\n"
         "Hello-world");
-    bell::net::HTTPReader reader(bell::net::HTTPType::Response, &mockResponse);
+    bell::http::Reader reader(bell::http::Direction::Response, &mockResponse);
     REQUIRE_THROWS(reader.readHeaders());
   }
 
@@ -55,7 +56,7 @@ TEST_CASE("bell::net::HTTPReader tests", "[bell::net::HTTPReader]") {
         "Content-Length: 13\r\n"
         "\r\n"
         "Not Found Page");
-    bell::net::HTTPReader reader(bell::net::HTTPType::Response, &mockResponse);
+    bell::http::Reader reader(bell::http::Direction::Response, &mockResponse);
     REQUIRE_NOTHROW(reader.readHeaders());
     REQUIRE(reader.getStatusCode() == 404);
   }
@@ -68,7 +69,7 @@ TEST_CASE("bell::net::HTTPReader tests", "[bell::net::HTTPReader]") {
         "X-Custom-Header: TestValue\r\n"
         "\r\n"
         "Hello-world");
-    bell::net::HTTPReader reader(bell::net::HTTPType::Response, &mockResponse);
+    bell::http::Reader reader(bell::http::Direction::Response, &mockResponse);
     REQUIRE_NOTHROW(reader.readHeaders());
     REQUIRE(reader.getStatusCode() == 200);
     REQUIRE(reader.getContentLength() == 11);
@@ -85,9 +86,9 @@ TEST_CASE("bell::net::HTTPReader tests", "[bell::net::HTTPReader]") {
         "Host: example.com\r\n"
         "User-Agent: TestAgent\r\n"
         "\r\n");
-    bell::net::HTTPReader reader(bell::net::HTTPType::Request, &mockRequest);
+    bell::http::Reader reader(bell::http::Direction::Request, &mockRequest);
     REQUIRE_NOTHROW(reader.readHeaders());
-    REQUIRE(reader.getMethod() == bell::net::HTTPMethod::GET);
+    REQUIRE(reader.getMethod() == bell::http::Method::GET);
     REQUIRE(reader.getPath() == "/index.html");
     REQUIRE(reader.getHeader("Host") == "example.com");
     REQUIRE(reader.getHeader("User-Agent") == "TestAgent");
@@ -99,7 +100,7 @@ TEST_CASE("bell::net::HTTPReader tests", "[bell::net::HTTPReader]") {
         "GET /index.html HTTP/1.1\r\n"
         "User-Agent: TestAgent\r\n"
         "\r\n");
-    bell::net::HTTPReader reader(bell::net::HTTPType::Request, &mockRequest);
+    bell::http::Reader reader(bell::http::Direction::Request, &mockRequest);
     REQUIRE_THROWS(
         reader.readHeaders());  // Missing Host should cause error in HTTP/1.1
   }
@@ -109,7 +110,7 @@ TEST_CASE("bell::net::HTTPReader tests", "[bell::net::HTTPReader]") {
         "GET /index.html HTTP\r\n"  // Missing version
         "Host: example.com\r\n"
         "\r\n");
-    bell::net::HTTPReader reader(bell::net::HTTPType::Request, &mockRequest);
+    bell::http::Reader reader(bell::http::Direction::Request, &mockRequest);
     REQUIRE_THROWS(reader.readHeaders());
   }
 
@@ -121,9 +122,9 @@ TEST_CASE("bell::net::HTTPReader tests", "[bell::net::HTTPReader]") {
         "Content-Length: 18\r\n"
         "\r\n"
         "{\"key\":\"value\"}");
-    bell::net::HTTPReader reader(bell::net::HTTPType::Request, &mockRequest);
+    bell::http::Reader reader(bell::http::Direction::Request, &mockRequest);
     REQUIRE_NOTHROW(reader.readHeaders());
-    REQUIRE(reader.getMethod() == bell::net::HTTPMethod::POST);
+    REQUIRE(reader.getMethod() == bell::http::Method::POST);
     REQUIRE(reader.getPath() == "/submit");
     REQUIRE(reader.getHeader("Content-Type") == "application/json");
   }
@@ -135,9 +136,9 @@ TEST_CASE("bell::net::HTTPReader tests", "[bell::net::HTTPReader]") {
         "Authorization: Bearer token\r\n"
         "Content-Length: 0\r\n"
         "\r\n");
-    bell::net::HTTPReader reader(bell::net::HTTPType::Request, &mockRequest);
+    bell::http::Reader reader(bell::http::Direction::Request, &mockRequest);
     REQUIRE_NOTHROW(reader.readHeaders());
-    REQUIRE(reader.getMethod() == bell::net::HTTPMethod::PUT);
+    REQUIRE(reader.getMethod() == bell::http::Method::PUT);
     REQUIRE(reader.getHeader("Authorization") == "Bearer token");
   }
 }

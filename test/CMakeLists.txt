@@ -12,7 +12,8 @@ add_executable(bell-test
   BinaryStreamTest.cpp
   SocketsTest.cpp
   URIParserTest.cpp
-  HTTPClientTest.cpp
+  HTTPReaderTest.cpp
+  HTTPWriterTest.cpp
   MDNSWrappersTest.cpp
   SemaphoreTest.cpp
   TaskTest.cpp
