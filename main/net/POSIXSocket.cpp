@@ -159,8 +159,6 @@ void POSIXSocket::bind(const std::string& address, uint16_t port) {
     isClosed = true;
     throw std::runtime_error(fmt::format("Bind failed: {}", strerror(errno)));
   }
-
-  BELL_LOG(info, LOG_TAG, "Bound to {}:{}", address.c_str(), port);
 }
 
 void POSIXSocket::setOptionImpl(int level, int optionName,

@@ -24,13 +24,13 @@ http::Connection::Connection(const std::string& url, int timeoutMs) {
 
   // Create a socket to the host
   // TODO: Add TLS support here
-  auto socket = std::make_unique<net::TCPSocket>();
+  auto socket = std::make_shared<net::TCPSocket>();
   socket->connect(parsedUri->host.value(), parsedUri->port.value_or(80),
                   timeoutMs);
 
   // Wrap the socket in a socket stream
   socketStream =
-      std::make_unique<net::SocketStream>(std::move(socket), timeoutMs);
+      std::make_shared<net::SocketStream>(std::move(socket), timeoutMs);
 }
 
 std::unique_ptr<http::Writer> http::Connection::sendRequest(

@@ -112,7 +112,6 @@ void TCPSocket::listen(int backlog) {
   }
 
   isListening = true;
-  BELL_LOG(info, LOG_TAG, "Listening on socket fd={}", sockFd);
 }
 
 std::unique_ptr<TCPSocket> TCPSocket::accept() {

@@ -10,7 +10,7 @@
 namespace bell::net {
 class SocketBuffer : public std::streambuf {
  private:
-  std::unique_ptr<Socket> internalSocket;
+  std::shared_ptr<Socket> internalSocket = nullptr;
 
   // Timeout for socket operations in milliseconds, 0 means that the socket is blocking
   int operationTimeoutMs = 0;
@@ -20,7 +20,7 @@ class SocketBuffer : public std::streambuf {
   std::array<char, bufLen> obuf{};
 
  public:
-  SocketBuffer() = default;
+  SocketBuffer(std::shared_ptr<Socket> socket, int operationTimeout);
 
   // Delete copy constructor and copy assignment operator
   SocketBuffer(const SocketBuffer&) = delete;
@@ -29,18 +29,6 @@ class SocketBuffer : public std::streambuf {
   // Define move constructor and move assignment operator
   SocketBuffer(SocketBuffer&& other) noexcept = default;
   SocketBuffer& operator=(SocketBuffer&& other) noexcept = default;
-
-  int open(std::unique_ptr<Socket> socket, int operationTimeoutMs = 0);
-
-  int close();
-
-  bool isOpen() {
-    return internalSocket != nullptr && internalSocket->isOpen();
-  }
-
-  int getFd() { return internalSocket->getFd(); }
-
-  ~SocketBuffer() override { close(); }
 
  protected:
   int sync() override;
@@ -57,28 +45,16 @@ class SocketBuffer : public std::streambuf {
 class SocketStream : public std::iostream {
  private:
   SocketBuffer socketBuf;
+  std::shared_ptr<Socket> socket;
 
  public:
-  SocketStream() : std::iostream(&socketBuf) {}
+  SocketStream(const std::shared_ptr<Socket>& socket, int operationTimeout = 0)
+      : std::iostream(&socketBuf),
+        socketBuf(socket, operationTimeout),
+        socket(socket) {}
 
-  SocketStream(std::unique_ptr<Socket> socket, int operationTimeoutMs = 0)
-      : std::iostream(&socketBuf) {
-    open(std::move(socket), operationTimeoutMs);
-  }
-
-  int getFd() { return socketBuf.getFd(); }
+  bool isOpen() { return socket->isOpen(); }
 
   SocketBuffer* rdbuf() { return &socketBuf; }
-
-  int open(std::unique_ptr<Socket> socket, int operationTimeoutMs = 0) {
-    int err = socketBuf.open(std::move(socket), operationTimeoutMs);
-    if (err)
-      setstate(std::ios::failbit);
-    return err;
-  }
-
-  int close() { return socketBuf.close(); }
-
-  bool isOpen() { return socketBuf.isOpen(); }
 };
 }  // namespace bell::net

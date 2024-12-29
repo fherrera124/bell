@@ -53,7 +53,7 @@ class Connection {
   // Other connection-related methods
  private:
   // Internal socket stream
-  std::unique_ptr<bell::net::SocketStream> socketStream;
+  std::shared_ptr<bell::net::SocketStream> socketStream;
 
   // Parsed URL
   bell::net::URI parsedUrl;
@@ -71,9 +71,9 @@ class Connection {
  *
  * @return std::unique_ptr<Connection> Pointer to the http::Connection. The response can be obtained by calling getResponse() on the returned object.
  */
-inline std::unique_ptr<Connection> get(const std::string& url,
-                                       const Headers& headers = {},
-                                       int timeoutMs = defaultHTTPClientTimeout) {
+inline std::unique_ptr<Connection> get(
+    const std::string& url, const Headers& headers = {},
+    int timeoutMs = defaultHTTPClientTimeout) {
   auto connection = std::make_unique<Connection>(url, timeoutMs);
   connection->sendRequest(Method::GET, headers, 0);
   return connection;
@@ -110,10 +110,10 @@ inline std::unique_ptr<Connection> postRawPtr(
  *
  * @return std::unique_ptr<Connection> Pointer to the http::Connection. The response can be obtained by calling getResponse() on the returned object.
  */
-inline std::unique_ptr<Connection> post(const std::string& url,
-                                        const Headers& headers = {},
-                                        const std::vector<std::byte>& body = {},
-                                        int timeoutMs = defaultHTTPClientTimeout) {
+inline std::unique_ptr<Connection> post(
+    const std::string& url, const Headers& headers = {},
+    const std::vector<std::byte>& body = {},
+    int timeoutMs = defaultHTTPClientTimeout) {
   return postRawPtr(url, headers, body.data(), body.size(), timeoutMs);
 }
 }  // namespace bell::http

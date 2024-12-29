@@ -146,6 +146,16 @@ class Writer {
   void writeBodyRaw(const char* bytes, size_t bytesLen);
 
   /**
+   * @brief Returns true if the headers have been written to the stream.
+   */
+  bool hasWrittenHeaders() const;
+
+  /**
+   * @brief Returns true if the body has been written to the stream, or if no body is expected.
+   */
+  bool hasWrittenBody() const;
+
+  /**
    * @brief Returns the stream used by the writer
    *
    * @return std::istream* Pointer to the stream used by the reader. Will be valid until the reader is destroyed.

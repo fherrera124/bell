@@ -8,26 +8,12 @@
 
 using namespace bell::net;
 
-int SocketBuffer::open(std::unique_ptr<Socket> socket, int operationTimeoutMs) {
-  if (internalSocket != nullptr) {
-    close();
-  }
-  this->operationTimeoutMs = operationTimeoutMs;
-  internalSocket = std::move(socket);
-
+SocketBuffer::SocketBuffer(std::shared_ptr<Socket> socket,
+                           int operationTimeoutMs)
+    : internalSocket(std::move(socket)),
+      operationTimeoutMs(operationTimeoutMs) {
   // Set the socket to non-blocking mode if a timeout is specified
   internalSocket->setBlocking(operationTimeoutMs == 0);
-
-  return 0;
-}
-
-int SocketBuffer::close() {
-  if (internalSocket != nullptr && isOpen()) {
-    pubsync();
-    internalSocket->close();
-    internalSocket = nullptr;
-  }
-  return 0;
 }
 
 int SocketBuffer::sync() {
@@ -92,7 +78,9 @@ std::streamsize SocketBuffer::xsgetn(char_type* _s, std::streamsize _n) {
       }
       remain -= br;
     }
-  } catch (...) { return (_n - remain); }
+  } catch (...) {
+    return (_n - remain);
+  }
   return _n;
 }
 
@@ -113,7 +101,9 @@ std::streamsize SocketBuffer::xsputn(const char_type* _s, std::streamsize _n) {
                                  operationTimeoutMs);
       remain -= bw;
     }
-  } catch (...) { return (_n - remain); }
+  } catch (...) {
+    return (_n - remain);
+  }
   if (remain > 0) {
     traits_type::copy(pptr(), end - remain, remain);
     pbump(remain);

@@ -95,6 +95,8 @@ void http::Reader::readHeaders() {
   auto contentLengthHeader = getHeader("Content-Length");
   if (!contentLengthHeader.empty()) {
     contentLength = std::stoi(std::string(contentLengthHeader));
+  } else {
+    contentLength = 0;
   }
 
   if (readerDirection == Direction::Response) {
@@ -157,10 +159,9 @@ std::vector<std::byte> http::Reader::getBodyBytes() {
   }
 
   return {
-      reinterpret_cast<std::byte*>(bufferPtr->data() +
-                                   bufferPtr->size() - readContentLength),
-      reinterpret_cast<std::byte*>(bufferPtr->data() +
-                                   bufferPtr->size()),
+      reinterpret_cast<std::byte*>(bufferPtr->data() + bufferPtr->size() -
+                                   readContentLength),
+      reinterpret_cast<std::byte*>(bufferPtr->data() + bufferPtr->size()),
   };
 }
 
@@ -179,7 +180,6 @@ size_t http::Reader::getBodyBytesLength() {
 
   return readContentLength;
 }
-
 
 void http::Reader::readBody() {
   ensureValid(readerDirection);

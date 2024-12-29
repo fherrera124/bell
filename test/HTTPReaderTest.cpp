@@ -6,6 +6,7 @@
 // Code under test
 #include "bell/http/Client.h"
 #include "bell/http/Reader.h"
+#include "bell/utils/Utils.h"
 
 TEST_CASE("bell::http::Reader tests", "[bell::http::Reader]") {
   // HTTP response parsing tests

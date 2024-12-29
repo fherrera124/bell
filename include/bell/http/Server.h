@@ -7,30 +7,51 @@
 #include "bell/net/TCPSocket.h"
 #include "bell/utils/Task.h"
 
+#include "bell/http/RadixRouter.h"
+#include "bell/http/Reader.h"
+#include "bell/http/Writer.h"
+
 namespace bell::http {
 class Server : bell::utils::Task {
  public:
   Server(int maxConnections = 5);
 
+  using RequestHandler = std::function<void(
+      const std::unique_ptr<Reader>& requestReader,
+      const std::unique_ptr<Writer>& responseWriter,
+      const std::unordered_map<std::string, std::string>& routeParams)>;
+
   void listen(int port = 8080);
 
- private:
-  const char* LOG_TAG = "HTTPServer";
+  void registerHandler(Method method, const std::string& path,
+                       const RequestHandler& handler);
 
+  void registerGet(const std::string& path, const RequestHandler& handler);
+
+  void registerPost(const std::string& path, const RequestHandler& handler);
+
+  void registerCustom404(const RequestHandler& handler);
+
+ private:
+  const char* LOG_TAG = "http::Server";
+
+  // Default timeout for HTTP operations
+  const int defaultHttpOperationTimeout = 5000;
+
+  RadixRouter<RequestHandler> router;
+
+  // Maximum number of connections to accept
   int maxConnections;
 
+  // TCP socket used for listening for incoming connections
   std::unique_ptr<bell::net::TCPSocket> listenSocket;
 
+  // Type used to represent an active connection
   struct Connection {
-    std::unique_ptr<bell::net::SocketStream> socket;
-    int fd;
+    // Client socket
+    std::shared_ptr<bell::net::TCPSocket> socket;
+    bool closed = false;
   };
-
-  void acceptConnection();
-
-  void readFromClient(const Connection& connection);
-
-  void taskLoop() override;
 
   // ::select() related members
   int maxFd = 0;
@@ -39,6 +60,16 @@ class Server : bell::utils::Task {
   const int maxReadBufferSize = 16 * 1024;
   std::vector<char> readBuffer{};
 
-  // std::vector<Connection> connections{};
+  std::vector<Connection> connections{};
+
+  RequestHandler notFoundHandler;
+
+  void acceptConnection();
+
+  void readFromClient(const Connection& connection);
+
+  void closeConnection(int fd);
+
+  void taskLoop() override;
 };
-}  // namespace bell::net
+}  // namespace bell::http

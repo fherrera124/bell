@@ -61,6 +61,8 @@ void http::Writer::writeHeaders() {
   }
 
   *ostream << "\r\n";  // End of headers
+  ostream->flush();    // Flush the headers to the stream
+
   headersWritten = true;
 }
 
@@ -130,6 +132,14 @@ void http::Writer::writeResponseWithBody(int statusCode, const Headers& headers,
   writeBodyStringView(body);
 }
 
+bool http::Writer::hasWrittenHeaders() const {
+  return headersWritten;
+}
+
+bool http::Writer::hasWrittenBody() const {
+  return contentLengthWritten >= contentLength;
+}
+
 void http::Writer::ensureValid(Direction expectedDirection) {
   if (headersWritten) {
     throw std::runtime_error("HTTP headers have already been written");
@@ -174,6 +184,8 @@ void http::Writer::writeBodyRaw(const char* bytes, size_t bytesLen) {
 
   ostream->write(bytes, static_cast<std::streamsize>(bytesLen));
   contentLengthWritten += bytesLen;
+
+  ostream->flush();  // Flush the headers to the stream
 }
 
 void http::Writer::writeBodyStringView(std::string_view body) {

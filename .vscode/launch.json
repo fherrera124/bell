@@ -7,7 +7,7 @@
     {
       "type": "lldb",
       "request": "launch",
-      "name": "Debug",
+      "name": "Debug tests",
       "program": "${workspaceFolder}/build/test/bell-test",
       "args": [],
       "cwd": "${workspaceFolder}"
