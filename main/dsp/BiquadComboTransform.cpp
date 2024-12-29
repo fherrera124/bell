@@ -33,7 +33,7 @@ void BiquadComboTransform::configure(Type filterType, float freq, int order) {
 std::vector<float> BiquadComboTransform::calculateBWQ(int order) {
   std::vector<float> qValues;
   for (int n = 0; n < order / 2; n++) {
-    float q = 1.0F / (2.0F * std::sinf(M_PI / order * n + 0.5F));
+    float q = 1.0F / (2.0F * sinf(M_PI / order * n + 0.5F));
     qValues.push_back(q);
   }
 

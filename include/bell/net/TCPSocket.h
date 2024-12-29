@@ -1,5 +1,7 @@
 #pragma once
 
+#include <memory>
+
 #include "bell/net/POSIXSocket.h"
 
 namespace bell::net {

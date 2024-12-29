@@ -203,8 +203,8 @@ float BiquadTransform::calculateHeadroom() {
 // coefficients for a high pass biquad filter
 void BiquadTransform::highPassCoEffs(float f, float q) {
   float w0 = 2 * FLOAT_PI * f / this->sampleRate;
-  float c = std::cosf(w0);
-  float s = std::sinf(w0);
+  float c = cosf(w0);
+  float s = sinf(w0);
   float alpha = s / (2 * q);
 
   float b0 = (1 + c) / 2;
@@ -220,7 +220,7 @@ void BiquadTransform::highPassCoEffs(float f, float q) {
 // coefficients for a high pass first order biquad filter
 void BiquadTransform::highPassFOCoEffs(float f) {
   float w0 = 2 * FLOAT_PI * f / this->sampleRate;
-  float k = std::tanf(w0 / 2.0F);
+  float k = tanf(w0 / 2.0F);
 
   float alpha = 1.0F + k;
 
@@ -237,8 +237,8 @@ void BiquadTransform::highPassFOCoEffs(float f) {
 // coefficients for a low pass biquad filter
 void BiquadTransform::lowPassCoEffs(float f, float q) {
   float w0 = 2 * FLOAT_PI * f / this->sampleRate;
-  float c = std::cosf(w0);
-  float s = std::sinf(w0);
+  float c = cosf(w0);
+  float s = sinf(w0);
   float alpha = s / (2 * q);
 
   float b0 = (1 - c) / 2;
@@ -254,7 +254,7 @@ void BiquadTransform::lowPassCoEffs(float f, float q) {
 // coefficients for a low pass first order biquad filter
 void BiquadTransform::lowPassFOCoEffs(float f) {
   float w0 = 2 * FLOAT_PI * f / this->sampleRate;
-  float k = std::tanf(w0 / 2.0F);
+  float k = tanf(w0 / 2.0F);
 
   float alpha = 1.0F + k;
 
@@ -271,11 +271,11 @@ void BiquadTransform::lowPassFOCoEffs(float f) {
 // coefficients for a peak biquad filter
 void BiquadTransform::peakCoEffs(float f, float gain, float q) {
   float w0 = 2 * FLOAT_PI * f / this->sampleRate;
-  float c = std::cosf(w0);
-  float s = std::sinf(w0);
+  float c = cosf(w0);
+  float s = sinf(w0);
   float alpha = s / (2 * q);
 
-  float ampl = std::powf(10.0F, gain / 40.0F);
+  float ampl = powf(10.0F, gain / 40.0F);
   float b0 = 1.0F + (alpha * ampl);
   float b1 = -2.0F * c;
   float b2 = 1.0F - (alpha * ampl);
@@ -288,11 +288,11 @@ void BiquadTransform::peakCoEffs(float f, float gain, float q) {
 void BiquadTransform::peakCoEffsBandwidth(float f, float gain,
                                           float bandwidth) {
   float w0 = 2 * FLOAT_PI * f / this->sampleRate;
-  float c = std::cosf(w0);
-  float s = std::sinf(w0);
+  float c = cosf(w0);
+  float s = sinf(w0);
   float alpha = s * sinh(logf(2.0F) / 2.0F * bandwidth * w0 / s);
 
-  float ampl = std::powf(10.0F, gain / 40.0F);
+  float ampl = powf(10.0F, gain / 40.0F);
   float b0 = 1.0F + (alpha * ampl);
   float b1 = -2.0F * c;
   float b2 = 1.0F - (alpha * ampl);
@@ -304,11 +304,11 @@ void BiquadTransform::peakCoEffsBandwidth(float f, float gain,
 }
 
 void BiquadTransform::highShelfCoEffs(float f, float gain, float q) {
-  float A = std::powf(10.0F, gain / 40.0F);
+  float A = powf(10.0F, gain / 40.0F);
   float w0 = 2 * FLOAT_PI * f / this->sampleRate;
-  float c = std::cosf(w0);
-  float s = std::sinf(w0);
-  float beta = s * std::sqrtf(A) / q;
+  float c = cosf(w0);
+  float s = sinf(w0);
+  float beta = s * sqrtf(A) / q;
   float b0 = A * ((A + 1.0F) + (A - 1.0F) * c + beta);
   float b1 = -2.0F * A * ((A - 1.0F) + (A + 1.0F) * c);
   float b2 = A * ((A + 1.0F) + (A - 1.0F) * c - beta);
@@ -319,14 +319,14 @@ void BiquadTransform::highShelfCoEffs(float f, float gain, float q) {
   this->normalizeCoEffs(a0, a1, a2, b0, b1, b2);
 }
 void BiquadTransform::highShelfCoEffsSlope(float f, float gain, float slope) {
-  float A = std::powf(10.0F, gain / 40.0F);
+  float A = powf(10.0F, gain / 40.0F);
   float w0 = 2 * FLOAT_PI * f / this->sampleRate;
-  float c = std::cosf(w0);
-  float s = std::sinf(w0);
+  float c = cosf(w0);
+  float s = sinf(w0);
   float alpha =
       s / 2.0F *
-      std::sqrtf((A + 1.0F / A) * (1.0F / (slope / 12.0F) - 1.0F) + 2.0F);
-  float beta = 2.0F * std::sqrtf(A) * alpha;
+      sqrtf((A + 1.0F / A) * (1.0F / (slope / 12.0F) - 1.0F) + 2.0F);
+  float beta = 2.0F * sqrtf(A) * alpha;
   float b0 = A * ((A + 1.0F) + (A - 1.0F) * c + beta);
   float b1 = -2.0F * A * ((A - 1.0F) + (A + 1.0F) * c);
   float b2 = A * ((A + 1.0F) + (A - 1.0F) * c - beta);
@@ -337,12 +337,12 @@ void BiquadTransform::highShelfCoEffsSlope(float f, float gain, float slope) {
   this->normalizeCoEffs(a0, a1, a2, b0, b1, b2);
 }
 void BiquadTransform::highShelfFOCoEffs(float f, float gain) {
-  float A = std::powf(10.0F, gain / 40.0F);
+  float A = powf(10.0F, gain / 40.0F);
   float w0 = 2 * FLOAT_PI * f / this->sampleRate;
-  float tn = std::tanf(w0 / 2.0F);
+  float tn = tanf(w0 / 2.0F);
 
-  float b0 = A * tn + std::powf(A, 2);
-  float b1 = A * tn - std::powf(A, 2);
+  float b0 = A * tn + powf(A, 2);
+  float b1 = A * tn - powf(A, 2);
   float b2 = 0.0F;
   float a0 = A * tn + 1.0F;
   float a1 = A * tn - 1.0F;
@@ -352,11 +352,11 @@ void BiquadTransform::highShelfFOCoEffs(float f, float gain) {
 }
 
 void BiquadTransform::lowShelfCoEffs(float f, float gain, float q) {
-  float A = std::powf(10.0F, gain / 40.0F);
+  float A = powf(10.0F, gain / 40.0F);
   float w0 = 2 * FLOAT_PI * f / this->sampleRate;
-  float c = std::cosf(w0);
-  float s = std::sinf(w0);
-  float beta = s * std::sqrtf(A) / q;
+  float c = cosf(w0);
+  float s = sinf(w0);
+  float beta = s * sqrtf(A) / q;
 
   float b0 = A * ((A + 1.0F) - (A - 1.0F) * c + beta);
   float b1 = 2.0F * A * ((A - 1.0F) - (A + 1.0F) * c);
@@ -369,14 +369,14 @@ void BiquadTransform::lowShelfCoEffs(float f, float gain, float q) {
 }
 
 void BiquadTransform::lowShelfCoEffsSlope(float f, float gain, float slope) {
-  float A = std::powf(10.0F, gain / 40.0F);
+  float A = powf(10.0F, gain / 40.0F);
   float w0 = 2 * FLOAT_PI * f / this->sampleRate;
-  float c = std::cosf(w0);
-  float s = std::sinf(w0);
+  float c = cosf(w0);
+  float s = sinf(w0);
   float alpha =
       s / 2.0F *
-      std::sqrtf((A + 1.0F / A) * (1.0F / (slope / 12.0F) - 1.0F) + 2.0F);
-  float beta = 2.0F * std::sqrtf(A) * alpha;
+      sqrtf((A + 1.0F / A) * (1.0F / (slope / 12.0F) - 1.0F) + 2.0F);
+  float beta = 2.0F * sqrtf(A) * alpha;
 
   float b0 = A * ((A + 1.0F) - (A - 1.0F) * c + beta);
   float b1 = 2.0F * A * ((A - 1.0F) - (A + 1.0F) * c);
@@ -388,12 +388,12 @@ void BiquadTransform::lowShelfCoEffsSlope(float f, float gain, float slope) {
   this->normalizeCoEffs(a0, a1, a2, b0, b1, b2);
 }
 void BiquadTransform::lowShelfFOCoEffs(float f, float gain) {
-  float A = std::powf(10.0F, gain / 40.0F);
+  float A = powf(10.0F, gain / 40.0F);
   float w0 = 2 * FLOAT_PI * f / this->sampleRate;
-  float tn = std::tanf(w0 / 2.0F);
+  float tn = tanf(w0 / 2.0F);
 
-  float b0 = std::powf(A, 2) * tn + A;
-  float b1 = std::powf(A, 2) * tn - A;
+  float b0 = powf(A, 2) * tn + A;
+  float b1 = powf(A, 2) * tn - A;
   float b2 = 0.0F;
   float a0 = tn + A;
   float a1 = tn - A;
@@ -404,8 +404,8 @@ void BiquadTransform::lowShelfFOCoEffs(float f, float gain) {
 
 void BiquadTransform::notchCoEffs(float f, float q) {
   float w0 = 2 * FLOAT_PI * f / this->sampleRate;
-  float c = std::cosf(w0);
-  float s = std::sinf(w0);
+  float c = cosf(w0);
+  float s = sinf(w0);
   float alpha = s / (2.0F * q);
 
   float b0 = 1.0F;
@@ -419,9 +419,9 @@ void BiquadTransform::notchCoEffs(float f, float q) {
 }
 void BiquadTransform::notchCoEffsBandwidth(float f, float bandwidth) {
   float w0 = 2 * FLOAT_PI * f / this->sampleRate;
-  float c = std::cosf(w0);
-  float s = std::sinf(w0);
-  float alpha = s * std::sinhf(std::logf(2.0F) / 2.0F * bandwidth * w0 / s);
+  float c = cosf(w0);
+  float s = sinf(w0);
+  float alpha = s * sinhf(logf(2.0F) / 2.0F * bandwidth * w0 / s);
 
   float b0 = 1.0F;
   float b1 = -2.0F * c;
@@ -435,8 +435,8 @@ void BiquadTransform::notchCoEffsBandwidth(float f, float bandwidth) {
 
 void BiquadTransform::bandPassCoEffs(float f, float q) {
   float w0 = 2 * FLOAT_PI * f / this->sampleRate;
-  float c = std::cosf(w0);
-  float s = std::sinf(w0);
+  float c = cosf(w0);
+  float s = sinf(w0);
   float alpha = s / (2.0F * q);
 
   float b0 = alpha;
@@ -450,9 +450,9 @@ void BiquadTransform::bandPassCoEffs(float f, float q) {
 }
 void BiquadTransform::bandPassCoEffsBandwidth(float f, float bandwidth) {
   float w0 = 2 * FLOAT_PI * f / this->sampleRate;
-  float c = std::cosf(w0);
-  float s = std::sinf(w0);
-  float alpha = s * std::sinh(std::logf(2.0F) / 2.0F * bandwidth * w0 / s);
+  float c = cosf(w0);
+  float s = sinf(w0);
+  float alpha = s * sinh(logf(2.0F) / 2.0F * bandwidth * w0 / s);
 
   float b0 = alpha;
   float b1 = 0.0F;
@@ -466,8 +466,8 @@ void BiquadTransform::bandPassCoEffsBandwidth(float f, float bandwidth) {
 
 void BiquadTransform::allPassCoEffs(float f, float q) {
   float w0 = 2 * FLOAT_PI * f / this->sampleRate;
-  float c = std::cosf(w0);
-  float s = std::sinf(w0);
+  float c = cosf(w0);
+  float s = sinf(w0);
   float alpha = s / (2.0F * q);
 
   float b0 = 1.0F - alpha;
@@ -481,9 +481,9 @@ void BiquadTransform::allPassCoEffs(float f, float q) {
 }
 void BiquadTransform::allPassCoEffsBandwidth(float f, float bandwidth) {
   float w0 = 2 * FLOAT_PI * f / this->sampleRate;
-  float c = std::cosf(w0);
-  float s = std::sinf(w0);
-  float alpha = s * std::sinh(std::logf(2.0F) / 2.0F * bandwidth * w0 / s);
+  float c = cosf(w0);
+  float s = sinf(w0);
+  float alpha = s * sinh(logf(2.0F) / 2.0F * bandwidth * w0 / s);
 
   float b0 = 1.0F - alpha;
   float b1 = -2.0F * c;
@@ -496,7 +496,7 @@ void BiquadTransform::allPassCoEffsBandwidth(float f, float bandwidth) {
 }
 void BiquadTransform::allPassFOCoEffs(float f) {
   float w0 = 2 * FLOAT_PI * f / this->sampleRate;
-  float tn = std::tanf(w0 / 2.0F);
+  float tn = tanf(w0 / 2.0F);
 
   float alpha = (tn + 1.0F) / (tn - 1.0F);
 

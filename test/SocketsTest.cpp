@@ -1,5 +1,7 @@
-#include <unistd.h>
 #include <catch2/catch_test_macros.hpp>
+
+#include <unistd.h>
+#include <atomic>
 #include <thread>
 
 #include "bell/Logger.h"

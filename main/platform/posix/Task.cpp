@@ -55,7 +55,7 @@ class Task::Impl {
   }
 
  private:
-  pthread_t threadHandle = nullptr;
+  pthread_t threadHandle = 0;
   pthread_attr_t threadAttr{};
   bool threadAttrInitialized = false;
 

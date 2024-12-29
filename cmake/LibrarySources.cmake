@@ -1,5 +1,6 @@
 # Enable testing
 if(NOT BELL_DISABLE_TESTS)
+    add_subdirectory(external/catch2)
     enable_testing()
     add_subdirectory(test)
 endif()
@@ -23,7 +24,14 @@ if(APPLE)
     list(APPEND BELL_SOURCES ${BELL_SOURCES_APPLE})
 endif()
 
+# Unix common includes
 if(UNIX)
     file(GLOB BELL_SOURCES_POSIX "main/platform/posix/*.cpp")
+    list(APPEND BELL_SOURCES ${BELL_SOURCES_POSIX})
+endif()
+
+# Linux includes
+if (UNIX AND NOT APPLE)
+    file(GLOB BELL_SOURCES_POSIX "main/platform/linux/*.cpp")
     list(APPEND BELL_SOURCES ${BELL_SOURCES_POSIX})
 endif()

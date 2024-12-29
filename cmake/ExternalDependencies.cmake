@@ -6,6 +6,10 @@ list(APPEND BELL_LIBS fmt::fmt)
 add_subdirectory(external/picohttpparser)
 list(APPEND BELL_LIBS picohttpparser)
 
+# Include pthread
+find_package(Threads REQUIRED)
+list(APPEND BELL_LIBS Threads::Threads)
+
 # Include tao-json if not disabled
 if(NOT BELL_DISABLE_TAOJSON)
     add_subdirectory(external/taojson)
