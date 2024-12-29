@@ -15,7 +15,7 @@
 namespace bell {
 
 // List of available levels for the BELL_LOG macro
-enum class LogLevel { DEBUG, ERROR, INFO, WARN };
+enum class LogLevel { DEBUG, INFO, WARN, ERROR };
 
 class LoggerBackend {
  public:
@@ -33,6 +33,20 @@ class LoggerBackend {
    */
   virtual void log(LogLevel level, const std::string& filename, int line,
                    const std::string& tag, const std::string& message) = 0;
+
+  /**
+   * @brief Set the minimum log level to be logged. Default is LogLevel::DEBUG
+   *
+   * @param level log level
+   */
+  inline void setLogLevel(LogLevel level) {
+    std::scoped_lock lock(loggerMutex);
+    logLevel = level;
+  }
+
+ protected:
+  LogLevel logLevel = LogLevel::DEBUG;
+  std::mutex loggerMutex;
 };
 
 class BaseLogger {
@@ -61,6 +75,17 @@ class BaseLogger {
   inline void registerBackend(std::unique_ptr<LoggerBackend> logger) {
     std::scoped_lock lock(loggerMutex);
     registeredBackends.push_back(std::move(logger));
+  }
+
+  /**
+   * @brief Set the minimum log level to be logged in all backends. Default is LogLevel::DEBUG
+   *
+   * @param level log level
+   */
+  inline void setLogLevel(LogLevel level) {
+    for (auto& backend : registeredBackends) {
+      backend->setLogLevel(level);
+    }
   }
 
   template <typename... Args>
@@ -142,13 +167,21 @@ class StdoutLoggerBackend : public bell::LoggerBackend {
  * @param logFullTimestamp whether to format the timestamp as local time since start, or full system time
  */
 void registerDefaultLogger(bool includeTags = false,
-                           bool logFullTimestamp = false);
+                           bool logFullTimestamp = false,
+                           LogLevel level = LogLevel::DEBUG);
 
 /**
  * @brief Registers a logger implementation. Multiple loggers can be used at the same time.
  */
 void registerLoggerBackend(std::unique_ptr<bell::LoggerBackend> logger);
 
+/**
+ * @brief Set the minimum log level to be logged. Default is LogLevel::DEBUG
+ *
+ * @remark This can also be set per logger backend
+ * @param level log level
+ */
+void setLogLevel(LogLevel level);
 }  // namespace bell
 
 #define BELL_LOG(type, ...)                                               \
