@@ -1,8 +1,8 @@
 #pragma once
 
 #include <array>
-#include <vector>
 #include <functional>
+#include <vector>
 
 #include "bell/net/SocketStream.h"
 #include "bell/net/TCPSocket.h"

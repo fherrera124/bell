@@ -30,10 +30,6 @@ TEST_CASE("bell::mdns tests", "[bell::mdns]") {
   std::atomic<bool> serviceAdded = false;
   std::atomic<bool> serviceAddrResolved = false;
   std::atomic<bool> serviceRemoved = false;
-  auto service = bell::mdns::Service::registerService(serviceName, "_bell",
-                                                      "_tcp", "", 1234, {});
-
-  bell::utils::sleepMs(1000 * 60 * 60);
 
   auto browser = bell::mdns::Browser::startDiscovery(
       "_bell._tcp", "", 0,
@@ -65,8 +61,9 @@ TEST_CASE("bell::mdns tests", "[bell::mdns]") {
     REQUIRE_FALSE(serviceRemoved);
 
     {
-      auto service = bell::mdns::Service::registerService(serviceName, "_bell",
-                                                          "_tcp", "", 1234, {});
+      auto service = bell::mdns::Service::registerService(
+          serviceName, "_bell", "_tcp", "", 1234,
+          {{"dupa", "value"}, {"dupa2", "value2"}});
       bell::utils::sleepMs(1000);
 
       // Service should be added and addr resolved by now

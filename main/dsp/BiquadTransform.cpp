@@ -324,8 +324,7 @@ void BiquadTransform::highShelfCoEffsSlope(float f, float gain, float slope) {
   float c = cosf(w0);
   float s = sinf(w0);
   float alpha =
-      s / 2.0F *
-      sqrtf((A + 1.0F / A) * (1.0F / (slope / 12.0F) - 1.0F) + 2.0F);
+      s / 2.0F * sqrtf((A + 1.0F / A) * (1.0F / (slope / 12.0F) - 1.0F) + 2.0F);
   float beta = 2.0F * sqrtf(A) * alpha;
   float b0 = A * ((A + 1.0F) + (A - 1.0F) * c + beta);
   float b1 = -2.0F * A * ((A - 1.0F) + (A + 1.0F) * c);
@@ -374,8 +373,7 @@ void BiquadTransform::lowShelfCoEffsSlope(float f, float gain, float slope) {
   float c = cosf(w0);
   float s = sinf(w0);
   float alpha =
-      s / 2.0F *
-      sqrtf((A + 1.0F / A) * (1.0F / (slope / 12.0F) - 1.0F) + 2.0F);
+      s / 2.0F * sqrtf((A + 1.0F / A) * (1.0F / (slope / 12.0F) - 1.0F) + 2.0F);
   float beta = 2.0F * sqrtf(A) * alpha;
 
   float b0 = A * ((A + 1.0F) - (A - 1.0F) * c + beta);

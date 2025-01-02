@@ -260,7 +260,7 @@ class implMDNSBrowser : public mdns::Browser {
     }
 
     // Successfuly resolved the service
-    recordPtr->record.addresses.emplace_back(net::IpAddress(address));
+    recordPtr->record.addresses.emplace_back(address);
 
     if (!(flags & kDNSServiceFlagsMoreComing)) {
       // Successfuly resolved service's address
