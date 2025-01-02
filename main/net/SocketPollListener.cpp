@@ -2,6 +2,7 @@
 
 // System includes
 #include <sys/poll.h>
+#include <algorithm>
 #include <cstring>
 
 #include "fmt/format.h"

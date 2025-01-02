@@ -1,7 +1,7 @@
 #include "bell/utils/Task.h"
 
 #include <pthread.h>
-#include "bell/Logger.h"
+#include <algorithm>
 
 using namespace bell::utils;
 
@@ -33,8 +33,8 @@ class Task::Impl {
     }
 
     threadAttrInitialized = true;
-    ret = pthread_attr_setstacksize(&threadAttr,
-                                    std::max(stackSize, PTHREAD_STACK_MIN));
+    ret = pthread_attr_setstacksize(
+        &threadAttr, std::max(stackSize, static_cast<int>(PTHREAD_STACK_MIN)));
     if (ret > 0) {
       // Could not set the stack size
       return false;

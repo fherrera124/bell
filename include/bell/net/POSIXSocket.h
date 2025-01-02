@@ -1,5 +1,8 @@
 #pragma once
 
+// System includes
+#include <cstdint>
+
 #include "bell/net/IpAddress.h"
 #include "bell/net/Socket.h"
 

@@ -15,3 +15,8 @@ if(NOT BELL_DISABLE_TAOJSON)
     add_subdirectory(external/taojson)
     list(APPEND BELL_LIBS taocpp-json)
 endif()
+
+if (UNIX AND NOT APPLE)
+    # Include avahi on linux
+    list(APPEND BELL_LIBS avahi-client avahi-common)
+endif()

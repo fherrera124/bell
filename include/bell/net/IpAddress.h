@@ -1,6 +1,7 @@
 #pragma once
 
 #include <sys/socket.h>
+#include <cstdint>
 #include <optional>
 #include <string>
 
@@ -53,6 +54,6 @@ class IpAddress {
   Type addressType = Type::Unknown;
   sockaddr_storage storage{};
   socklen_t addrLen = 0;
-  std::optional<uint16_t> port{};
+  std::optional<uint16_t> port;
 };
 }  // namespace bell::net

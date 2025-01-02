@@ -13,7 +13,7 @@ class Semaphore {
    * @brief Takes a semaphore, blocking until the count is greater than zero, or until the timeout expires.
    *
    * @param timeout Timeout in milliseconds. A value of 0 means no timeout.
-   * @
+   * @return true if the semaphore was taken, false if the timeout expired.
    */
   inline bool take(int timeout = 0) {
     std::unique_lock<std::mutex> lock(semMutex);
