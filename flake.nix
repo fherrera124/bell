@@ -2,7 +2,7 @@
   description = "bell - Various internal CPP utilities";
 
   inputs = {
-    nixpkgs.url = "nixpkgs/nixos-24.05";
+    nixpkgs.url = "nixpkgs/nixos-24.11";
     nixpkgs-unstable.url = "github:nixos/nixpkgs/nixpkgs-unstable";
     flake-utils.url = "github:numtide/flake-utils";
   };
@@ -30,10 +30,10 @@
 
       common-pkgs = with pkgs;
             [
-              catch2_3
               cmake
               ninja
               clang-tools
+              avahi
             ];
 
       apps = {

@@ -89,6 +89,10 @@ compile_commands.json
 CTestTestfile.cmake
 _deps
 
+# ninja
+build.ninja
+DartConfiguration.tcl
+
 ### CMake Patch ###
 # External projects
 *-prefix/
