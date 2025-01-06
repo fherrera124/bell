@@ -53,7 +53,7 @@ class Format {
 
   // Convert bytes to sample count
   uint32_t bytesToSamples(uint32_t bytes) const {
-    return bytes / (static_cast<int>(bw) / 8);
+    return bytes / (static_cast<int>(bw) / 8) / ch;
   }
 
  private:

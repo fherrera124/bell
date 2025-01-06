@@ -25,3 +25,9 @@ target_include_directories(bell PUBLIC ${BELL_INCLUDES} ${CMAKE_CURRENT_BINARY_D
 if(BELL_DISABLE_TAOJSON)
     target_compile_definitions(bell PUBLIC BELL_DISABLE_TAOJSON)
 endif()
+
+if(NOT BELL_DISABLE_SANITIZERS)
+    # Enable sanitizers
+    target_compile_options(bell PUBLIC -fsanitize=address -fsanitize=undefined)
+    target_link_options(bell PUBLIC -fsanitize=address -fsanitize=undefined)
+endif()

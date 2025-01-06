@@ -103,13 +103,17 @@ std::optional<bell::net::URI> bell::net::parseURI(std::string_view uri) {
     result.host = std::string(authority);
   }
 
-  uri.remove_prefix(authorityEnd);
+  uri.remove_prefix(std::min(authorityEnd, uri.size()));
 
   // Parse the path
   if (!uri.empty() && uri.front() == '/') {
     auto pathEnd = uri.find('?');
-    result.path = std::string(uri.substr(0, pathEnd));
-    uri.remove_prefix(pathEnd);
+    if (pathEnd != std::string_view::npos) {
+      result.path = std::string(uri.substr(0, pathEnd));
+      uri.remove_prefix(pathEnd);
+    } else {
+      result.path = std::string(uri);
+    }
   } else {
     result.path = "/";  // Default path if none specified
   }

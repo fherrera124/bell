@@ -33,6 +33,6 @@ class SocketPollListener {
  private:
   // keeps reference to socket we're listening to events from
   std::unordered_map<int, SocketEventCallback> handlers;
-  std::vector<struct pollfd> fds;
+  std::vector<pollfd> fds{};
 };
 }  // namespace bell::net

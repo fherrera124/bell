@@ -14,10 +14,9 @@ void SocketPollListener::registerSocket(
   handlers.insert({fd, eventCallback});
 
   // Add to the file descriptor list for polling
-  struct pollfd pfd {};
+  pollfd pfd{};
   pfd.fd = fd;
   pfd.events = eventMask;
-
   fds.push_back(pfd);
 }
 
@@ -48,7 +47,8 @@ void SocketPollListener::poll(int timeoutMs) {
     return;
   }
 
-  for (auto& pfd : fds) {
+  auto fdsCopy = fds;  // Copy the file descriptors to avoid modification
+  for (auto& pfd : fdsCopy) {
     if (pfd.revents != 0) {  // If there are any events
       auto it = handlers.find(pfd.fd);
       if (it != handlers.end()) {

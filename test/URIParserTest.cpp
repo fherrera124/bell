@@ -9,8 +9,9 @@ using Catch::Matchers::Equals;
 
 TEST_CASE("bell::io::URIParser tests", "[bell::io::URIParser]") {
   SECTION("Valid URIs") {
+    std::string uri = "http://www.example.com";
     // Parse first URI
-    auto result = bell::net::parseURI("http://www.example.com");
+    auto result = bell::net::parseURI(uri);
     REQUIRE(result.has_value());
     REQUIRE(result->port.has_value() == false);
     REQUIRE(result->query.has_value() == false);
@@ -19,9 +20,9 @@ TEST_CASE("bell::io::URIParser tests", "[bell::io::URIParser]") {
     CHECK_THAT(result->host.value(), Equals("www.example.com"));
     CHECK_THAT(result->path.value(), Equals("/"));
 
+    uri = "https://www.example.com:443/path/to/resource?query=value";
     // Parse second URI
-    result = bell::net::parseURI(
-        "https://www.example.com:443/path/to/resource?query=value");
+    result = bell::net::parseURI(uri);
     REQUIRE(result.has_value());
     REQUIRE(result->port.value() == 443);
 

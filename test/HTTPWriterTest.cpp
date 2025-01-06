@@ -62,8 +62,7 @@ TEST_CASE("bell::http::Writer tests", "[bell::http::Writer]") {
     // Write the request using the helper method
     writer.writeResponse(200);
 
-    std::string expected =
-        "HTTP/1.1 200 OK\r\n\r\n";
+    std::string expected = "HTTP/1.1 200 OK\r\n\r\n";
     REQUIRE(ss.str() == expected);
 
     // Should not be able to write another response
@@ -87,7 +86,8 @@ TEST_CASE("bell::http::Writer tests", "[bell::http::Writer]") {
     writer.writeResponseWithBody(500, {}, "Hello, world!");
 
     std::string expected =
-        "HTTP/1.1 500 Internal Server Error\r\ncontent-type: text/html\r\ncontent-length: 13\r\n\r\nHello, world!";
+        "HTTP/1.1 500 Internal Server Error\r\ncontent-type: "
+        "text/html\r\ncontent-length: 13\r\n\r\nHello, world!";
     REQUIRE(ss.str() == expected);
 
     // Should not be able to write another response

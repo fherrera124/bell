@@ -1,5 +1,6 @@
 option(BELL_DISABLE_TESTS "Disable bell unit tests" ON)
 option(BELL_RUN_CLANGTIDY "Run clang-tidy static analysis" OFF)
+option(BELL_DISABLE_SANITIZERS "Disable sanitizers" ON)
 
 # Audio codecs
 option(BELL_DISABLE_CODECS "Disable the entire audio codec wrapper" OFF)
@@ -24,6 +25,8 @@ option(BELL_DISABLE_TAOJSON "Don't include TaoJSON" OFF)
 
 message(STATUS "Bell options:")
 message(STATUS "    Disable unit tests: ${BELL_DISABLE_TESTS}")
+message(STATUS "    Run clang-tidy: ${BELL_RUN_CLANGTIDY}")
+message(STATUS "    Disable sanitizers: ${BELL_DISABLE_SANITIZERS}")
 message(STATUS "    Disable all codecs: ${BELL_DISABLE_CODECS}")
 
 if(NOT BELL_DISABLE_CODECS)

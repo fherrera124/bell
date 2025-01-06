@@ -1,6 +1,5 @@
 #include <catch2/catch_test_macros.hpp>
-#include <sstream>         // for std::ostringstream
-
+#include <sstream>  // for std::ostringstream
 
 #include "bell/io/BinaryStream.h"
 #include "bell/io/MemoryStream.h"  // for bell::IMemoryStream

@@ -55,22 +55,19 @@ def dsp_parse_pipeline(json_str):
         
 # Example Usage
 def dsp_run_pipeline(input_pcm, output_pcm, num_channels, bit_width, sample_rate):
-    CHUNK_SIZE = 1024  # Maximum buffer size for processing
+    CHUNK_SIZE = 512  # Maximum buffer size for processing
     success = True
-
     # Create output buffer with the same size as input
     output_pcm.clear()
-    output_pcm.extend([0] * len(input_pcm))  # Ensure the output PCM is pre-allocated
-
+    output_pcm.extend(bytearray(len(input_pcm)))  # Ensure the output PCM is pre-allocated
     # Process PCM data in chunks
     for i in range(0, len(input_pcm), CHUNK_SIZE):
         # Determine the current chunk size
         chunk_size = min(CHUNK_SIZE, len(input_pcm) - i)
-
         # Prepare input and output buffers for the chunk
-        input_data = (ctypes.c_uint8 * chunk_size)(*input_pcm[i:i + chunk_size])
+        input_data = (ctypes.c_uint8 * chunk_size).from_buffer_copy(input_pcm[i:i + chunk_size])
         output_data = (ctypes.c_uint8 * chunk_size)()
-
+        
         # Call the DSP pipeline
         if not run_dsp_pipeline(
             input_data, chunk_size,
@@ -80,10 +77,8 @@ def dsp_run_pipeline(input_pcm, output_pcm, num_channels, bit_width, sample_rate
             print(f"DSP pipeline failed at chunk {i // CHUNK_SIZE}.")
             success = False
             break
-
         # Copy processed chunk to the output PCM array
-        output_pcm[i:i + chunk_size] = list(output_data)
-
+        output_pcm[i:i + chunk_size] = bytes(output_data)  # Ensure proper byte-level assignment
     if success:
         print("DSP pipeline processed all chunks successfully.")
     return success
