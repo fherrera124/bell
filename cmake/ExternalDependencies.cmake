@@ -23,6 +23,21 @@ if(NOT BELL_DISABLE_TAOJSON)
     list(APPEND BELL_LIBS taocpp-json)
 endif()
 
+if(NOT BELL_DISABLE_MBEDTLS)
+    # Include mbedtls
+    if(BELL_EXTERNAL_MBEDTLS)
+        list(APPEND BELL_LIBS ${BELL_EXTERNAL_MBEDTLS})
+    else()
+        # Disable mbedtls tests and program targets
+        set(ENABLE_TESTING OFF)
+        set(ENABLE_PROGRAMS OFF)
+
+        # add mbedtls as a subdirectory
+        add_subdirectory(external/mbedtls)
+        list(APPEND BELL_LIBS mbedtls)
+    endif()
+endif()
+
 if (UNIX AND NOT APPLE)
     # Include avahi on linux
     list(APPEND BELL_LIBS avahi-client avahi-common)

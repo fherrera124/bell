@@ -19,7 +19,12 @@ option(BELL_DISABLE_MQTT "Disable the built-in MQTT wrapper" ON)
 option(BELL_DISABLE_SINKS "Disable all built-in audio sink implementations" OFF)
 option(BELL_SINK_ALSA "Enable ALSA audio sink" OFF)
 option(BELL_SINK_PORTAUDIO "Enable PortAudio sink" OFF)
+
+# Misc
 option(BELL_DISABLE_TAOJSON "Don't include TaoJSON" OFF)
+option(BELL_DISABLE_MBEDTLS "Don't include MbedTLS" OFF)
+option(BELL_EXTERNAL_MBEDTLS "Don't include MbedTLS" OFF)
+set(BELL_EXTERNAL_MBEDTLS "" CACHE STRING "External mbedtls library target name, optional")
 
 message(STATUS "Bell options:")
 message(STATUS "  Disable unit tests: ${BELL_DISABLE_TESTS}")
@@ -42,3 +47,4 @@ endif()
 
 message(STATUS "  Disable TaoJSON: ${BELL_DISABLE_TAOJSON}")
 message(STATUS "  Disable Mqtt: ${BELL_DISABLE_MQTT}")
+message(STATUS "  Disable MbedTLS: ${BELL_DISABLE_MBEDTLS}")
