@@ -7,3 +7,6 @@
 [submodule "external/catch2"]
 	path = external/catch2
 	url = git@github.com:catchorg/Catch2.git
+[submodule "external/mbedtls"]
+	path = external/mbedtls
+	url = https://github.com/Mbed-TLS/mbedtls.git
