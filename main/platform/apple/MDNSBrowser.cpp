@@ -1,10 +1,10 @@
 #include "bell/mdns/Browser.h"
 
 // System includes
+#include <cassert>
 #include <iostream>
 #include <stdexcept>
 #include <string>
-#include <cassert>
 
 // Library includes
 #include "bell/net/IpAddress.h"
