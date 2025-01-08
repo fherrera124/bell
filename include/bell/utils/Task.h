@@ -6,15 +6,15 @@
 #include <string>
 
 namespace bell::utils {
+// Enumeration of task cores, used on Espressif platforms
+enum class TaskCore {
+  Core0 = 0,
+  Core1 = 1,
+  CoreAny = -1,
+};
+
 class Task {
  public:
-  // Enumeration of task cores, used on Espressif platforms
-  enum class TaskCore {
-    Core0 = 0,
-    Core1 = 1,
-    CoreAny = -1,
-  };
-
   /**
    * @brief Default constructor for the Task base class
    * @param taskName The name of the task
