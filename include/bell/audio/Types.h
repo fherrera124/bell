@@ -25,7 +25,7 @@ enum class SampleRate : uint32_t {
 class Format {
  public:
   // Default constructor
-  Format() : ch(2), bw(BitWidth::BW_16), sr(SampleRate::SR_44100HZ) {}
+  Format() = default;
 
   Format(uint8_t numChannels, BitWidth bitWidth, SampleRate sampleRate)
       : ch(numChannels), bw(bitWidth), sr(sampleRate) {}
@@ -39,6 +39,12 @@ class Format {
   BitWidth getBitWidth() const { return bw; }
   SampleRate getSampleRate() const { return sr; }
   uint8_t getNumChannels() const { return ch; }
+  uint32_t getSampleRateValue() const { return static_cast<uint32_t>(sr); }
+
+  // Setters
+  void setBitWidth(BitWidth bitWidth) { bw = bitWidth; }
+  void setSampleRate(SampleRate sampleRate) { sr = sampleRate; }
+  void setNumChannels(uint8_t numChannels) { ch = numChannels; }
 
   bool operator==(const Format& other) const {
     return bw == other.bw && sr == other.sr && ch == other.ch;
@@ -56,9 +62,14 @@ class Format {
     return bytes / (static_cast<int>(bw) / 8) / ch;
   }
 
+  // Convert milliseconds to samples
+  uint32_t msToSamples(uint32_t ms) const {
+    return (static_cast<int>(sr) / 1000) * ms;
+  }
+
  private:
-  uint8_t ch;
-  BitWidth bw;
-  SampleRate sr;
+  uint8_t ch = 2;
+  BitWidth bw = BitWidth::BW_16;
+  SampleRate sr = SampleRate::SR_44100HZ;
 };
 }  // namespace bell::audio

@@ -8,7 +8,7 @@ using namespace bell::utils;
 class Task::Impl {
  public:
   Impl(const std::string& /*taskName*/, int stackSize, int /*espPriority*/,
-       Task::TaskCore /*espTaskCore*/, bool /*espStackOnPsram*/)
+       TaskCore /*espTaskCore*/, bool /*espStackOnPsram*/)
       : stackSize(stackSize) {}
   ~Impl() {
     if (threadAttrInitialized) {
