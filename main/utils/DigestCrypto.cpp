@@ -1,9 +1,9 @@
-#include "bell/utils/MbedTLSDigest.h"
+#include "bell/utils/DigestCrypto.h"
 #include "fmt/format.h"
 
 using namespace bell;
 
-utils::MbedTLSDigest::MbedTLSDigest(mbedtls_md_type_t type, bool hmac) {
+utils::DigestCrypto::DigestCrypto(mbedtls_md_type_t type, bool hmac) {
   if (type == MBEDTLS_MD_NONE) {
     throw std::invalid_argument("Invalid hash type");
   }
@@ -21,12 +21,12 @@ utils::MbedTLSDigest::MbedTLSDigest(mbedtls_md_type_t type, bool hmac) {
   reset();
 }
 
-utils::MbedTLSDigest::~MbedTLSDigest() {
+utils::DigestCrypto::~DigestCrypto() {
   // Free the context
   mbedtls_md_free(&ctx);
 }
 
-void utils::MbedTLSDigest::reset() {
+void utils::DigestCrypto::reset() {
   // Reset the context
   auto result = mbedtls_md_starts(&ctx);
   if (result != 0) {
@@ -44,7 +44,7 @@ void utils::MbedTLSDigest::reset() {
   }
 }
 
-void utils::MbedTLSDigest::update(const uint8_t* bytes, size_t length) {
+void utils::DigestCrypto::update(const uint8_t* bytes, size_t length) {
   // Update the context with the specified bytes
   auto result = mbedtls_md_update(&ctx, bytes, length);
   if (result != 0) {
@@ -53,12 +53,12 @@ void utils::MbedTLSDigest::update(const uint8_t* bytes, size_t length) {
   }
 }
 
-void utils::MbedTLSDigest::updateString(std::string_view str) {
+void utils::DigestCrypto::updateString(std::string_view str) {
   // Update the context with the specified string
   update(reinterpret_cast<const uint8_t*>(str.data()), str.size());
 }
 
-void utils::MbedTLSDigest::hmac(const uint8_t* key, size_t keyLength) {
+void utils::DigestCrypto::hmac(const uint8_t* key, size_t keyLength) {
   // Initialize the HMAC context
   auto result = mbedtls_md_hmac_starts(&ctx, key, keyLength);
   if (result != 0) {
@@ -69,7 +69,7 @@ void utils::MbedTLSDigest::hmac(const uint8_t* key, size_t keyLength) {
   hmacInitialized = true;
 }
 
-void utils::MbedTLSDigest::hmacUpdate(const uint8_t* bytes, size_t length) {
+void utils::DigestCrypto::hmacUpdate(const uint8_t* bytes, size_t length) {
   // Update the HMAC context with the specified bytes
   auto result = mbedtls_md_hmac_update(&ctx, bytes, length);
   if (result != 0) {
@@ -78,12 +78,12 @@ void utils::MbedTLSDigest::hmacUpdate(const uint8_t* bytes, size_t length) {
   }
 }
 
-void utils::MbedTLSDigest::hmacUpdateString(const std::string_view& key) {
+void utils::DigestCrypto::hmacUpdateString(const std::string_view& key) {
   // Update the HMAC context with the specified string
   hmacUpdate(reinterpret_cast<const uint8_t*>(key.data()), key.size());
 }
 
-void utils::MbedTLSDigest::finish(uint8_t* output) {
+void utils::DigestCrypto::finish(uint8_t* output) {
   // Finalize the context and store the result in the output array
   auto result = mbedtls_md_finish(&ctx, output);
   if (result != 0) {
@@ -92,7 +92,7 @@ void utils::MbedTLSDigest::finish(uint8_t* output) {
   }
 }
 
-void utils::MbedTLSDigest::hmacFinish(uint8_t* output) {
+void utils::DigestCrypto::hmacFinish(uint8_t* output) {
   // Finalize the HMAC context and store the result in the output array
   auto result = mbedtls_md_hmac_finish(&ctx, output);
   if (result != 0) {
@@ -101,19 +101,19 @@ void utils::MbedTLSDigest::hmacFinish(uint8_t* output) {
   }
 }
 
-size_t utils::MbedTLSDigest::getDigestSize() {
+size_t utils::DigestCrypto::getDigestSize() {
   // Get the length of the digest
   return mbedtls_md_get_size(mbedtls_md_info_from_type(digestType));
 }
 
-void utils::MbedTLSDigest::getDigest(const uint8_t* bytes, size_t length,
+void utils::DigestCrypto::getDigest(const uint8_t* bytes, size_t length,
                                      uint8_t* output) {
   reset();
   update(bytes, length);
   finish(output);
 }
 
-void utils::MbedTLSDigest::getHmac(const uint8_t* key, size_t keyLength,
+void utils::DigestCrypto::getHmac(const uint8_t* key, size_t keyLength,
                                    const uint8_t* message, size_t messageLength,
                                    uint8_t* output) {
   hmac(key, keyLength);

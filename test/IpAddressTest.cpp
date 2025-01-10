@@ -10,7 +10,7 @@ TEST_CASE("bell::net::IpAddress tests", "[bell::net::IpAddress]") {
 
     // Localhost should resolve to either IPv4 or IPv6
     REQUIRE((resolved.getType() != bell::net::IpAddress::Type::Unknown));
-    REQUIRE(resolved.getSockAddrLen() > 0);
+    REQUIRE(resolved.getSockAddrLen()  > 0);
 
     // Requesting IPv4 should return IPv4
     resolved =

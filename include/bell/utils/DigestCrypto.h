@@ -7,10 +7,10 @@
 #include <mbedtls/md.h>
 
 namespace bell::utils {
-class MbedTLSDigest {
+class DigestCrypto {
  public:
   /**
-   * @brief Constructs an MbedTLSDigest object.
+   * @brief Constructs an DigestCrypto object.
    * 
    * Initializes the digest context with the specified hashing algorithm.
    * Optionally initializes for HMAC if specified.
@@ -18,8 +18,8 @@ class MbedTLSDigest {
    * @param type The type of hash algorithm to use. 
    * @param hmac Set to true to initialize for HMAC operations. Default is false.
    */
-  MbedTLSDigest(mbedtls_md_type_t type, bool hmac = false);
-  ~MbedTLSDigest();
+  DigestCrypto(mbedtls_md_type_t type, bool hmac = false);
+  ~DigestCrypto();
 
   /**
    * @brief Updates the digest with a chunk of data.
