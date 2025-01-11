@@ -107,15 +107,15 @@ size_t utils::DigestCrypto::getDigestSize() {
 }
 
 void utils::DigestCrypto::getDigest(const uint8_t* bytes, size_t length,
-                                     uint8_t* output) {
+                                    uint8_t* output) {
   reset();
   update(bytes, length);
   finish(output);
 }
 
 void utils::DigestCrypto::getHmac(const uint8_t* key, size_t keyLength,
-                                   const uint8_t* message, size_t messageLength,
-                                   uint8_t* output) {
+                                  const uint8_t* message, size_t messageLength,
+                                  uint8_t* output) {
   hmac(key, keyLength);
   hmacUpdate(message, messageLength);
   hmacFinish(output);

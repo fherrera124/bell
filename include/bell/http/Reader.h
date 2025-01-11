@@ -105,6 +105,13 @@ class Reader {
   size_t getBodyBytesLength();
 
   /**
+   * @brief Returns the query parameters of the request, parsed as key-value pairs
+   * 
+   * @return std::unordered_map<std::string, std::string> 
+   */
+  std::unordered_map<std::string, std::string> getQueryParams() const;
+
+  /**
    * @brief Returns the stream used by the reader
    *
    * @return std::istream* Pointer to the stream used by the reader. Will be valid until the reader is destroyed.
@@ -129,10 +136,14 @@ class Reader {
   // Request specific fields
   std::optional<Method> method;
   std::optional<std::string_view> path;
+  std::unordered_map<std::string, std::string> queryParams;
 
   // Response specific fields
   std::optional<int> statusCode;
   std::optional<std::string_view> statusMessage;
+
+  // Tries to parse the query parameters from path, stripping it if successful
+  void parseQueryParams();
 
   // Ensure the response is of the expected type, throws an exception if it is not
   void ensureValid(Direction expectedDirection) const;

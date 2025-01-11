@@ -96,6 +96,25 @@ TEST_CASE("bell::http::Reader tests", "[bell::http::Reader]") {
     REQUIRE_THROWS(reader.getStatusCode());
   }
 
+  SECTION("Parses query parameters from HTTP requests") {
+    std::istringstream mockRequest(
+        "GET /search?query=test&lang=en HTTP/1.1\r\n"
+        "Host: example.com\r\n"
+        "\r\n");
+    bell::http::Reader reader(bell::http::Direction::Request, &mockRequest);
+    REQUIRE_NOTHROW(reader.readHeaders());
+
+    // Verify method and path are parsed correctly
+    REQUIRE(reader.getMethod() == bell::http::Method::GET);
+    REQUIRE(reader.getPath() == "/search");
+
+    // Now, check the query parameters
+    auto queryParams = reader.getQueryParams();
+    REQUIRE(queryParams.size() == 2);
+    REQUIRE(queryParams["query"] == "test");
+    REQUIRE(queryParams["lang"] == "en");
+  }
+
   SECTION("Handles missing Host header in HTTP/1.1 requests") {
     std::istringstream mockRequest(
         "GET /index.html HTTP/1.1\r\n"

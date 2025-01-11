@@ -1,5 +1,7 @@
 #include "bell/http/Reader.h"
 #include "bell/http/Common.h"
+#include "bell/io/MemoryStream.h"
+#include "bell/net/URIParser.h"
 
 using namespace bell;
 
@@ -113,11 +115,20 @@ void http::Reader::readHeaders() {
     if (minorVersion == 1 && getHeader("Host").empty()) {
       throw std::runtime_error("Host header required for HTTP/1.1");
     }
+
+    parseQueryParams();
   }
 }
 
 size_t http::Reader::getContentLength() const {
   return contentLength.value();
+}
+
+std::unordered_map<std::string, std::string> http::Reader::getQueryParams()
+    const {
+  ensureValid(Direction::Request);
+
+  return queryParams;
 }
 
 std::string_view http::Reader::getHeader(const std::string& headerName) const {
@@ -171,6 +182,34 @@ const char* http::Reader::getBodyBytesPtr() {
   }
 
   return bufferPtr->data() + bufferPtr->size() - readContentLength;
+}
+
+void http::Reader::parseQueryParams() {
+  ensureValid(Direction::Request);
+
+  if (!path.has_value()) {
+    throw std::runtime_error("Path not set");
+  }
+
+  auto queryStart = path->find('?');
+  if (queryStart != std::string::npos) {
+    io::IMemoryStream ss(
+        reinterpret_cast<const std::byte*>(path->data() + queryStart + 1),
+        path->size() - queryStart - 1);
+    std::string pair;
+
+    while (std::getline(ss, pair, '&')) {
+      size_t pos = pair.find('=');
+      if (pos != std::string::npos) {
+        std::string key = net::decodeURLEncoded(pair.substr(0, pos));
+        std::string value = net::decodeURLEncoded(pair.substr(pos + 1));
+        queryParams[key] = value;
+      }
+    }
+
+    // Remove query parameters from the path
+    path = path->substr(0, queryStart);
+  }
 }
 
 size_t http::Reader::getBodyBytesLength() {
