@@ -117,3 +117,8 @@ inline std::unique_ptr<Connection> post(
   return postRawPtr(url, headers, body.data(), body.size(), timeoutMs);
 }
 }  // namespace bell::http
+
+// Alias for the HTTPConnection class
+namespace bell {
+using HTTPConnection = http::Connection;
+};  // namespace bell

@@ -58,3 +58,7 @@ class SocketStream : public std::iostream {
   SocketBuffer* rdbuf() { return &socketBuf; }
 };
 }  // namespace bell::net
+
+namespace bell {
+using SocketStream = net::SocketStream;
+}

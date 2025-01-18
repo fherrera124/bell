@@ -5,6 +5,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -106,8 +107,8 @@ class Reader {
 
   /**
    * @brief Returns the query parameters of the request, parsed as key-value pairs
-   * 
-   * @return std::unordered_map<std::string, std::string> 
+   *
+   * @return std::unordered_map<std::string, std::string>
    */
   std::unordered_map<std::string, std::string> getQueryParams() const;
 
@@ -151,3 +152,8 @@ class Reader {
   void readBody();
 };
 }  // namespace bell::http
+
+// Alias for the HTTPReader class
+namespace bell {
+using HTTPReader = http::Reader;
+};  // namespace bell

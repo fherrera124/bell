@@ -117,3 +117,7 @@ class BiquadTransform : public Transform {
                        float b2);
 };
 }  // namespace bell::dsp
+
+namespace bell {
+using BiquadTransform = dsp::BiquadTransform;
+}

@@ -16,7 +16,6 @@ namespace bell::http {
 class Server : bell::utils::Task {
  public:
   Server(int maxConnections = 5);
-
   using RequestHandler = std::function<void(
       const std::unique_ptr<Reader>& requestReader,
       const std::unique_ptr<Writer>& responseWriter,
@@ -74,3 +73,8 @@ class Server : bell::utils::Task {
   void taskLoop() override;
 };
 }  // namespace bell::http
+
+namespace bell {
+using HTTPServer = http::Server;
+using HTTPRequestParams = const std::unordered_map<std::string, std::string>&;
+}  // namespace bell

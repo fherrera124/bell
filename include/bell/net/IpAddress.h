@@ -14,13 +14,20 @@ class IpAddress {
   IpAddress();
 
   // Create an address from a sockaddr structure. Should fill in the type and storage fields.
-  IpAddress(const sockaddr* addr);
+  IpAddress(const sockaddr* addr,
+            std::optional<std::string> originalHost = std::nullopt);
 
   // Returns the address in a string format. For IPv4, this is the dotted decimal format. For IPv6, this is the colon-separated format.
   std::string toString(bool includePort = true) const;
 
   // Returns the address type
   Type getType() const;
+
+  // Returns the original host string, as passed to the resolveDomain() or fromString() functions
+  std::optional<std::string> getOriginalHost() const;
+
+  // Returns the port of the address, if set
+  std::optional<uint16_t> getPort() const;
 
   // Returns the sockaddr structure pointer, for use with socket functions
   const sockaddr* getSockAddrPtr() const;
@@ -33,6 +40,17 @@ class IpAddress {
 
   // Returns the inet family of the address
   int getFamily() const;
+
+  // Implement compare operator
+  bool operator==(const IpAddress& other) const {
+    if (addressType != other.addressType)
+      return false;
+    if (port != other.port)
+      return false;
+    if (addrLen != other.addrLen)
+      return false;
+    return memcmp(&storage, &other.storage, sizeof(storage)) == 0;
+  }
 
   /**
    * @brief Create an address from the string representation of an IP address.
@@ -55,5 +73,10 @@ class IpAddress {
   sockaddr_storage storage{};
   socklen_t addrLen = 0;
   std::optional<uint16_t> port;
+  std::optional<std::string> originalHost;
 };
 }  // namespace bell::net
+
+namespace bell {
+using IpAddress = net::IpAddress;
+}

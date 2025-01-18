@@ -49,3 +49,7 @@ class Semaphore {
   uint32_t semCount;
 };
 }  // namespace bell::utils
+
+namespace bell {
+using Semaphore = utils::Semaphore;
+}

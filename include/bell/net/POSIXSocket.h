@@ -67,3 +67,7 @@ class POSIXSocket : public Socket {
   IpAddress destinationAddress;
 };
 }  // namespace bell::net
+
+namespace bell {
+using POSIXSocket = net::POSIXSocket;
+}

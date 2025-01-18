@@ -56,3 +56,7 @@ class BiquadComboTransform : public Transform {
   void configureButterworth(float freq, int order, bool isLowpass);
 };
 }  // namespace bell::dsp
+
+namespace bell {
+using BiquadComboTransform = dsp::BiquadComboTransform;
+}

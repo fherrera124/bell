@@ -73,3 +73,7 @@ class TransformPipeline {
   std::vector<std::shared_ptr<Transform>> transforms{};
 };
 }  // namespace bell::dsp
+
+namespace bell {
+using TransformPipeline = dsp::TransformPipeline;
+}

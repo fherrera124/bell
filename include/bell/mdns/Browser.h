@@ -141,3 +141,7 @@ class Browser {
 };
 
 }  // namespace bell::mdns
+
+namespace bell {
+using MDNSBrowser = mdns::Browser;
+}

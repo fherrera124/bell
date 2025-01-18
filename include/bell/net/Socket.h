@@ -127,3 +127,7 @@ class Socket {
   virtual int getFd() = 0;
 };
 }  // namespace bell::net
+
+namespace bell {
+using Socket = net::Socket;
+}

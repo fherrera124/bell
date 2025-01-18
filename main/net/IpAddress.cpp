@@ -13,7 +13,9 @@ IpAddress::IpAddress() {
   std::memset(&storage, 0, sizeof(storage));
 }
 
-IpAddress::IpAddress(const sockaddr* addr) {
+IpAddress::IpAddress(const sockaddr* addr,
+                     std::optional<std::string> originalHost)
+    : originalHost(std::move(originalHost)) {
   // Copy the address and determine the address type and length
   if (addr->sa_family == AF_INET) {
     addressType = Type::IPv4;
@@ -122,16 +124,24 @@ std::optional<IpAddress> IpAddress::fromString(const std::string& addrStr) {
   // Try to parse IPv4 address
   if (inet_pton(AF_INET, addrStr.c_str(), &(ipv4Addr.sin_addr)) == 1) {
     sockAddrv4->sa_family = AF_INET;
-    return IpAddress(sockAddrv4);
+    return IpAddress(sockAddrv4, addrStr);
   }
 
   // Try to parse IPv6 address
   if (inet_pton(AF_INET6, addrStr.c_str(), &(ipv6Addr.sin6_addr)) == 1) {
     sockAddrv6->sa_family = AF_INET6;
-    return IpAddress(sockAddrv6);
+    return IpAddress(sockAddrv6, addrStr);
   }
 
   return std::nullopt;
+}
+
+std::optional<uint16_t> IpAddress::getPort() const {
+  return port;
+}
+
+std::optional<std::string> IpAddress::getOriginalHost() const {
+  return originalHost;
 }
 
 IpAddress IpAddress::resolveDomain(const std::string& hostname, int sockType,
@@ -157,7 +167,7 @@ IpAddress IpAddress::resolveDomain(const std::string& hostname, int sockType,
   }
 
   // We'll use the first valid result
-  IpAddress resolved(res->ai_addr);
+  IpAddress resolved(res->ai_addr, hostname);
 
   // Clean up
   freeaddrinfo(res);

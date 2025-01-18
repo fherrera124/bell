@@ -29,3 +29,11 @@ Method parseMethod(std::string_view method);
 /// @brief Returns a string representation of the HTTP method
 std::string_view methodToString(Method method);
 }  // namespace bell::http
+
+// Alias for the HTTPCommon class
+namespace bell {
+using HTTPHeader = http::Header;
+using HTTPHeaders = http::Headers;
+using HTTPMethod = http::Method;
+using HTTPDirection = http::Direction;
+};  // namespace bell

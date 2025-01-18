@@ -42,3 +42,7 @@ class TCPSocket : public POSIXSocket {
   const char* LOG_TAG = "TCPSocket";
 };
 }  // namespace bell::net
+
+namespace bell {
+using TCPSocket = net::TCPSocket;
+}

@@ -36,3 +36,7 @@ class SocketPollListener {
   std::vector<pollfd> fds{};
 };
 }  // namespace bell::net
+
+namespace bell {
+using SocketPollListener = net::SocketPollListener;
+}

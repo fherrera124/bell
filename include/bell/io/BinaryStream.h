@@ -79,3 +79,7 @@ class BinaryStream {
   }
 };
 }  // namespace bell::io
+
+namespace bell {
+using BinaryStream = io::BinaryStream;
+}

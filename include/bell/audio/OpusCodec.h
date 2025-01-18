@@ -58,3 +58,8 @@ class OpusCodec : public Codec {
   static int getOpusFrameSize(int frameDuration);
 };
 }  // namespace bell::audio
+
+namespace bell {
+using OpusCodec = audio::OpusCodec;
+using OpusCodecConfig = audio::OpusCodec::OpusCodecConfig;
+}  // namespace bell

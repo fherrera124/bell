@@ -46,3 +46,7 @@ class Engine {
   std::mutex accessMutex;
 };
 }  // namespace bell::dsp
+
+namespace bell {
+using DspEngine = dsp::Engine;
+}

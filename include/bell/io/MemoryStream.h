@@ -47,3 +47,8 @@ struct OMemoryStream : virtual MemoryBuffer, std::ostream {
         std::ostream(static_cast<std::streambuf*>(this)) {}
 };
 }  // namespace bell::io
+
+namespace bell {
+using IMemoryStream = io::IMemoryStream;
+using OMemoryStream = io::OMemoryStream;
+}  // namespace bell

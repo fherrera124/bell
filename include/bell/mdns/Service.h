@@ -11,7 +11,7 @@ class Service {
 
   /**
    * @brief Register a service with the mDNS server.
-   * 
+   *
    * @param serviceName MDNS service name
    * @param serviceType MDNS service type
    * @param serviceProto MDNS service protocol
@@ -32,3 +32,7 @@ class Service {
   virtual void unregisterService() = 0;
 };
 }  // namespace bell::mdns
+
+namespace bell {
+using MDNSService = mdns::Service;
+}

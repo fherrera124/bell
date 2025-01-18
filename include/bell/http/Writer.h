@@ -195,3 +195,7 @@ class Writer {
   void ensureValid(Direction expectedDirection);
 };
 }  // namespace bell::http
+
+namespace bell {
+using HTTPWriter = http::Writer;
+}

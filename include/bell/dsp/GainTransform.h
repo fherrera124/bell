@@ -12,7 +12,7 @@ class GainTransform : public Transform {
 
   /**
    * @brief Set the gain of the transform in dB.
-   * 
+   *
    * @param gainDb Gain in dB
    */
   void configure(float gainDb);
@@ -26,3 +26,7 @@ class GainTransform : public Transform {
   float gainDb = 0.0F;
 };
 }  // namespace bell::dsp
+
+namespace bell {
+using GainTransform = dsp::GainTransform;
+}

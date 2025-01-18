@@ -69,3 +69,8 @@ class Task {
 };
 
 }  // namespace bell::utils
+
+namespace bell {
+using Task = utils::Task;
+using TaskCore = utils::TaskCore;
+}  // namespace bell

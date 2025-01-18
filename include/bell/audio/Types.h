@@ -54,7 +54,7 @@ class Format {
 
   // Convert sample count to bytes
   uint32_t samplesToBytes(uint32_t samples) const {
-    return (static_cast<int>(bw) / 8) * samples;
+    return (static_cast<int>(bw) / 8) * samples * ch;
   }
 
   // Convert bytes to sample count
@@ -67,9 +67,25 @@ class Format {
     return (static_cast<int>(sr) / 1000) * ms;
   }
 
+  // Convert samples to milliseconds
+  uint32_t samplesToMs(uint32_t samples) const {
+    return samples / (static_cast<int>(sr) / 1000);
+  }
+
+  // Convert milliseconds to bytes
+  uint32_t msToBytes(uint32_t ms) const {
+    return samplesToBytes(msToSamples(ms));
+  }
+
  private:
   uint8_t ch = 2;
   BitWidth bw = BitWidth::BW_16;
   SampleRate sr = SampleRate::SR_44100HZ;
 };
 }  // namespace bell::audio
+
+namespace bell {
+using AudioFormat = audio::Format;
+using SampleRate = audio::SampleRate;
+using BitWidth = audio::BitWidth;
+}  // namespace bell

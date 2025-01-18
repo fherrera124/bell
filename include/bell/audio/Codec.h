@@ -80,3 +80,7 @@ class Codec {
                           size_t& outputLength, ResultCode& result) = 0;
 };
 }  // namespace bell::audio
+
+namespace bell {
+using AudioCodec = audio::Codec;
+}
