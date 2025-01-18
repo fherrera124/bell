@@ -32,7 +32,7 @@ void http::Server::listen(int port) {
   listenSocket = std::make_unique<net::TCPSocket>();
 
   // Try to bind to the specified port
-  listenSocket->bind("localhost", port);
+  listenSocket->bind("", port);
 
   // Start listening for incoming connections
   listenSocket->listen(maxConnections);

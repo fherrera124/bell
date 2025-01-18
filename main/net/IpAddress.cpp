@@ -146,6 +146,14 @@ std::optional<std::string> IpAddress::getOriginalHost() const {
 
 IpAddress IpAddress::resolveDomain(const std::string& hostname, int sockType,
                                    int family) {
+  if (hostname.empty()) {
+    // Addr any on empty hostname
+    sockaddr_in addr{};
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = INADDR_ANY;
+    return {reinterpret_cast<sockaddr*>(&addr)};
+  }
+
   auto possibleAddress = fromString(hostname);
 
   // First, check if hostname is already an IP address (IPv4 or IPv6)
