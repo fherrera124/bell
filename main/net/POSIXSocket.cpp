@@ -116,6 +116,14 @@ size_t POSIXSocket::write(const uint8_t* buf, size_t len, int timeoutMs) {
   return static_cast<size_t>(res);
 }
 
+void POSIXSocket::createFd(int domain, int protocol) {
+  sockFd = socket(domain, sockType, protocol);
+  if (sockFd < 0) {
+    throw std::runtime_error(fmt::format("Could not create socket {}", errno));
+  }
+  isClosed = false;
+}
+
 int POSIXSocket::getFd() {
   return sockFd;
 }
@@ -143,12 +151,7 @@ void POSIXSocket::bind(const std::string& address, uint16_t port) {
   IpAddress resolved = IpAddress::resolveDomain(address, sockType);
   resolved.setPort(port);
 
-  sockFd = socket(resolved.getFamily(), sockType, IPPROTO_IP);
-  if (sockFd < 0) {
-    throw std::runtime_error("Could not create socket " +
-                             std::string(strerror(errno)));
-  }
-
+  createFd(resolved.getFamily(), IPPROTO_IP);
   isClosed = false;
 
   // Set REUSEADDR option

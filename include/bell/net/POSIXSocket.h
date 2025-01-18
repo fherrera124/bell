@@ -1,6 +1,7 @@
 #pragma once
 
 // System includes
+#include <netinet/in.h>
 #include <cstdint>
 
 #include "bell/net/IpAddress.h"
@@ -12,7 +13,7 @@ namespace bell::net {
  */
 class POSIXSocket : public Socket {
  public:
-  POSIXSocket() = default;  ///< Default constructor.
+  POSIXSocket() = default;
 
   /**
    * @brief Set a socket option with a templated value.
@@ -28,6 +29,17 @@ class POSIXSocket : public Socket {
   void setOption(int level, int optionName, const T& optionValue) {
     setOptionImpl(level, optionName, &optionValue, sizeof(T));
   }
+
+  /**
+   * @brief Create an underlying file descriptor for the socket.
+   *
+   * This method initializes the file descriptor, using the provided domain and protocol.
+   *
+   * @remark This is done internally by bind, connect, and listen methods. Only call this method if you need to create a socket without binding, connecting, or listening.
+   * @param domain The domain of the socket (e.g., AF_INET).
+   * @param protocol The protocol of the socket (e.g., SOCK_STREAM).
+   */
+  void createFd(int domain, int protocol = IPPROTO_IP);
 
   // Socket interface overrides
   void wrapFd(int fd) override;

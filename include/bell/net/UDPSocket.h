@@ -9,7 +9,12 @@ namespace bell::net {
  */
 class UDPSocket : public POSIXSocket {
  public:
-  UDPSocket() { this->sockType = SOCK_DGRAM; };
+ /**
+  * @brief UDP socket constructor
+  * 
+  * @param initAsIpV6 
+  */
+  UDPSocket(bool initAsIpV6 = false) { this->sockType = SOCK_DGRAM; };
   ~UDPSocket() override;
 
   /**

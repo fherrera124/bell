@@ -157,8 +157,7 @@ uint8_t* OpusCodec::decode(const uint8_t* encodedInput, size_t inputLength,
   }
 
   result = ResultCode::Success;
-  outputLength = getAudioFormat().samplesToBytes(pcmLen) *
-                 static_cast<size_t>(getAudioFormat().getNumChannels());
+  outputLength = getAudioFormat().samplesToBytes(pcmLen);
 
   return tmpBuffer.data();
 }

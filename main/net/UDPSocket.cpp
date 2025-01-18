@@ -32,6 +32,10 @@ UDPSocket::~UDPSocket() {
 
 size_t UDPSocket::recvfrom(uint8_t* buf, size_t len, const IpAddress& address,
                            int timeoutMs) {
+  if (!isOpen()) {
+    throw std::runtime_error("Socket is not open");
+  }
+
   if (timeoutMs > 0) {
     // Use the socket's poll method to wait for data to be readable.
     int events = poll(POLLIN, timeoutMs);
@@ -51,8 +55,9 @@ size_t UDPSocket::recvfrom(uint8_t* buf, size_t len, const IpAddress& address,
                  const_cast<sockaddr*>(address.getSockAddrPtr()),  // NOLINT
                  &addressLen);
   if (res < 0) {
+    BELL_LOG(error, "UDPSocket", "Error in recv, {}", strerror(errno));
     close();
-    throw std::runtime_error(fmt::format("Error in recv, {}", errno));
+    throw std::runtime_error(fmt::format("Error in recv, {}", strerror(errno)));
   }
 
   return static_cast<size_t>(res);
@@ -60,6 +65,10 @@ size_t UDPSocket::recvfrom(uint8_t* buf, size_t len, const IpAddress& address,
 
 size_t UDPSocket::sendto(const uint8_t* buf, size_t len,
                          const IpAddress& address, int timeoutMs) {
+  if (!isOpen()) {
+    throw std::runtime_error("Socket is not open");
+  }
+
   if (timeoutMs > 0) {
     // Use the socket's poll method to wait for the socket to become writable.
     int events = poll(POLLOUT, timeoutMs);
@@ -76,8 +85,9 @@ size_t UDPSocket::sendto(const uint8_t* buf, size_t len,
                const_cast<sockaddr*>(address.getSockAddrPtr()),  // NOLINT
                address.getSockAddrLen());
   if (res < 0) {
+    BELL_LOG(error, "UDPSocket", "Error in sendto, {}", strerror(errno));
     close();
-    throw std::runtime_error(fmt::format("Error in send, {}", errno));
+    throw std::runtime_error(fmt::format("Error in send, {}", strerror(errno)));
   }
 
   return static_cast<size_t>(res);
