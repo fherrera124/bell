@@ -21,6 +21,13 @@ class BinaryStream {
    */
   void setByteOrder(std::endian byteOrder);
 
+  /**
+   * @brief Skip a number of bytes in the stream.
+   * 
+   * @param bytes Number of bytes to skip.
+   */
+  void skip(ssize_t bytes);
+
   // Read operations
   BinaryStream& operator>>(char& value);
   BinaryStream& operator>>(std::byte& value);

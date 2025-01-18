@@ -24,6 +24,11 @@ void BinaryStream::ensureWritable() {
     throw std::runtime_error("No output provided for binary stream");
 }
 
+void BinaryStream::skip(ssize_t bytes) {
+  ensureReadable();
+  istr->ignore(bytes);
+}
+
 BinaryStream& BinaryStream::operator>>(char& value) {
   ensureReadable();
   istr->read((char*)&value, 1);
