@@ -109,6 +109,7 @@ size_t POSIXSocket::write(const uint8_t* buf, size_t len, int timeoutMs) {
   // Perform the actual write operation
   ssize_t res = ::send(sockFd, buf, len, 0);
   if (res < 0) {
+    BELL_LOG(error, "POSIXSocket", "Error in send: {}", strerror(errno));
     close();
     throw std::runtime_error("Error in send");
   }
