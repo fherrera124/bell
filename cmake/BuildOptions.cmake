@@ -17,9 +17,7 @@ option(BELL_VORBIS_FLOAT "Use floating point Vorbis API" OFF)
 option(BELL_DISABLE_MQTT "Disable the built-in MQTT wrapper" ON)
 
 # Audio sinks
-option(BELL_DISABLE_SINKS "Disable all built-in audio sink implementations" OFF)
-option(BELL_SINK_ALSA "Enable ALSA audio sink" OFF)
-option(BELL_SINK_PORTAUDIO "Enable PortAudio sink" OFF)
+option(BELL_BACKEND_PORTAUDIO "Enable PortAudio output backend" OFF)
 
 # Misc
 option(BELL_DISABLE_TAOJSON "Don't include TaoJSON" OFF)
@@ -41,12 +39,7 @@ if(NOT BELL_DISABLE_CODECS)
     message(STATUS "  * Opus audio codec: ${BELL_CODEC_OPUS}")
 endif()
 
-message(STATUS "  Disable built-in audio sinks: ${BELL_DISABLE_SINKS}")
-
-if(NOT BELL_DISABLE_SINKS)
-    message(STATUS "  * ALSA sink: ${BELL_SINK_ALSA}")
-    message(STATUS "  * PortAudio sink: ${BELL_SINK_PORTAUDIO}")
-endif()
+ message(STATUS " Enable PortAudio backend: ${BELL_PORTAUDIO_BACKEND}")
 
 message(STATUS "  Disable TaoJSON: ${BELL_DISABLE_TAOJSON}")
 message(STATUS "  Disable Mqtt: ${BELL_DISABLE_MQTT}")

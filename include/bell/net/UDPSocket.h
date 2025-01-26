@@ -9,7 +9,7 @@ namespace bell::net {
  */
 class UDPSocket : public POSIXSocket {
  public:
- /**
+  /**
   * @brief UDP socket constructor
   * 
   * @param initAsIpV6 

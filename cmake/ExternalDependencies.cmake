@@ -38,7 +38,7 @@ if(NOT BELL_DISABLE_MBEDTLS)
     endif()
 endif()
 
-if (UNIX AND NOT APPLE)
+if(UNIX AND NOT APPLE)
     # Include avahi on linux
     list(APPEND BELL_LIBS avahi-client avahi-common)
 endif()
@@ -63,4 +63,11 @@ if(NOT BELL_DISABLE_CODECS AND BELL_CODEC_OPUS)
     target_compile_options(opus PRIVATE -O2 -Wno-unused-parameter -Wno-parentheses-equality -Wno-cast-align -Wno-unused-but-set-variable -Wno-nonnull)
 
     list(APPEND BELL_LIBS opus)
+endif()
+
+# Audio backends
+if(BELL_BACKEND_PORTAUDIO)
+    find_package(Portaudio REQUIRED)
+    list(APPEND BELL_LIBS ${PORTAUDIO_LIBRARIES})
+    list(APPEND BELL_EXTERNAL_INCLUDES ${PORTAUDIO_INCLUDE_DIRS})
 endif()

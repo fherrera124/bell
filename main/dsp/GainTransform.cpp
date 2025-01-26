@@ -1,6 +1,6 @@
 #include "bell/dsp/GainTransform.h"
 
-// System includes
+// Standar includes
 #include <mutex>
 
 using namespace bell::dsp;

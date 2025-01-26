@@ -1,6 +1,6 @@
 #include "bell/mdns/Browser.h"
 
-// System includes
+// Standar includes
 #include <cassert>
 #include <iostream>
 #include <stdexcept>
@@ -263,10 +263,8 @@ class implMDNSBrowser : public mdns::Browser {
     // Successfuly resolved the service
     recordPtr->record.addresses.emplace_back(address);
 
-    if (!(flags & kDNSServiceFlagsMoreComing)) {
-      // Successfuly resolved service's address
-      onEvent(mdns::EventType::AddressResolved, recordPtr->record);
-    }
+    // Successfuly resolved service's address
+    onEvent(mdns::EventType::AddressResolved, recordPtr->record);
   }
 
   void resolveReply(CachedMDNSRecord* recordPtr, DNSServiceFlags /*flags*/,

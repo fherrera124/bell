@@ -1,7 +1,7 @@
 
 #pragma once
 
-// System includes
+// Standard includes
 #include <cstddef>
 #include <cstdint>
 #include <memory>

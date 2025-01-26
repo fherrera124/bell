@@ -1,6 +1,6 @@
 #pragma once
 
-// System includes
+// Standard includes
 #include <string_view>
 
 // Local includes

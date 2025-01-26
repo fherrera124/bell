@@ -1,6 +1,6 @@
 #pragma once
 
-// System includes
+// Standard includes
 #include <any>
 #include <cstddef>
 #include <optional>

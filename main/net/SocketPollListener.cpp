@@ -1,6 +1,6 @@
 #include "bell/net/SocketPollListener.h"
 
-// System includes
+// Standar includes
 #include <sys/poll.h>
 #include <algorithm>
 #include <cstring>

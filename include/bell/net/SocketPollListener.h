@@ -1,6 +1,6 @@
 #pragma once
 
-// System includes
+// Standard includes
 #include <sys/poll.h>
 #include <functional>
 #include <unordered_map>

@@ -1,6 +1,6 @@
 #pragma once
 
-// System includes
+// Standard includes
 #include <istream>
 #include <map>
 #include <optional>

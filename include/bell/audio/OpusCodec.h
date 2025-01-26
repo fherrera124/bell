@@ -1,6 +1,6 @@
 #include "bell/audio/Codec.h"
 
-// System includes
+// Standard includes
 #include <vector>
 
 // Own includes

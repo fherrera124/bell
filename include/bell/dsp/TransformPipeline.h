@@ -1,6 +1,6 @@
 #pragma once
 
-// System includes
+// Standard includes
 #include <array>
 #include <mutex>
 #include <unordered_map>
