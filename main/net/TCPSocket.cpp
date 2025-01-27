@@ -22,7 +22,7 @@
 #endif
 
 #include <fcntl.h>
-#include <poll.h>
+#include <sys/poll.h>
 
 using namespace bell::net;
 
@@ -93,7 +93,7 @@ void TCPSocket::connect(const std::string& host, uint16_t port, int timeoutMs) {
         sockErr != 0) {
       close();
       BELL_LOG(error, LOG_TAG, "Connection to {} failed. Socket error {}",
-               host.c_str(), sockErr);
+               host.c_str(), strerror(sockErr));
       throw std::runtime_error("Sock connect failed");
     }
   }

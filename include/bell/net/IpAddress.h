@@ -2,6 +2,7 @@
 
 #include <sys/socket.h>
 #include <cstdint>
+#include <cstring>
 #include <optional>
 #include <string>
 

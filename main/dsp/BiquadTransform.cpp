@@ -4,6 +4,12 @@
 #include <cmath>
 #include <mutex>
 
+#ifdef ESP_PLATFORM
+// ASM optimized function for espressif
+extern "C" int dsps_biquad_f32_ae32(const float* input, float* output, int len,
+                                    float* coef, float* w);
+#endif
+
 using namespace bell::dsp;
 
 void BiquadTransform::configure(Type filterType, std::optional<float> f,

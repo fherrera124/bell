@@ -22,7 +22,7 @@ option(BELL_BACKEND_PORTAUDIO "Enable PortAudio output backend" OFF)
 # Misc
 option(BELL_DISABLE_TAOJSON "Don't include TaoJSON" OFF)
 option(BELL_DISABLE_MBEDTLS "Don't include MbedTLS" OFF)
-option(BELL_EXTERNAL_MBEDTLS "Don't include MbedTLS" OFF)
+option(BELL_DISABLE_MBEDTLS "Don't include MbedTLS" OFF)
 set(BELL_EXTERNAL_MBEDTLS "" CACHE STRING "External mbedtls library target name, optional")
 
 message(STATUS "Bell options:")

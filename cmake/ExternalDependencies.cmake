@@ -6,6 +6,8 @@ function(message)
 endfunction()
 
 # Include libfmt
+set(FMT_INSTALL OFF) # Disable fmt install targets
+set(FMT_OS OFF) # Disable OS-specific features
 add_subdirectory(external/fmt)
 list(APPEND BELL_LIBS fmt::fmt)
 
@@ -60,7 +62,7 @@ if(NOT BELL_DISABLE_CODECS AND BELL_CODEC_OPUS)
     add_subdirectory(external/opus-resample)
     set(MESSAGE_QUIET OFF)
 
-    target_compile_options(opus PRIVATE -O2 -Wno-unused-parameter -Wno-parentheses-equality -Wno-cast-align -Wno-unused-but-set-variable -Wno-nonnull)
+    target_compile_options(opus PRIVATE -O2 -Wno-unused-parameter -Wno-parentheses-equality -Wno-cast-align -Wno-unused-but-set-variable -Wno-nonnull -Wno-stringop-overread)
 
     list(APPEND BELL_LIBS opus)
 endif()
@@ -70,4 +72,13 @@ if(BELL_BACKEND_PORTAUDIO)
     find_package(Portaudio REQUIRED)
     list(APPEND BELL_LIBS ${PORTAUDIO_LIBRARIES})
     list(APPEND BELL_EXTERNAL_INCLUDES ${PORTAUDIO_INCLUDE_DIRS})
+endif()
+
+# Espressif-specific dependencies
+if(ESP_PLATFORM)
+    if(IDF_VERSION_MAJOR LESS_EQUAL 4)
+        list(APPEND BELL_LIBS idf::mdns idf::mbedtls idf::pthread idf::driver idf::lwip idf::newlib)
+    else()
+        list(APPEND BELL_LIBS idf::espressif__mdns idf::mbedtls idf::pthread idf::driver idf::lwip idf::newlib)
+    endif()
 endif()

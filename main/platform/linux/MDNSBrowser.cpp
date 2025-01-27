@@ -18,45 +18,29 @@
 
 // Bell includes
 #include "bell/Logger.h"
+#include "bell/net/URIParser.h"
 #include "bell/utils/Utils.h"
 
 using namespace bell;
 
 namespace {
 std::unordered_map<std::string, std::string> parseAvahiTxtValues(
-    const std::string& avahiString) {
-  std::unordered_map<std::string, std::string> txtValues;
+    AvahiStringList* txt) {
+  std::unordered_map<std::string, std::string> txtRecords;
 
-  std::size_t start = 0;
-  while (start < avahiString.length()) {
-    // Find the starting quote of the key=value pair
-    std::size_t quoteStart = avahiString.find('"', start);
-    if (quoteStart == std::string::npos) {
-      break;
+  for (AvahiStringList* entry = txt; entry != nullptr;
+       entry = avahi_string_list_get_next(entry)) {
+    char* key;
+    size_t size;
+    char* value;
+    if (avahi_string_list_get_pair(entry, &key, &value, &size) == 0) {
+      txtRecords[key] = (value != nullptr ? value : "");
+      free(key);
+      free(value);
     }
-
-    // Find the ending quote of the key=value pair
-    std::size_t quoteEnd = avahiString.find('"', quoteStart + 1);
-    if (quoteEnd == std::string::npos) {
-      break;
-    }
-
-    // Extract the key=value substring
-    std::string keyValue =
-        avahiString.substr(quoteStart + 1, quoteEnd - quoteStart - 1);
-    std::size_t equalsPos = keyValue.find('=');
-    if (equalsPos != std::string::npos) {
-      // Extract key and value
-      std::string key = keyValue.substr(0, equalsPos);
-      std::string value = keyValue.substr(equalsPos + 1);
-      txtValues[key] = value;
-    }
-
-    // Move start forward
-    start = quoteEnd + 1;
   }
 
-  return txtValues;
+  return txtRecords;
 }
 }  // namespace
 
@@ -157,12 +141,9 @@ class implMDNSBrowser : public mdns::Browser {
 
       matchingRecord->hostname = hostName;
       matchingRecord->fullName = fmt::format("{}.{}.{}", name, type, domain);
-      matchingRecord->port = ntohs(port);
+      matchingRecord->port = port;
       matchingRecord->serviceResolved = true;
-
-      auto* recordsString = avahi_string_list_to_string(txt);
-      matchingRecord->txtRecords = parseAvahiTxtValues(recordsString);
-      delete recordsString;
+      matchingRecord->txtRecords = parseAvahiTxtValues(txt);
 
       onEvent(mdns::EventType::ServiceResolved, *matchingRecord);
 

@@ -35,3 +35,9 @@ if (UNIX AND NOT APPLE)
     file(GLOB BELL_SOURCES_POSIX "main/platform/linux/*.cpp")
     list(APPEND BELL_SOURCES ${BELL_SOURCES_POSIX})
 endif()
+
+# Espressif includes
+if (ESP_PLATFORM)
+    file(GLOB BELL_SOURCES_ESP "main/platform/esp/*.cpp" "main/platform/esp/*.S")
+    list(APPEND BELL_SOURCES ${BELL_SOURCES_ESP})
+endif()

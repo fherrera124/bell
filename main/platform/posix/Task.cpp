@@ -1,5 +1,6 @@
 #include "bell/utils/Task.h"
 
+#include <bell/Logger.h>
 #include <pthread.h>
 #include <algorithm>
 
@@ -33,18 +34,16 @@ class Task::Impl {
     }
 
     threadAttrInitialized = true;
-    ret = pthread_attr_setstacksize(
-        &threadAttr, std::max(stackSize, static_cast<int>(PTHREAD_STACK_MIN)));
-    if (ret > 0) {
-      // Could not set the stack size
-      return false;
-    }
 
     // Try to create a new pthread
-    if (!pthread_create(&threadHandle, &threadAttr, threadEntryFunc, task)) {
+    int err = pthread_create(&threadHandle, &threadAttr, threadEntryFunc, task);
+    if (err == 0) {
       pthread_detach(threadHandle);
       return true;
     }
+
+    BELL_LOG(error, "BellTask", "Failed to create thread. Error: {}",
+             strerror(err));
     return false;
   }
 
