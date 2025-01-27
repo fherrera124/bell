@@ -5,6 +5,7 @@
 
 #include "bell/Logger.h"
 #include "bell/net/IpAddress.h"
+#include "bell/utils/Utils.h"
 
 // Platform specific socket includes
 #ifdef _WIN32
@@ -76,16 +77,7 @@ int POSIXSocket::poll(int events, int timeoutMs) {
                     : 0;  // Return the events that occurred or 0 if timeout.
 }
 
-size_t POSIXSocket::read(uint8_t* buf, size_t len, int timeoutMs) {
-  if (timeoutMs > 0) {
-    // Use the socket's poll method to wait for data to be readable.
-    int events = poll(POLLIN, timeoutMs);
-    if (!(events & POLLIN)) {
-      // Timeout occurred, or no readable events.
-      throw std::runtime_error("Socket read timed out or no data available");
-    }
-  }
-
+size_t POSIXSocket::read(uint8_t* buf, size_t len) {
   // Perform the actual read operation
   ssize_t res = recv(sockFd, buf, len, 0);
   if (res < 0) {
@@ -96,16 +88,7 @@ size_t POSIXSocket::read(uint8_t* buf, size_t len, int timeoutMs) {
   return static_cast<size_t>(res);
 }
 
-size_t POSIXSocket::write(const uint8_t* buf, size_t len, int timeoutMs) {
-  if (timeoutMs > 0) {
-    // Use the socket's poll method to wait for the socket to become writable.
-    int events = poll(POLLOUT, timeoutMs);
-    if (!(events & POLLOUT)) {
-      // Timeout occurred, or no writable events.
-      throw std::runtime_error("Socket write timed out or socket not writable");
-    }
-  }
-
+size_t POSIXSocket::write(const uint8_t* buf, size_t len) {
   // Perform the actual write operation
   ssize_t res = ::send(sockFd, buf, len, 0);
   if (res < 0) {
@@ -175,6 +158,21 @@ void POSIXSocket::setOptionImpl(int level, int optionName,
     throw std::runtime_error(
         fmt::format("Failed to set socket option: {}", strerror(errno)));
   }
+}
+
+void POSIXSocket::setTimeout(int timeoutMs) {
+  if (timeoutMs == 0) {
+    // Switch to blocking mode
+    setBlocking(true);
+    return;
+  }
+  
+  setBlocking(false);
+  auto timeVal = bell::utils::millisecondsToTimeval(timeoutMs);
+  this->timeoutMs = timeoutMs;
+
+  setOption(SOL_SOCKET, SO_RCVTIMEO, timeVal);
+  setOption(SOL_SOCKET, SO_SNDTIMEO, timeVal);
 }
 
 std::string POSIXSocket::getLocalAddress() const {

@@ -33,6 +33,13 @@ class Socket {
   virtual void setBlocking(bool blocking) = 0;
 
   /**
+   * @brief Set the timeout for socket operations.
+   *
+   * @param timeoutMs Timeout in milliseconds. A value of 0 indicates a non-blocking operation.
+   */
+  virtual void setTimeout(int timeoutMs) = 0;
+
+  /**
    * @brief Wrap an existing file descriptor with this socket.
    *
    * This method allows an existing file descriptor (fd) to be wrapped and
@@ -47,7 +54,7 @@ class Socket {
   * @brief Poll the socket for specific events.
   *
   * @param events Bitmask specifying the events to check for (e.g., readability, writability).
-  * @param timeout_ms Timeout in milliseconds. A value of 0 indicates a non-blocking poll.
+  * @param timeoutMs Timeout in milliseconds. A value of 0 indicates a non-blocking poll.
   * @return A bitmask indicating which events occurred, or 0 if the timeout expired.
   */
   virtual int poll(int events, int timeoutMs = 0) = 0;
@@ -61,10 +68,9 @@ class Socket {
    *
    * @param buf Pointer to the buffer containing the data to send.
    * @param len The number of bytes to write from the buffer.
-   * @param timeoutMs The maximum time to wait for the write operation to complete, in milliseconds. This parameter is ignored, if the socket is set to a blocking mode.
    * @return The number of bytes successfully written.
    */
-  virtual size_t write(const uint8_t* buf, size_t len, int timeoutMs = 0) = 0;
+  virtual size_t write(const uint8_t* buf, size_t len) = 0;
 
   /**
    * @brief Read data from the socket.
@@ -75,12 +81,11 @@ class Socket {
    *
    * @param buf Pointer to the buffer where the received data will be stored.
    * @param len The maximum number of bytes to read into the buffer.
-   * @param timeoutMs The maximum time to wait for data to become available, in milliseconds. This parameter is ignored, if the socket is set to a blocking mode.
    * @return The number of bytes successfully read. A return value of 0 may indicate
    * that the connection was closed, while a value less than len could indicate that
    * no more data is currently available.
    */
-  virtual size_t read(uint8_t* buf, size_t len, int timeoutMs = 0) = 0;
+  virtual size_t read(uint8_t* buf, size_t len) = 0;
 
   /**
    * @brief Bind the socket to a specific address and port.

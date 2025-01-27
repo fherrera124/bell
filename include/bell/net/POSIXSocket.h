@@ -42,10 +42,11 @@ class POSIXSocket : public Socket {
   void createFd(int domain, int protocol = IPPROTO_IP);
 
   // Socket interface overrides
+  void setTimeout(int timeoutMs) override;
   void wrapFd(int fd) override;
   int getFd() override;
-  size_t read(uint8_t* buf, size_t len, int timeoutMs = 0) override;
-  size_t write(const uint8_t* buf, size_t len, int timeoutMs = 0) override;
+  size_t read(uint8_t* buf, size_t len) override;
+  size_t write(const uint8_t* buf, size_t len) override;
   void bind(const std::string& address, uint16_t port) override;
   void setBlocking(bool blocking) override;
   int poll(int events, int timeoutMs = 0) override;
@@ -72,6 +73,9 @@ class POSIXSocket : public Socket {
 
   // Flag indicating if the socket is listening
   bool isListening = false;
+
+  // Timeout for socket operations, assigned to SO_RCVTIMEO and SO_SNDTIMEO
+  int timeoutMs = 0;
 
   int sockType = -1;  // SOCK_STREAM or SOCK_DGRAM, set by derived classes
 

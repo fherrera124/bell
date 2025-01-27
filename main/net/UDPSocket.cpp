@@ -30,19 +30,9 @@ UDPSocket::~UDPSocket() {
   close();
 }
 
-size_t UDPSocket::recvfrom(uint8_t* buf, size_t len, const IpAddress& address,
-                           int timeoutMs) {
+size_t UDPSocket::recvfrom(uint8_t* buf, size_t len, const IpAddress& address) {
   if (!isOpen()) {
     throw std::runtime_error("Socket is not open");
-  }
-
-  if (timeoutMs > 0) {
-    // Use the socket's poll method to wait for data to be readable.
-    int events = poll(POLLIN, timeoutMs);
-    if (!(events & POLLIN)) {
-      // Timeout occurred, or no readable events.
-      throw std::runtime_error("Socket read timed out or no data available");
-    }
   }
 
   socklen_t addressLen = address.getSockAddrLen();
@@ -64,18 +54,9 @@ size_t UDPSocket::recvfrom(uint8_t* buf, size_t len, const IpAddress& address,
 }
 
 size_t UDPSocket::sendto(const uint8_t* buf, size_t len,
-                         const IpAddress& address, int timeoutMs) {
+                         const IpAddress& address) {
   if (!isOpen()) {
     throw std::runtime_error("Socket is not open");
-  }
-
-  if (timeoutMs > 0) {
-    // Use the socket's poll method to wait for the socket to become writable.
-    int events = poll(POLLOUT, timeoutMs);
-    if (!(events & POLLOUT)) {
-      // Timeout occurred, or no writable events.
-      throw std::runtime_error("Socket write timed out or socket not writable");
-    }
   }
 
   // Using const_cast to remove the const qualifier from the address, as sendto expects a non-const

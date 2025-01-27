@@ -27,13 +27,11 @@ class UDPSocket : public POSIXSocket {
    * @param buf Pointer to the buffer where the received data will be stored.
    * @param len The maximum number of bytes to read into the buffer.
    * @param address The address from which the data should be received.
-   * @param timeoutMs The maximum time to wait for data to become available, in milliseconds. This parameter is ignored, if the socket is set to a blocking mode.
    * @return The number of bytes successfully read. A return value of 0 may indicate
    * that the connection was closed, while a value less than len could indicate that
    * no more data is currently available.
    */
-  size_t recvfrom(uint8_t* buf, size_t len, const IpAddress& address,
-                  int timeoutMs = 0);
+  size_t recvfrom(uint8_t* buf, size_t len, const IpAddress& address);
 
   /**
    * @brief Send data to the provided address
@@ -45,11 +43,9 @@ class UDPSocket : public POSIXSocket {
    * @param buf Pointer to the buffer containing the data to send.
    * @param len The number of bytes to write from the buffer.
    * @param address The address to which the data should be sent.
-   * @param timeoutMs The maximum time to wait for the write operation to complete, in milliseconds. This parameter is ignored, if the socket is set to a blocking mode.
    * @return The number of bytes successfully written.
    */
-  size_t sendto(const uint8_t* buf, size_t len, const IpAddress& address,
-                int timeoutMs = 0);
+  size_t sendto(const uint8_t* buf, size_t len, const IpAddress& address);
 
  private:
   const char* LOG_TAG = "UDPSocket";

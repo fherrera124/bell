@@ -99,7 +99,11 @@ void TCPSocket::connect(const std::string& host, uint16_t port, int timeoutMs) {
   }
 
   // Set socket back to the requested blocking mode
-  setBlocking(isBlocking);
+  if (timeoutMs > 0) {
+    setTimeout(timeoutMs);
+  } else {
+    setBlocking(isBlocking);
+  }
 }
 
 void TCPSocket::listen(int backlog) {

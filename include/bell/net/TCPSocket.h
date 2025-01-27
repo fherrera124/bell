@@ -16,7 +16,7 @@ class TCPSocket : public POSIXSocket {
   /**
    * @brief Resolve the provided host and port, and attempt to create a socket connected there.
    *
-   * This method resolves the hostname and attempts to connect to the specified port.
+   * This method resolves the hostname and attempts to connect to the specified port. It will also set the default timeout for the socket.
    *
    * @param host String containing a hostname or IP address to connect to.
    * @param port The port number to connect to on the specified host.

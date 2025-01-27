@@ -29,8 +29,7 @@ http::Connection::Connection(const std::string& url, int timeoutMs) {
                   timeoutMs);
 
   // Wrap the socket in a socket stream
-  socketStream =
-      std::make_shared<net::SocketStream>(std::move(socket), timeoutMs);
+  socketStream = std::make_shared<net::SocketStream>(std::move(socket));
 }
 
 std::unique_ptr<http::Writer> http::Connection::sendRequest(

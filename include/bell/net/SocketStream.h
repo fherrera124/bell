@@ -12,15 +12,12 @@ class SocketBuffer : public std::streambuf {
  private:
   std::shared_ptr<Socket> internalSocket = nullptr;
 
-  // Timeout for socket operations in milliseconds, 0 means that the socket is blocking
-  int operationTimeoutMs = 0;
-
   static const int bufLen = 1024;
   std::array<char, bufLen> ibuf{};
   std::array<char, bufLen> obuf{};
 
  public:
-  SocketBuffer(std::shared_ptr<Socket> socket, int operationTimeout);
+  SocketBuffer(std::shared_ptr<Socket> socket);
 
   // Delete copy constructor and copy assignment operator
   SocketBuffer(const SocketBuffer&) = delete;
@@ -48,10 +45,8 @@ class SocketStream : public std::iostream {
   std::shared_ptr<Socket> socket;
 
  public:
-  SocketStream(const std::shared_ptr<Socket>& socket, int operationTimeout = 0)
-      : std::iostream(&socketBuf),
-        socketBuf(socket, operationTimeout),
-        socket(socket) {}
+  SocketStream(const std::shared_ptr<Socket>& socket)
+      : std::iostream(&socketBuf), socketBuf(socket), socket(socket) {}
 
   bool isOpen() { return socket->isOpen(); }
 

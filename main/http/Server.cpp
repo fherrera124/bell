@@ -33,6 +33,8 @@ void http::Server::listen(int port) {
 
   // Try to bind to the specified port
   listenSocket->bind("", port);
+  // Set socket timeout
+  listenSocket->setTimeout(defaultHttpOperationTimeout);
 
   // Start listening for incoming connections
   listenSocket->listen(maxConnections);
@@ -53,6 +55,8 @@ void http::Server::registerCustom404(const RequestHandler& handler) {
 void http::Server::acceptConnection() {
   // Accept the connection
   std::shared_ptr<net::TCPSocket> clientSocket = listenSocket->accept();
+  clientSocket->setTimeout(defaultHttpOperationTimeout);
+
   int clientFd = clientSocket->getFd();
   FD_SET(clientFd, &masterFdSet);
   BELL_LOG(debug, LOG_TAG, "Accepted connection");
@@ -87,8 +91,7 @@ void http::Server::closeConnection(int fd) {
 void http::Server::readFromClient(const Connection& connection) {
   try {
     // Wrap the socket in a stream, try to parse the request
-    net::SocketStream socketStream(connection.socket,
-                                   defaultHttpOperationTimeout);
+    net::SocketStream socketStream(connection.socket);
 
     auto reader = std::make_unique<http::Reader>(Direction::Request,
                                                  &socketStream, &readBuffer);
