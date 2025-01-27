@@ -10,7 +10,11 @@ class Task::Impl {
  public:
   Impl(const std::string& taskName, int stackSize, int espPriority,
        TaskCore espTaskCore, bool espStackOnPsram)
-      : stackSize(stackSize), espTaskCore(espTaskCore), espStackOnPsram(espStackOnPsram), espPriority(espPriority), taskName(taskName) {}
+      : stackSize(stackSize),
+        espTaskCore(espTaskCore),
+        espStackOnPsram(espStackOnPsram),
+        espPriority(espPriority),
+        taskName(taskName) {}
   ~Impl() {
 
   };
@@ -19,10 +23,7 @@ class Task::Impl {
   Impl(const Impl&) = delete;
   Impl& operator=(const Impl&) = delete;
 
-  bool startTask(Task* task) {
-
-    return false;
-  }
+  bool startTask(Task* task) { return false; }
 
  private:
   int stackSize = 0;
@@ -30,7 +31,6 @@ class Task::Impl {
   bool espStackOnPsram = false;
   int espPriority;
   std::string taskName;
-
 };
 
 // Task constructor and member methods

@@ -9,7 +9,6 @@
 
 using namespace bell;
 
-
 std::unique_ptr<mdns::Browser> mdns::Browser::startDiscovery(
     const std::string& regType, const std::string& regDomain,
     int interfaceIndex, const DiscoveryEventCallback& onEvent,

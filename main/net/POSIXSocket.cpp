@@ -166,7 +166,7 @@ void POSIXSocket::setTimeout(int timeoutMs) {
     setBlocking(true);
     return;
   }
-  
+
   setBlocking(false);
   auto timeVal = bell::utils::millisecondsToTimeval(timeoutMs);
   this->timeoutMs = timeoutMs;
