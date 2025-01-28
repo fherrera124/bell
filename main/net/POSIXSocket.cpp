@@ -78,6 +78,10 @@ int POSIXSocket::poll(int events, int timeoutMs) {
 }
 
 size_t POSIXSocket::read(uint8_t* buf, size_t len) {
+  if (!isOpen()) {
+    throw std::runtime_error("Socket is not open");
+  }
+
   // Perform the actual read operation
   ssize_t res = recv(sockFd, buf, len, 0);
   if (res < 0) {
@@ -89,8 +93,12 @@ size_t POSIXSocket::read(uint8_t* buf, size_t len) {
 }
 
 size_t POSIXSocket::write(const uint8_t* buf, size_t len) {
+  if (!isOpen()) {
+    throw std::runtime_error("Socket is not open");
+  }
+
   // Perform the actual write operation
-  ssize_t res = ::send(sockFd, buf, len, 0);
+  ssize_t res = ::send(sockFd, buf, len, MSG_NOSIGNAL);
   if (res < 0) {
     BELL_LOG(error, "POSIXSocket", "Error in send: {}", strerror(errno));
     close();
