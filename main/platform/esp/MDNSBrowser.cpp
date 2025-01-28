@@ -2,6 +2,7 @@
 
 // Standar includes
 #include <array>
+#include <iostream>
 #include <stdexcept>
 #include <string>
 
@@ -18,14 +19,13 @@ using namespace bell;
 class implMDNSBrowser : public mdns::Browser {
  public:
   implMDNSBrowser(std::string regType, std::string regDomain,
-                  int interfaceIndex, DiscoveryEventCallback onEvent,
-                  bool autoResolveService = true, bool resolveIpv6 = true)
+                  DiscoveryEventCallback onEvent)
       : regType(std::move(regType)),
         regDomain(std::move(regDomain)),
         onEvent(std::move(onEvent)) {
     // Extract the protocol from the regType
-    serviceType = regType.substr(0, regType.find_first_of('.'));
-    proto = regType.substr(regType.find_first_of('.') + 1);
+    serviceType = this->regType.substr(0, this->regType.find_first_of('.'));
+    proto = this->regType.substr(this->regType.find_first_of('.') + 1);
   }
 
   // Delete copy constructor and copy assignment operator
@@ -35,8 +35,6 @@ class implMDNSBrowser : public mdns::Browser {
   ~implMDNSBrowser() override { stopDiscovery(); }
 
  private:
-  const char* LOG_TAG = "EspressifMDNSBrowser";
-
   std::string regType;
   std::string regDomain;
   std::string proto;
@@ -45,17 +43,18 @@ class implMDNSBrowser : public mdns::Browser {
 
   const int maxResults = 32;
 
-  std::vector<DiscoveredRecord> discoveredRecords;
+  std::vector<DiscoveredRecord> cachedRecords;
+  std::vector<DiscoveredRecord> receivedRecords;
 
-  std::vector<DiscoveredRecord> parseResults(mdns_result_t* results) {
+  void parseResults(mdns_result_t* results) {
     mdns_result_t* r = results;
     mdns_ip_addr_t* a = nullptr;
-    std::vector<DiscoveredRecord> records;
 
     while (r) {
       DiscoveredRecord record;
 
-      record.interfaceIndex = r->esp_netif
+      // Assign netif index
+      record.interfaceIndex = esp_netif_get_netif_impl_index(r->esp_netif);
 
       if (r->instance_name) {
         record.name = r->instance_name;
@@ -68,8 +67,6 @@ class implMDNSBrowser : public mdns::Browser {
         record.addressResolved = true;
       }
 
-
-
       a = r->addr;
       while (a) {
         if (a->addr.type == IPADDR_TYPE_V4) {
@@ -77,7 +74,11 @@ class implMDNSBrowser : public mdns::Browser {
           esp_ip4addr_ntoa(&a->addr.u_addr.ip4, strCharData.data(),
                            IP4ADDR_STRLEN_MAX);
           std::string ipStr(strCharData.data());
-          record.addresses.push_back(net::IpAddress::fromString(ipStr));
+          auto ip = net::IpAddress::fromString(ipStr);
+
+          if (ip.has_value()) {
+            record.addresses.push_back(ip.value());
+          }
         } else if (a->addr.type == IPADDR_TYPE_V6) {
           // TODO: Implement IPv6 support
           //   std::array<char, IP6ADDR_STRLEN_MAX> strCharData{};
@@ -98,11 +99,31 @@ class implMDNSBrowser : public mdns::Browser {
                          &r->txt[x].value[r->txt_value_len[x]])});
       }
 
-      records.push_back(record);
+      // Notify of new services
+      if (std::find(cachedRecords.begin(), cachedRecords.end(), record) ==
+          cachedRecords.end()) {
+        onEvent(mdns::EventType::ServiceAdded, record);
+        if (record.serviceResolved) {
+          onEvent(mdns::EventType::ServiceResolved, record);
+        }
+        if (record.addressResolved) {
+          onEvent(mdns::EventType::AddressResolved, record);
+        }
+      }
+
+      receivedRecords.push_back(record);
       r = r->next;
     }
 
-    publishDiscovered();
+    // Notify of removed services
+    for (auto& cachedRecord : cachedRecords) {
+      if (std::find(receivedRecords.begin(), receivedRecords.end(),
+                    cachedRecord) == receivedRecords.end()) {
+        onEvent(mdns::EventType::ServiceRemoved, cachedRecord);
+      }
+    }
+
+    cachedRecords.assign(receivedRecords.begin(), receivedRecords.end());
   }
 
   void processEvents(int timeoutMs) override {
@@ -111,10 +132,12 @@ class implMDNSBrowser : public mdns::Browser {
     esp_err_t err = mdns_query_ptr(serviceType.c_str(), proto.c_str(),
                                    timeoutMs, maxResults, &results);
     if (err) {
+      BELL_LOG(
+          error, "MDNSBrowser",
+          "Failed to query mdns services. Service type: {}, proto: {}, err: {}",
+          serviceType, proto, static_cast<int>(err));
       throw std::runtime_error("Could not query mdns services");
     }
-
-    processResults(results);
 
     mdns_query_results_free(results);
   }
@@ -132,9 +155,8 @@ class implMDNSBrowser : public mdns::Browser {
 
 std::unique_ptr<mdns::Browser> mdns::Browser::startDiscovery(
     const std::string& regType, const std::string& regDomain,
-    int interfaceIndex, const DiscoveryEventCallback& onEvent,
-    bool autoResolveService, bool /*autoResolveAddresses*/, bool resolveIpv6) {
-  return std::make_unique<implMDNSBrowser>(regType, regDomain, interfaceIndex,
-                                           onEvent, autoResolveService,
-                                           resolveIpv6);
+    int /*interfaceIndex*/, const DiscoveryEventCallback& onEvent,
+    bool /*autoResolveService*/, bool /*autoResolveAddresses*/,
+    bool /*resolveIpv6*/) {
+  return std::make_unique<implMDNSBrowser>(regType, regDomain, onEvent);
 }

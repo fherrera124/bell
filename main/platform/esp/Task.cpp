@@ -1,29 +1,86 @@
 #include "bell/utils/Task.h"
 
+// Library includes
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+#include <freertos/timers.h>
+#include "sdkconfig.h"
+
+// Bell includes
 #include <bell/Logger.h>
-#include <pthread.h>
-#include <algorithm>
 
 using namespace bell::utils;
 
 class Task::Impl {
  public:
-  Impl(const std::string& taskName, int stackSize, int espPriority,
+  Impl(std::string taskName, int stackSize, int espPriority,
        TaskCore espTaskCore, bool espStackOnPsram)
       : stackSize(stackSize),
         espTaskCore(espTaskCore),
         espStackOnPsram(espStackOnPsram),
         espPriority(espPriority),
-        taskName(taskName) {}
-  ~Impl() {
+        taskName(std::move(taskName)) {
 
+    if (espStackOnPsram) {
+      xStack = static_cast<StackType_t*>(
+          heap_caps_malloc(stackSize, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+
+      xTaskBuffer = static_cast<StaticTask_t*>(heap_caps_malloc(
+          sizeof(StaticTask_t), MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+    }
+  }
+  ~Impl() {
+    if (xStack) {
+      heap_caps_free(xStack);
+
+      // Create a cleanup timer for PSRAM task TCB
+      auto* timerHandle =
+          xTimerCreate("TaskCleanupTimer", pdMS_TO_TICKS(5000), pdFALSE,
+                       xTaskBuffer, [](TimerHandle_t timer) {
+                         heap_caps_free(pvTimerGetTimerID(timer));
+                         xTimerDelete(timer, portMAX_DELAY);
+                       });
+      xTimerStart(timerHandle, portMAX_DELAY);
+    }
   };
 
   // Delete copy constructor and copy assignment operator
   Impl(const Impl&) = delete;
   Impl& operator=(const Impl&) = delete;
 
-  bool startTask(Task* task) { return false; }
+  // Task entry point
+  void taskEntryPoint() {
+    if (taskPtr) {
+      taskPtr->runTask();
+    }
+  }
+
+  // Task entry point shim, used to call the mmber method
+  static void taskEntryPointShim(void* task) {
+    Task::Impl* taskPtr = static_cast<Task::Impl*>(task);
+    taskPtr->taskEntryPoint();
+  }
+
+  bool startTask(Task* task) {
+    taskPtr = task;
+    if (espStackOnPsram) {
+      // Create the task with previously allocated stack on PSRAM
+      xTaskHandle = xTaskCreateStaticPinnedToCore(
+          taskEntryPointShim, this->taskName.c_str(), this->stackSize, this,
+          this->espPriority + CONFIG_PTHREAD_TASK_PRIO_DEFAULT, xStack,
+          xTaskBuffer, getFreeRTOSTaskCore());
+    } else {
+      // Create the task with default stack allocation
+      if (xTaskCreatePinnedToCore(
+              taskEntryPointShim, this->taskName.c_str(), this->stackSize, this,
+              this->espPriority + CONFIG_PTHREAD_TASK_PRIO_DEFAULT,
+              &xTaskHandle, getFreeRTOSTaskCore()) != pdPASS) {
+        xTaskHandle = nullptr;
+      }
+    }
+
+    return xTaskHandle != nullptr;
+  }
 
  private:
   int stackSize = 0;
@@ -31,6 +88,25 @@ class Task::Impl {
   bool espStackOnPsram = false;
   int espPriority;
   std::string taskName;
+
+  StaticTask_t* xTaskBuffer;
+  StackType_t* xStack;
+  TaskHandle_t xTaskHandle;
+  Task* taskPtr;
+
+  // Returns the FreeRTOS task core
+  BaseType_t getFreeRTOSTaskCore() {
+    switch (espTaskCore) {
+      case TaskCore::Core0:
+        return 0;
+      case TaskCore::Core1:
+        return 1;
+      case TaskCore::CoreAny:
+        return tskNO_AFFINITY;
+    }
+
+    return tskNO_AFFINITY;
+  }
 };
 
 // Task constructor and member methods

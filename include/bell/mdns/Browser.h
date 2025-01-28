@@ -46,6 +46,8 @@ class Browser {
 
     std::vector<net::IpAddress> addresses;
 
+    DiscoveredRecord() = default;
+    
     bool operator==(const DiscoveredRecord& other) const {
       return name == other.name && regType == other.regType &&
              domain == other.domain && interfaceIndex == other.interfaceIndex;
