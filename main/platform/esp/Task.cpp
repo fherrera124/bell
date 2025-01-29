@@ -6,9 +6,6 @@
 #include <freertos/timers.h>
 #include "sdkconfig.h"
 
-// Bell includes
-#include <bell/Logger.h>
-
 using namespace bell::utils;
 
 class Task::Impl {
@@ -35,14 +32,12 @@ class Task::Impl {
     }
 
     if (xStack) {
-      BELL_LOG(info, "Task", "Freeing PSRAM stack");
       heap_caps_free(xStack);
 
       // Create a cleanup timer for PSRAM task TCB
       auto* timerHandle =
           xTimerCreate("TaskCleanupTimer", pdMS_TO_TICKS(5000), pdFALSE,
                        xTaskBuffer, [](TimerHandle_t timer) {
-                         BELL_LOG(info, "Task", "Freeing up TCB");
                          heap_caps_free(pvTimerGetTimerID(timer));
                          xTimerDelete(timer, portMAX_DELAY);
                        });
@@ -66,7 +61,6 @@ class Task::Impl {
     Task::Impl* taskPtr = static_cast<Task::Impl*>(task);
     taskPtr->taskEntryPoint();
 
-    printf("Task ended\n");
     vTaskDelete(NULL);
   }
 
