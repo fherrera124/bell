@@ -21,22 +21,28 @@ class Task::Impl {
         espPriority(espPriority),
         taskName(std::move(taskName)) {
 
-    if (espStackOnPsram) {
-      xStack = static_cast<StackType_t*>(
-          heap_caps_malloc(stackSize, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+    if (this->espStackOnPsram) {
+      xStack = static_cast<StackType_t*>(heap_caps_malloc(
+          this->stackSize, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
 
       xTaskBuffer = static_cast<StaticTask_t*>(heap_caps_malloc(
           sizeof(StaticTask_t), MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
     }
   }
   ~Impl() {
+    if (taskPtr) {
+      taskPtr->stopTask();
+    }
+
     if (xStack) {
+      BELL_LOG(info, "Task", "Freeing PSRAM stack");
       heap_caps_free(xStack);
 
       // Create a cleanup timer for PSRAM task TCB
       auto* timerHandle =
           xTimerCreate("TaskCleanupTimer", pdMS_TO_TICKS(5000), pdFALSE,
                        xTaskBuffer, [](TimerHandle_t timer) {
+                         BELL_LOG(info, "Task", "Freeing up TCB");
                          heap_caps_free(pvTimerGetTimerID(timer));
                          xTimerDelete(timer, portMAX_DELAY);
                        });
@@ -59,6 +65,9 @@ class Task::Impl {
   static void taskEntryPointShim(void* task) {
     Task::Impl* taskPtr = static_cast<Task::Impl*>(task);
     taskPtr->taskEntryPoint();
+
+    printf("Task ended\n");
+    vTaskDelete(NULL);
   }
 
   bool startTask(Task* task) {
@@ -115,9 +124,7 @@ Task::Task(const std::string& taskName, int stackSize, int espPriority,
     : pImpl(std::make_unique<Impl>(taskName, stackSize, espPriority,
                                    espTaskCore, espStackOnPsram)) {}
 
-Task::~Task() {
-  stopTask();
-}
+Task::~Task() {}
 
 bool Task::startTask() {
   return pImpl->startTask(this);

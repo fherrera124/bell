@@ -127,16 +127,13 @@ class implMDNSBrowser : public mdns::Browser {
   }
 
   void processEvents(int timeoutMs) override {
-    // Start Avahi thread poll
     mdns_result_t* results = nullptr;
     esp_err_t err = mdns_query_ptr(serviceType.c_str(), proto.c_str(),
                                    timeoutMs, maxResults, &results);
     if (err) {
-      BELL_LOG(
-          error, "MDNSBrowser",
-          "Failed to query mdns services. Service type: {}, proto: {}, err: {}",
-          serviceType, proto, static_cast<int>(err));
       throw std::runtime_error("Could not query mdns services");
+    } else {
+      parseResults(results);
     }
 
     mdns_query_results_free(results);
