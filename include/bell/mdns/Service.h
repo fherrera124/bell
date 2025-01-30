@@ -1,5 +1,7 @@
 #pragma once
 
+#ifndef BELL_DISABLE_MDNS
+
 #include <map>
 #include <memory>
 
@@ -36,3 +38,5 @@ class Service {
 namespace bell {
 using MDNSService = mdns::Service;
 }
+
+#endif  // BELL_DISABLE_MDNS

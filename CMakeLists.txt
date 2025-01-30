@@ -24,11 +24,15 @@ target_include_directories(bell PUBLIC ${BELL_INCLUDES} ${BELL_EXTERNAL_INCLUDES
 
 # Set flags
 if(BELL_DISABLE_TAOJSON)
-    target_compile_definitions(bell PUBLIC BELL_DISABLE_TAOJSON)
+    target_compile_definitions(bell PRIVATE BELL_DISABLE_TAOJSON)
+endif()
+
+if(BELL_DISABLE_MDNS)
+    target_compile_definitions(bell PRIVATE BELL_DISABLE_MDNS)
 endif()
 
 if(BELL_BACKEND_PORTAUDIO)
-    target_compile_definitions(bell PUBLIC BELL_BACKEND_PORTAUDIO)
+    target_compile_definitions(bell PRIVATE BELL_BACKEND_PORTAUDIO)
 endif()
 
 if(NOT BELL_DISABLE_SANITIZERS)

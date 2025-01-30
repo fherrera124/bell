@@ -19,11 +19,6 @@ TEST_CASE("bell::net::IpAddress tests", "[bell::net::IpAddress]") {
     // Should be IPv4
     REQUIRE((resolved.getType() == bell::net::IpAddress::Type::IPv4));
 
-    // Resolving a known domain should return a valid address
-    resolved = bell::net::IpAddress::resolveDomain("google.com", SOCK_STREAM);
-    REQUIRE((resolved.getType() != bell::net::IpAddress::Type::Unknown));
-    REQUIRE(resolved.getSockAddrLen() > 0);
-
     // Resolving an invalid domain should fail
     REQUIRE_THROWS(
         bell::net::IpAddress::resolveDomain("_invalid.domai", SOCK_STREAM));

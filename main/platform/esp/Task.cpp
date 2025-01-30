@@ -27,7 +27,7 @@ class Task::Impl {
     }
   }
   ~Impl() {
-    if (taskPtr) {
+    if (taskPtr != nullptr) {
       taskPtr->stopTask();
     }
 
@@ -51,7 +51,7 @@ class Task::Impl {
 
   // Task entry point
   void taskEntryPoint() {
-    if (taskPtr) {
+    if (taskPtr != nullptr) {
       taskPtr->runTask();
     }
   }
@@ -95,7 +95,7 @@ class Task::Impl {
   StaticTask_t* xTaskBuffer;
   StackType_t* xStack;
   TaskHandle_t xTaskHandle;
-  Task* taskPtr;
+  Task* taskPtr = nullptr;
 
   // Returns the FreeRTOS task core
   BaseType_t getFreeRTOSTaskCore() {

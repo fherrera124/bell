@@ -1,6 +1,8 @@
 #include "bell/mdns/Browser.h"
 
-// Standar includes
+#ifndef BELL_DISABLE_MDNS
+
+// Standard includes
 #include <algorithm>
 #include <iostream>
 #include <regex>
@@ -108,6 +110,7 @@ class implMDNSBrowser : public mdns::Browser {
   AvahiClient* avahiClient = nullptr;
   AvahiServiceBrowser* serviceBrowser = nullptr;
   AvahiSimplePoll* avahiPoll = nullptr;
+  AvahiProtocol protocol = AVAHI_PROTO_UNSPEC;
 
   std::vector<DiscoveredRecord> discoveredRecords;
 
@@ -166,10 +169,12 @@ class implMDNSBrowser : public mdns::Browser {
     }
   }
 
-  void browseCallback(AvahiIfIndex interface, AvahiProtocol /*protocol*/,
+  void browseCallback(AvahiIfIndex interface, AvahiProtocol protocol,
                       AvahiBrowserEvent event, const char* name,
                       const char* type, const char* domain,
                       AvahiLookupResultFlags /*flags*/) {
+    this->protocol = protocol;  // store the protocol for resolve
+
     switch (event) {
       case AVAHI_BROWSER_FAILURE:
         throw std::runtime_error(
@@ -261,12 +266,14 @@ class implMDNSBrowser : public mdns::Browser {
   void resolveService(const DiscoveredRecord& service) override {
     if (!(avahi_service_resolver_new(
             avahiClient, static_cast<int>(service.interfaceIndex),
-            resolveIpv6 ? AVAHI_PROTO_UNSPEC : AVAHI_PROTO_INET,
-            service.name.c_str(), service.regType.c_str(),
+            this->protocol, service.name.c_str(), service.regType.c_str(),
             service.domain.empty() ? nullptr : service.domain.c_str(),
             resolveIpv6 ? AVAHI_PROTO_UNSPEC : AVAHI_PROTO_INET,
             (AvahiLookupFlags)0, avahiResolveCallback, this))) {
-      throw std::runtime_error("Failed to resolve service");
+
+      throw std::runtime_error(
+          fmt::format("Failed to resolve service, err = {}",
+                      avahi_strerror(avahi_client_errno(avahiClient))));
     }
   }
 
@@ -283,3 +290,5 @@ std::unique_ptr<mdns::Browser> mdns::Browser::startDiscovery(
                                            onEvent, autoResolveService,
                                            resolveIpv6);
 }
+
+#endif  // BELL_DISABLE_MDNS

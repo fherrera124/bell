@@ -22,7 +22,8 @@ option(BELL_BACKEND_PORTAUDIO "Enable PortAudio output backend" OFF)
 # Misc
 option(BELL_DISABLE_TAOJSON "Don't include TaoJSON" OFF)
 option(BELL_DISABLE_MBEDTLS "Don't include MbedTLS" OFF)
-option(BELL_DISABLE_MBEDTLS "Don't include MbedTLS" OFF)
+option(BELL_DISABLE_MDNS "Don't include MDNS (Bonjour, Avahi) wrappers" OFF)
+
 set(BELL_EXTERNAL_MBEDTLS "" CACHE STRING "External mbedtls library target name, optional")
 
 message(STATUS "Bell options:")
@@ -39,8 +40,9 @@ if(NOT BELL_DISABLE_CODECS)
     message(STATUS "  * Opus audio codec: ${BELL_CODEC_OPUS}")
 endif()
 
- message(STATUS " Enable PortAudio backend: ${BELL_PORTAUDIO_BACKEND}")
+message(STATUS " Enable PortAudio backend: ${BELL_PORTAUDIO_BACKEND}")
 
 message(STATUS "  Disable TaoJSON: ${BELL_DISABLE_TAOJSON}")
 message(STATUS "  Disable Mqtt: ${BELL_DISABLE_MQTT}")
 message(STATUS "  Disable MbedTLS: ${BELL_DISABLE_MBEDTLS}")
+message(STATUS "  Disable MDNS: ${BELL_DISABLE_MDNS}")

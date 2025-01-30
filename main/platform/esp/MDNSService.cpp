@@ -1,5 +1,7 @@
 #include "bell/mdns/Service.h"
 
+#ifndef BELL_DISABLE_MDNS
+
 // System includes
 #include <cassert>
 #include <string>
@@ -61,3 +63,5 @@ std::unique_ptr<mdns::Service> mdns::Service::registerService(
   );
   return std::make_unique<implMDNSService>(serviceType, serviceProto, txtItems);
 }
+
+#endif  // BELL_DISABLE_MDNS

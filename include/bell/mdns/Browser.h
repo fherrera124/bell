@@ -1,5 +1,7 @@
 #pragma once
 
+#ifndef BELL_DISABLE_MDNS
+
 #include <functional>  // for function
 #include <memory>
 #include <optional>
@@ -154,3 +156,5 @@ class Browser {
 namespace bell {
 using MDNSBrowser = mdns::Browser;
 }
+
+#endif  // BELL_DISABLE_MDNS

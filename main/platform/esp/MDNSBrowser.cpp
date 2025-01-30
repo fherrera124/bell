@@ -1,6 +1,8 @@
 #include "bell/mdns/Browser.h"
 
-// Standar includes
+#ifndef BELL_DISABLE_MDNS
+
+// Standard includes
 #include <array>
 #include <iostream>
 #include <stdexcept>
@@ -167,3 +169,5 @@ std::unique_ptr<mdns::Browser> mdns::Browser::startDiscovery(
     bool /*resolveIpv6*/) {
   return std::make_unique<implMDNSBrowser>(regType, regDomain, onEvent);
 }
+
+#endif  // BELL_DISABLE_MDNS

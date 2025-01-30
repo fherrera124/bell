@@ -1,6 +1,8 @@
 #include "bell/mdns/Browser.h"
 
-// Standar includes
+#ifndef BELL_DISABLE_MDNS
+
+// Standard includes
 #include <cassert>
 #include <iostream>
 #include <stdexcept>
@@ -428,3 +430,5 @@ std::unique_ptr<mdns::Browser> mdns::Browser::startDiscovery(
                                            onEvent, autoResolveService,
                                            autoResolveAddresses, resolveIpv6);
 }
+
+#endif  // BELL_DISABLE_MDNS

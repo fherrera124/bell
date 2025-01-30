@@ -43,7 +43,7 @@
         tests = llvm.stdenv.mkDerivation {
           name = "tests";
           src = ./.;
-          cmakeFlags = ["-DBELL_DISABLE_TESTS=OFF"];
+          cmakeFlags = ["-DBELL_DISABLE_TESTS=OFF" "-DBELL_DISABLE_MDNS=ON"];
           nativeBuildInputs = common-pkgs;
           enableParallelBuilding = true;
           doCheck = true;
