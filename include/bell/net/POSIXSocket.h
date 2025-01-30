@@ -55,7 +55,7 @@ class POSIXSocket : public Socket {
   void bind(const std::string& address, uint16_t port) override;
   void setBlocking(bool blocking) override;
   int poll(int events, int timeoutMs = 0) override;
-  bool isOpen( )const override;
+  bool isOpen() const override;
   void close() override;
   std::string getLocalAddress() const override;
   std::string getRemoteAddress() const override;

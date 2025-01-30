@@ -25,6 +25,12 @@ if(NOT BELL_DISABLE_TAOJSON)
     list(APPEND BELL_LIBS taocpp-json)
 endif()
 
+# Include MQTT if not disabled
+if(NOT BELL_DISABLE_MQTT)
+    add_subdirectory(external/mqtt)
+    list(APPEND BELL_LIBS mqtt)
+endif()
+
 if(NOT BELL_DISABLE_MBEDTLS)
     # Include mbedtls
     if(BELL_EXTERNAL_MBEDTLS)

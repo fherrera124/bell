@@ -72,7 +72,7 @@ int POSIXSocket::poll(int events, int timeoutMs) {
     throw std::runtime_error("Socket is not open");
   }
 
-  struct pollfd pfd{};
+  struct pollfd pfd {};
   pfd.fd = sockFd;
   pfd.events = static_cast<short>(events);
 

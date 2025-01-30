@@ -89,7 +89,7 @@ void net::TLSSocket::connect(const std::string& host, uint16_t port,
              mbedtlsErrString(ret));
     throw std::runtime_error("Failed to set the hostname");
   }
-  
+
   setTimeout(timeoutMs);
   setBlocking(timeoutMs == 0);
 

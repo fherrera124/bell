@@ -14,7 +14,7 @@ set(BELL_EXTERNAL_VORBIS "" CACHE STRING "External Vorbis library target name, o
 option(BELL_VORBIS_FLOAT "Use floating point Vorbis API" OFF)
 
 # Extras
-option(BELL_DISABLE_MQTT "Disable the built-in MQTT wrapper" ON)
+option(BELL_DISABLE_MQTT "Disable the built-in MQTT wrapper" OFF)
 
 # Audio sinks
 option(BELL_BACKEND_PORTAUDIO "Enable PortAudio output backend" OFF)
@@ -43,6 +43,6 @@ endif()
 message(STATUS " Enable PortAudio backend: ${BELL_PORTAUDIO_BACKEND}")
 
 message(STATUS "  Disable TaoJSON: ${BELL_DISABLE_TAOJSON}")
-message(STATUS "  Disable Mqtt: ${BELL_DISABLE_MQTT}")
+message(STATUS "  Disable MQTT: ${BELL_DISABLE_MQTT}")
 message(STATUS "  Disable MbedTLS: ${BELL_DISABLE_MBEDTLS}")
 message(STATUS "  Disable MDNS: ${BELL_DISABLE_MDNS}")
