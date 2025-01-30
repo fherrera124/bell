@@ -47,10 +47,17 @@ class Browser {
     std::vector<net::IpAddress> addresses;
 
     DiscoveredRecord() = default;
-    
+
     bool operator==(const DiscoveredRecord& other) const {
       return name == other.name && regType == other.regType &&
              domain == other.domain && interfaceIndex == other.interfaceIndex;
+    }
+
+    size_t getHash() const {
+      return std::hash<std::string>{}(name) ^
+             std::hash<std::string>{}(regType) ^
+             std::hash<std::string>{}(domain) ^
+             std::hash<uint32_t>{}(interfaceIndex);
     }
 
     inline void parseTXTRecords(const unsigned char* txtRecord,

@@ -43,28 +43,39 @@ class implMDNSBrowser : public mdns::Browser {
 
   const int maxResults = 32;
 
-  std::vector<DiscoveredRecord> cachedRecords;
-  std::vector<DiscoveredRecord> receivedRecords;
+  std::vector<DiscoveredRecord> recordsCache;
 
   void parseResults(mdns_result_t* results) {
     mdns_result_t* r = results;
     mdns_ip_addr_t* a = nullptr;
+    std::vector<uint32_t> discoveredRecordHashes;
+    DiscoveredRecord record;  // currently discovered record
 
     while (r) {
-      DiscoveredRecord record;
-
       // Assign netif index
       record.interfaceIndex = esp_netif_get_netif_impl_index(r->esp_netif);
 
       if (r->instance_name) {
         record.name = r->instance_name;
-        record.serviceResolved = true;
       }
+
+      record.serviceResolved = r->instance_name != nullptr;
 
       if (r->hostname) {
         record.hostname = r->hostname;
         record.port = r->port;
-        record.addressResolved = true;
+      }
+
+      record.addressResolved = r->hostname != nullptr;
+      record.regType = r->service_type;
+
+      discoveredRecordHashes.push_back(record.getHash());
+
+      if (std::find(recordsCache.begin(), recordsCache.end(), record) !=
+          recordsCache.end()) {
+        // Already processed this record
+        r = r->next;
+        continue;
       }
 
       a = r->addr;
@@ -100,30 +111,29 @@ class implMDNSBrowser : public mdns::Browser {
       }
 
       // Notify of new services
-      if (std::find(cachedRecords.begin(), cachedRecords.end(), record) ==
-          cachedRecords.end()) {
-        onEvent(mdns::EventType::ServiceAdded, record);
-        if (record.serviceResolved) {
-          onEvent(mdns::EventType::ServiceResolved, record);
-        }
-        if (record.addressResolved) {
-          onEvent(mdns::EventType::AddressResolved, record);
-        }
+      onEvent(mdns::EventType::ServiceAdded, record);
+      if (record.serviceResolved) {
+        onEvent(mdns::EventType::ServiceResolved, record);
+      }
+      if (record.addressResolved) {
+        onEvent(mdns::EventType::AddressResolved, record);
       }
 
-      receivedRecords.push_back(record);
+      recordsCache.push_back(record);
       r = r->next;
     }
 
-    // Notify of removed services
-    for (auto& cachedRecord : cachedRecords) {
-      if (std::find(receivedRecords.begin(), receivedRecords.end(),
-                    cachedRecord) == receivedRecords.end()) {
-        onEvent(mdns::EventType::ServiceRemoved, cachedRecord);
-      }
-    }
-
-    cachedRecords.assign(receivedRecords.begin(), receivedRecords.end());
+    // Notify of removed services, and remove
+    std::erase_if(
+        recordsCache, [this, &discoveredRecordHashes](const auto& record) {
+          if (std::find(discoveredRecordHashes.begin(),
+                        discoveredRecordHashes.end(),
+                        record.getHash()) == discoveredRecordHashes.end()) {
+            onEvent(mdns::EventType::ServiceRemoved, record);
+            return true;
+          }
+          return false;
+        });
   }
 
   void processEvents(int timeoutMs) override {
