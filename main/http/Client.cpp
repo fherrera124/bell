@@ -7,11 +7,13 @@
 #include "bell/http/Reader.h"
 #include "bell/net/SocketStream.h"
 #include "bell/net/TCPSocket.h"
+#include "bell/net/TLSSocket.h"
 #include "bell/net/URIParser.h"
 
 using namespace bell;
 
-http::Connection::Connection(const std::string& url, int timeoutMs) {
+http::Connection::Connection(const std::string& url, int timeoutMs,
+                             bool secure) {
   // Try to parse the URL
   auto parsedUri = net::parseURI(url);
   if (!parsedUri.has_value() || !parsedUri->host.has_value() ||
@@ -23,13 +25,23 @@ http::Connection::Connection(const std::string& url, int timeoutMs) {
   parsedUrl = parsedUri.value();
 
   // Create a socket to the host
-  // TODO: Add TLS support here
-  auto socket = std::make_shared<net::TCPSocket>();
-  socket->connect(parsedUri->host.value(), parsedUri->port.value_or(80),
-                  timeoutMs);
+  bool useTLS = secure && parsedUri->scheme == "https";
 
-  // Wrap the socket in a socket stream
-  socketStream = std::make_shared<net::SocketStream>(std::move(socket));
+  if (useTLS) {
+    auto socket = std::make_shared<net::TLSSocket>();
+    socket->connect(parsedUri->host.value(), parsedUri->port.value_or(443),
+                    timeoutMs);
+
+    // Wrap the socket in socket stream
+    socketStream = std::make_shared<net::SocketStream>(std::move(socket));
+  } else {
+    auto socket = std::make_shared<net::TCPSocket>();
+    socket->connect(parsedUri->host.value(), parsedUri->port.value_or(80),
+                    timeoutMs);
+
+    // Wrap the socket in a socket stream
+    socketStream = std::make_shared<net::SocketStream>(std::move(socket));
+  }
 }
 
 std::unique_ptr<http::Writer> http::Connection::sendRequest(

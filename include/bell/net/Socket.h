@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <string>
 
 namespace bell::net {
@@ -114,7 +115,7 @@ class Socket {
    *
    * @return True if the socket is open, false otherwise.
    */
-  virtual bool isOpen() = 0;
+  virtual bool isOpen() const = 0;
 
   /**
    * @brief Close the socket.

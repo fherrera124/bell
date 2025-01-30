@@ -30,7 +30,8 @@ TCPSocket::~TCPSocket() {
   close();
 }
 
-void TCPSocket::connect(const std::string& host, uint16_t port, int timeoutMs) {
+void TCPSocket::connect(const std::string& host, uint16_t port, int timeoutMs,
+                        bool dontPoll) {
   int err;
 
   // Close the socket if it is already open
@@ -65,44 +66,47 @@ void TCPSocket::connect(const std::string& host, uint16_t port, int timeoutMs) {
     throw std::runtime_error("Sock connect failed");
   }
 
-  if (err < 0 && errno == EINPROGRESS) {
-    // Connection is in progress; use poll to wait for completion
-    struct pollfd pfd {};
-    pfd.fd = sockFd;
-    pfd.events = POLLOUT;
+  if (timeoutMs > 0 && !dontPoll) {
+    if (err < 0 && errno == EINPROGRESS) {
+      // Connection is in progress; use poll to wait for completion
+      struct pollfd pfd{};
+      pfd.fd = sockFd;
+      pfd.events = POLLOUT;
 
-    int pollResult = ::poll(&pfd, 1, timeoutMs);
-    if (pollResult <= 0) {
-      // Timeout or error
-      close();
-      if (pollResult == 0) {
-        BELL_LOG(error, LOG_TAG, "Connection to {} timed out after {} ms.",
-                 host.c_str(), timeoutMs);
-        throw std::runtime_error("Sock connect timeout");
+      int pollResult = ::poll(&pfd, 1, timeoutMs);
+      if (pollResult <= 0) {
+        // Timeout or error
+        close();
+        if (pollResult == 0) {
+          BELL_LOG(error, LOG_TAG, "Connection to {} timed out after {} ms.",
+                   host.c_str(), timeoutMs);
+          throw std::runtime_error("Sock connect timeout");
+        }
+
+        BELL_LOG(error, LOG_TAG,
+                 "Polling error while connecting to {}. Error {}", host.c_str(),
+                 errno);
+        throw std::runtime_error("Sock connect poll failed");
       }
 
-      BELL_LOG(error, LOG_TAG, "Polling error while connecting to {}. Error {}",
-               host.c_str(), errno);
-      throw std::runtime_error("Sock connect poll failed");
+      // Check for connection success or error
+      int sockErr;
+      socklen_t sockErrLen = sizeof(sockErr);
+      if (getsockopt(sockFd, SOL_SOCKET, SO_ERROR, &sockErr, &sockErrLen) < 0 ||
+          sockErr != 0) {
+        close();
+        BELL_LOG(error, LOG_TAG, "Connection to {} failed. Socket error {}",
+                 host.c_str(), strerror(sockErr));
+        throw std::runtime_error("Sock connect failed");
+      }
     }
 
-    // Check for connection success or error
-    int sockErr;
-    socklen_t sockErrLen = sizeof(sockErr);
-    if (getsockopt(sockFd, SOL_SOCKET, SO_ERROR, &sockErr, &sockErrLen) < 0 ||
-        sockErr != 0) {
-      close();
-      BELL_LOG(error, LOG_TAG, "Connection to {} failed. Socket error {}",
-               host.c_str(), strerror(sockErr));
-      throw std::runtime_error("Sock connect failed");
+    // Set socket back to the requested blocking mode
+    if (timeoutMs > 0) {
+      setTimeout(timeoutMs);
+    } else {
+      setBlocking(isBlocking);
     }
-  }
-
-  // Set socket back to the requested blocking mode
-  if (timeoutMs > 0) {
-    setTimeout(timeoutMs);
-  } else {
-    setBlocking(isBlocking);
   }
 }
 
@@ -119,7 +123,7 @@ void TCPSocket::listen(int backlog) {
 }
 
 std::unique_ptr<TCPSocket> TCPSocket::accept() {
-  struct sockaddr_in clientAddr {};
+  struct sockaddr_in clientAddr{};
   socklen_t addrLen = sizeof(clientAddr);
 
   // Accept the incoming connection

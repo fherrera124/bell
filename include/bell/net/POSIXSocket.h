@@ -41,6 +41,11 @@ class POSIXSocket : public Socket {
    */
   void createFd(int domain, int protocol = IPPROTO_IP);
 
+  /**
+   * @brief Returns the last error code from the socket, using SO_ERROR.
+   */
+  int lastError() const;
+
   // Socket interface overrides
   void setTimeout(int timeoutMs) override;
   void wrapFd(int fd) override;
@@ -50,7 +55,7 @@ class POSIXSocket : public Socket {
   void bind(const std::string& address, uint16_t port) override;
   void setBlocking(bool blocking) override;
   int poll(int events, int timeoutMs = 0) override;
-  bool isOpen() override;
+  bool isOpen( )const override;
   void close() override;
   std::string getLocalAddress() const override;
   std::string getRemoteAddress() const override;

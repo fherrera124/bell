@@ -27,7 +27,8 @@ const int defaultHTTPClientTimeout = 5000;
 class Connection {
  public:
   explicit Connection(const std::string& url,
-                      int timeoutMs = defaultHTTPClientTimeout);
+                      int timeoutMs = defaultHTTPClientTimeout,
+                      bool secure = true);
   ~Connection() = default;
 
   /**
@@ -68,13 +69,15 @@ class Connection {
  * @param url URL to make the request to
  * @param headers Headers to include in the request
  * @param timeoutMs Timeout in milliseconds
+ * @param secure Whether to use HTTPS (true, port 443) or HTTP (false, port 80)
  *
  * @return std::unique_ptr<Connection> Pointer to the http::Connection. The response can be obtained by calling getResponse() on the returned object.
  */
-inline std::unique_ptr<Connection> get(
-    const std::string& url, const Headers& headers = {},
-    int timeoutMs = defaultHTTPClientTimeout) {
-  auto connection = std::make_unique<Connection>(url, timeoutMs);
+inline std::unique_ptr<Connection> get(const std::string& url,
+                                       const Headers& headers = {},
+                                       int timeoutMs = defaultHTTPClientTimeout,
+                                       int secure = true) {
+  auto connection = std::make_unique<Connection>(url, timeoutMs, secure);
   connection->sendRequest(Method::GET, headers, 0);
   return connection;
 }
@@ -87,14 +90,15 @@ inline std::unique_ptr<Connection> get(
  * @param body Body to include in the request, passed as a pointer to a byte array
  * @param length Length of the body
  * @param timeoutMs Timeout in milliseconds
+ * @param secure Whether to use HTTPS (true, port 443) or HTTP (false, port 80)
  *
  * @return std::unique_ptr<Connection> Pointer to the http::Connection. The response can be obtained by calling getResponse() on the returned object.
  */
 inline std::unique_ptr<Connection> postRawPtr(
     const std::string& url, const Headers& headers = {},
     const std::byte* body = nullptr, size_t length = 0,
-    int timeoutMs = defaultHTTPClientTimeout) {
-  auto connection = std::make_unique<Connection>(url, timeoutMs);
+    int timeoutMs = defaultHTTPClientTimeout, bool secure = true) {
+  auto connection = std::make_unique<Connection>(url, timeoutMs, secure);
   auto reader = connection->sendRequest(Method::POST, headers, length);
   reader->writeBodyRaw(reinterpret_cast<const char*>(body), length);
   return connection;
@@ -107,14 +111,15 @@ inline std::unique_ptr<Connection> postRawPtr(
  * @param headers Headers to include in the request
  * @param body Body to include in the request, passed as a vector of bytes
  * @param timeoutMs Timeout in milliseconds
+ * @param secure Whether to use HTTPS (true, port 443) or HTTP (false, port 80)
  *
  * @return std::unique_ptr<Connection> Pointer to the http::Connection. The response can be obtained by calling getResponse() on the returned object.
  */
 inline std::unique_ptr<Connection> post(
     const std::string& url, const Headers& headers = {},
     const std::vector<std::byte>& body = {},
-    int timeoutMs = defaultHTTPClientTimeout) {
-  return postRawPtr(url, headers, body.data(), body.size(), timeoutMs);
+    int timeoutMs = defaultHTTPClientTimeout, bool secure = true) {
+  return postRawPtr(url, headers, body.data(), body.size(), timeoutMs, secure);
 }
 }  // namespace bell::http
 

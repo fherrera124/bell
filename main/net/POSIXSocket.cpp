@@ -59,12 +59,20 @@ void POSIXSocket::wrapFd(int fd) {
   }
 }
 
+int POSIXSocket::lastError() const {
+  if (!isOpen()) {
+    throw std::runtime_error("Socket is not open");
+  }
+
+  return errno;
+}
+
 int POSIXSocket::poll(int events, int timeoutMs) {
   if (!isOpen()) {
     throw std::runtime_error("Socket is not open");
   }
 
-  struct pollfd pfd {};
+  struct pollfd pfd{};
   pfd.fd = sockFd;
   pfd.events = static_cast<short>(events);
 
@@ -85,7 +93,9 @@ size_t POSIXSocket::read(uint8_t* buf, size_t len) {
   // Perform the actual read operation
   ssize_t res = recv(sockFd, buf, len, 0);
   if (res < 0) {
-    close();
+    if (errno != EAGAIN && errno != EWOULDBLOCK) {
+      close();
+    }
     throw std::runtime_error(fmt::format("Error in recv, {}", strerror(errno)));
   }
 
@@ -101,7 +111,9 @@ size_t POSIXSocket::write(const uint8_t* buf, size_t len) {
   ssize_t res = ::send(sockFd, buf, len, MSG_NOSIGNAL);
   if (res < 0) {
     BELL_LOG(error, "POSIXSocket", "Error in send: {}", strerror(errno));
-    close();
+    if (errno != EAGAIN && errno != EWOULDBLOCK) {
+      close();
+    }
     throw std::runtime_error("Error in send");
   }
 
@@ -120,7 +132,7 @@ int POSIXSocket::getFd() {
   return sockFd;
 }
 
-bool POSIXSocket::isOpen() {
+bool POSIXSocket::isOpen() const {
   return !isClosed;
 }
 

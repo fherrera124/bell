@@ -21,8 +21,10 @@ class TCPSocket : public POSIXSocket {
    * @param host String containing a hostname or IP address to connect to.
    * @param port The port number to connect to on the specified host.
    * @param timeout The maximum time to wait for the connection to be established, in milliseconds. This parameter is ignored, if the socket is set to a blocking mode.
+   * @param dontPoll If true, the function will not poll for the connection to be established.
    */
-  void connect(const std::string& host, uint16_t port, int timeoutMs = 0);
+  void connect(const std::string& host, uint16_t port, int timeoutMs = 0,
+               bool dontPoll = false);
 
   /**
    * @brief Listen for incoming connections on the socket.
