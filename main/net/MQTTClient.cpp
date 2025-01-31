@@ -78,7 +78,7 @@ void MQTTClient::publish(const std::string& topic, const std::string& message,
   }
 
   int err = mqtt_publish(&client, topic.c_str(), message.c_str(),
-                         message.size(), (uint8_t)qos);
+                         message.size(), static_cast<uint8_t>(qos));
 
   if (err != MQTT_OK) {
     BELL_LOG(error, "mqtt", "MQTT publish failed: %d", err);
