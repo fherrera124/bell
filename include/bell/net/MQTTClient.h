@@ -3,11 +3,13 @@
 #ifndef BELL_DISABLE_MQTT
 
 // Standard includes
-#include <atomic>
 #include <cstdint>
 #include <functional>
+#include <map>
 #include <memory>
+#include <mutex>
 #include <string>
+#include <string_view>
 
 // Library includes
 #include "mqtt.h"
@@ -20,7 +22,7 @@ namespace bell::net {
 class MQTTClient {
  public:
   MQTTClient() = default;
-  ~MQTTClient() = default;
+  ~MQTTClient();
 
   enum class QOS {
     AT_MOST_ONCE = MQTT_PUBLISH_QOS_0,
@@ -29,18 +31,10 @@ class MQTTClient {
   };
 
   /**
-   * @brief Callback for when a message is published.
-   * @param topic The topic the message was published to.
-   * @param message The message that was published.
+   * @brief Handler for when a message is published.
    */
-  using PublishCallback =
-      std::function<void(const std::string&, const std::string&)>;
-
-  /**
-   * @brief Set the catch-all publish callback
-   * @param callback The callback to set.
-   */
-  void setPublishCallback(const PublishCallback& callback);
+  using PublishHandler =
+      std::function<void(std::string_view message, int packetId, QOS qos)>;
 
   /**
    * @brief Connect to an MQTT broker.
@@ -50,10 +44,13 @@ class MQTTClient {
    * @param username The username to authenticate with.
    * @param password The password to authenticate with.
    * @param timeoutMs The timeout for the connection, in milliseconds.
+   * @param secure Whether to use a secure connection (TLS).
+   * @param keepAlive The keep-alive time in seconds.
    */
   void connect(const std::string& host, uint16_t port,
                const std::string& username = "",
-               const std::string& password = "", int timeoutMs = 0);
+               const std::string& password = "", int timeoutMs = 0,
+               bool secure = false, int keepAlive = 400);
 
   /**
    * @brief Disconnect from the MQTT broker.
@@ -80,8 +77,10 @@ class MQTTClient {
    *
    * @param topic The topic to subscribe to.
    * @param qos The quality of service to subscribe with.
+   * @param onPublish The callback to call when a message is published.
    */
-  void subscribe(const std::string& topic, QOS qos = QOS::AT_MOST_ONCE);
+  void subscribe(const std::string& topic, QOS qos = QOS::AT_MOST_ONCE,
+                 const PublishHandler& handler = {});
 
   /**
    * @brief Unsubscribe from a topic.
@@ -98,12 +97,15 @@ class MQTTClient {
   bool isConnected() const;
 
   // Directly mapped from mqtt client's publish_callback field
-  void onPublishCallback(struct mqtt_response_publish* published);
+  void cPublishCallback(struct mqtt_response_publish* publishResponse);
 
  private:
   std::unique_ptr<net::Socket> socket;
-  std::atomic<bool> connected = false;
-  PublishCallback publishCallback;
+  std::recursive_mutex accessMutex;
+
+  // Holds the callbacks for each subscribed topic
+  // Use std::less<> so we can use string_view for lookup
+  std::map<std::string, PublishHandler, std::less<>> topicCallbacks;
 
   // mqtt lib internals
   struct mqtt_client client {};
@@ -111,5 +113,9 @@ class MQTTClient {
   std::array<uint8_t, 1024> recvbuf{};
 };
 }  // namespace bell::net
+
+namespace bell {
+using MQTTClient = net::MQTTClient;
+}
 
 #endif  // BELL_DISABLE_MQTT

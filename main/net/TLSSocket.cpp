@@ -27,8 +27,9 @@ std::string mbedtlsErrString(int error) {
 }  // namespace
 
 net::TLSSocket::~TLSSocket() {
+  close();
+
   // Free the MbedTLS structures
-  mbedtls_ssl_close_notify(&sslCtx);
   mbedtls_ssl_free(&sslCtx);
   mbedtls_ssl_config_free(&sslConf);
   mbedtls_ctr_drbg_free(&ctrDrbgCtx);
@@ -181,7 +182,8 @@ bool net::TLSSocket::isOpen() const {
 }
 
 void net::TLSSocket::close() {
-  if (innerSocket) {
+  if (innerSocket && innerSocket->isOpen()) {
+    mbedtls_ssl_close_notify(&sslCtx);
     innerSocket->close();
   }
 }
