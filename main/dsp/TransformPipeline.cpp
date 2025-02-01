@@ -4,6 +4,7 @@
 #include "bell/dsp/BiquadComboTransform.h"
 #include "bell/dsp/BiquadTransform.h"
 #include "bell/dsp/GainTransform.h"
+#include "bell/dsp/MixerTransform.h"
 
 #ifndef BELL_DISABLE_TAOJSON
 // Used for JSON deserialization of the transforms
@@ -57,7 +58,7 @@ std::shared_ptr<Transform> parseTransform(const tao::json::value& json) {
              json.at("channel").is_number()) {
     // Parse the channel
     channels.push_back(json.at("channel").as<uint8_t>());
-  } else {
+  } else if (transformType != "mixer") {
     throw std::invalid_argument("Channels not specified for transform");
   }
 
@@ -76,6 +77,21 @@ std::shared_ptr<Transform> parseTransform(const tao::json::value& json) {
     return gain;
   }
 
+  // Parse the gain transform
+  if (transformType == "mixer") {
+    auto mixer = std::make_shared<MixerTransform>();
+
+    if (json.find("mapping") != nullptr && json.at("mapping").is_array()) {
+      mixer->configure(
+          json.at("mapping").as<std::vector<std::pair<int, int>>>());
+    } else {
+      throw std::invalid_argument("Invalid mixer mapping");
+    }
+
+    return mixer;
+  }
+
+  // Parse the biquad transform
   if (transformType == "biquad") {
     if (channels.size() > 1) {
       throw std::invalid_argument("Biquad transform only supports one channel");
