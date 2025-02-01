@@ -50,10 +50,11 @@ class implMDNSBrowser : public mdns::Browser {
   void parseResults(mdns_result_t* results) {
     mdns_result_t* r = results;
     mdns_ip_addr_t* a = nullptr;
-    std::vector<uint32_t> discoveredRecordHashes;
     DiscoveredRecord record;  // currently discovered record
 
     while (r) {
+      record.addresses.clear();
+
       // Assign netif index
       record.interfaceIndex = esp_netif_get_netif_impl_index(r->esp_netif);
 
@@ -71,7 +72,19 @@ class implMDNSBrowser : public mdns::Browser {
       record.addressResolved = r->hostname != nullptr;
       record.regType = r->service_type;
 
-      discoveredRecordHashes.push_back(record.getHash());
+      if (r->ttl == 0) {
+        // Record is being removed
+        // Notify of removed services, and remove
+        std::erase_if(recordsCache, [this, &record](const auto& erasedRecord) {
+          if (erasedRecord.getHash() == record.getHash()) {
+            onEvent(mdns::EventType::ServiceRemoved, erasedRecord);
+            return true;
+          }
+          return false;
+        });
+        r = r->next;
+        continue;
+      }
 
       if (std::find(recordsCache.begin(), recordsCache.end(), record) !=
           recordsCache.end()) {
@@ -124,18 +137,6 @@ class implMDNSBrowser : public mdns::Browser {
       recordsCache.push_back(record);
       r = r->next;
     }
-
-    // Notify of removed services, and remove
-    std::erase_if(
-        recordsCache, [this, &discoveredRecordHashes](const auto& record) {
-          if (std::find(discoveredRecordHashes.begin(),
-                        discoveredRecordHashes.end(),
-                        record.getHash()) == discoveredRecordHashes.end()) {
-            onEvent(mdns::EventType::ServiceRemoved, record);
-            return true;
-          }
-          return false;
-        });
   }
 
   void processEvents(int timeoutMs) override {
