@@ -2,9 +2,9 @@
 
 // Standard includes
 #include <array>
+#include <cstdint>
 #include <mutex>
 #include <unordered_map>
-#include <vector>
 
 // bell includes
 #include "bell/audio/Types.h"
@@ -21,7 +21,7 @@ struct DataSlots {
   static const int maxSamples = 2048;
 
   // Per-channel sample storage.
-  std::unordered_map<int, std::array<float, maxSamples>> sampleSlots{};
+  std::unordered_map<int, std::array<int32_t, maxSamples>> sampleSlots{};
 
   // Number of samples stored in the slots.
   size_t numSamples = 0;

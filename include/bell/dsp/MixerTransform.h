@@ -33,8 +33,6 @@ class MixerTransform : public Transform {
   // Mixer config
   std::vector<std::pair<int, int>> mixerMapping;
 
-  using ChannelData = std::array<float, DataSlots::maxSamples>;
-
   // A map to keep track of how many source channels are contributing to each target channel
   std::unordered_map<int, std::pair<ChannelData, int>> outputDataAcc{};
 

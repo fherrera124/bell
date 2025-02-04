@@ -2,7 +2,14 @@
 
 // Standar includes
 #include <cmath>
+#include <iostream>
 #include <mutex>
+
+// IQmathLib
+#include <IQmathLib.h>
+
+// Bell includes
+#include "bell/Logger.h"
 
 #ifdef ESP_PLATFORM
 // ASM optimized function for espressif
@@ -516,11 +523,25 @@ void BiquadTransform::allPassFOCoEffs(float f) {
 
 void BiquadTransform::normalizeCoEffs(float a0, float a1, float a2, float b0,
                                       float b1, float b2) {
-  coeffs[0] = b0 / a0;
-  coeffs[1] = b1 / a0;
-  coeffs[2] = b2 / a0;
-  coeffs[3] = a1 / a0;
-  coeffs[4] = a2 / a0;
+  // Normalize and scale coefficients
+  coeffs[0] = _IQ28((b0 / a0));
+  coeffs[1] = _IQ28((b1 / a0));
+  coeffs[2] = _IQ28((b2 / a0));
+  coeffs[3] = _IQ28((-a1 / a0));
+  coeffs[4] = _IQ28((-a2 / a0));
+
+  // Ensure coefficients are within valid range of -8.0 to +7.99999999
+  for (int i = 0; i < 5; ++i) {
+    if (coeffs[i] > _IQ28(7.99999999)) {
+      BELL_LOG(warn, LOG_TAG, "Coeff {} is too large, clamped to 7.99999999",
+               coeffs[i]);
+      coeffs[i] = _IQ28(7.99999999);
+    } else if (coeffs[i] < _IQ28(-8.0)) {
+      BELL_LOG(warn, LOG_TAG, "Coeff {} is too small, clamped to -8",
+               coeffs[i]);
+      coeffs[i] = _IQ28(-8.0);
+    }
+  }
 }
 
 void BiquadTransform::process(DataSlots& sampleSlots) {
@@ -536,16 +557,35 @@ void BiquadTransform::process(DataSlots& sampleSlots) {
 
   auto& input = sampleSlots.sampleSlots.at(this->channels[0]);
 
-#ifdef ESP_PLATFORM
-  dsps_biquad_f32_ae32(input.data(), input.data(), sampleSlots.numSamples,
-                       coeffs.data(), w.data());
-#else
-  // Apply the set coefficients
+  // Direct form 1 biquad filter, with basic noise shaping
+  // Based on robert bristow-johnson code from https://dsp.stackexchange.com/questions/21792/best-implementation-of-a-real-time-fixed-point-iir-filter-with-constant-coeffic
   for (size_t i = 0; i < sampleSlots.numSamples; i++) {
-    float d0 = input[i] - coeffs[3] * w[0] - coeffs[4] * w[1];
-    input[i] = coeffs[0] * d0 + coeffs[1] * w[0] + coeffs[2] * w[1];
-    w[1] = w[0];
-    w[0] = d0;
+    int32_t x = input[i] << 1U;  // Expand Q30 to full 32 bits
+    accumulator += (int64_t)coeffs[0] * x;
+    accumulator += (int64_t)coeffs[1] * x1;
+    accumulator += (int64_t)coeffs[2] * x2;
+    accumulator += (int64_t)coeffs[3] * y1;
+    accumulator += (int64_t)coeffs[4] * y2;
+
+    // Clip values
+    if (accumulator > 0x07FFFFFFFFFFFFFFLL) {
+      accumulator = 0x07FFFFFFFFFFFFFFLL;
+    } else if (accumulator < -0x0800000000000000LL) {
+      accumulator = -0x0800000000000000LL;
+    }
+
+    // point of quantization, always rounding down
+    int32_t y = (int32_t)(accumulator >> 28);
+
+    // bump the states over
+    x2 = x1;
+    x1 = x;
+    y2 = y1;
+    y1 = y;
+
+    // keep the fractional bits that were dropped for
+    accumulator &= 0x000000000FFFFFFFLL;
+
+    input[i] = (y >> 1U);
   }
-#endif
 }

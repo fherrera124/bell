@@ -22,7 +22,8 @@ class GainTransform : public Transform {
   float calculateHeadroom() override;
 
  private:
-  float gainFactor = 1.0F;
+  // 1.0 in IQ30
+  int32_t gainFactor = (1 << 30U);
   float gainDb = 0.0F;
 };
 }  // namespace bell::dsp

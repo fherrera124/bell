@@ -68,8 +68,14 @@ class BiquadTransform : public Transform {
   float calculateHeadroom() override;
 
  private:
-  std::array<float, 5> coeffs{};
-  std::array<float, 2> w = {0.0F, 0.0F};
+  const char* LOG_TAG = "BiquadTransform";
+  // IQ30 format
+  std::array<int32_t, 5> coeffs{};
+  int64_t accumulator = 0;
+  int32_t x1 = 0;
+  int32_t x2 = 0;
+  int32_t y1 = 0;
+  int32_t y2 = 0;
 
   // Pi constant
   const float FLOAT_PI = M_PI;

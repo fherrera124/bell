@@ -1,10 +1,13 @@
+#include <cstdint>
 #include <fstream>
 #include <iostream>
+
 #include "bell/Logger.h"
 #include "bell/dsp/Engine.h"
 
 int main(int argc, char* argv[]) {
   bell::registerDefaultLogger();
+
   // DSP engine
   bell::dsp::Engine dspEngine;
 

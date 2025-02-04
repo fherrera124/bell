@@ -1,14 +1,17 @@
 #include "bell/dsp/GainTransform.h"
 
-// Standar includes
+// Standard includes
 #include <mutex>
+
+// IQmathLib
+#include "IQmathLib.h"
 
 using namespace bell::dsp;
 
 void GainTransform::configure(float gainDb) {
   std::scoped_lock lock(accessMutex);
   this->gainDb = gainDb;
-  this->gainFactor = std::pow(10.0F, gainDb / 20.0F);
+  this->gainFactor = _IQ30(std::pow(10.0F, gainDb / 20.0F));
 }
 
 float GainTransform::calculateHeadroom() {
@@ -21,7 +24,8 @@ void GainTransform::process(DataSlots& sampleSlots) {
   for (uint32_t i = 0; i < sampleSlots.numSamples; i++) {
     // Apply gain to all channels
     for (auto& channel : channels) {
-      sampleSlots.sampleSlots.at(channel)[i] *= gainFactor;
+      sampleSlots.sampleSlots.at(channel)[i] =
+          _IQ30mpy(sampleSlots.sampleSlots.at(channel)[i], this->gainFactor);
     }
   }
 }

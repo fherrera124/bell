@@ -86,9 +86,15 @@ endif()
 
 # Espressif-specific dependencies
 if(ESP_PLATFORM)
+    list(APPEND BELL_LIBS idf::mbedtls idf::pthread idf::driver idf::lwip idf::newlib)
+
     if(IDF_VERSION_MAJOR LESS_EQUAL 4)
-        list(APPEND BELL_LIBS idf::mdns idf::mbedtls idf::pthread idf::driver idf::lwip idf::newlib)
+        if(NOT BELL_DISABLE_MDNS)
+            list(APPEND BELL_LIBS idf::mdns)
+        endif()
     else()
-        list(APPEND BELL_LIBS idf::espressif__mdns idf::mbedtls idf::pthread idf::driver idf::lwip idf::newlib)
+        if(NOT BELL_DISABLE_MDNS)
+            list(APPEND BELL_LIBS idf::espressif__mdns)
+        endif()
     endif()
 endif()
