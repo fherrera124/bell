@@ -19,6 +19,7 @@ namespace bell::dsp {
 struct DataSlots {
   // Maximum number of samples that can be stored in the slots.
   static const int maxSamples = 2048;
+  static const int maxChannels = 8;
 
   // Per-channel sample storage.
   std::unordered_map<int, std::array<int32_t, maxSamples>> sampleSlots{};

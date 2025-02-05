@@ -18,12 +18,12 @@ class MixerTransform : public Transform {
   /**
    * @brief Configure the mixer with the given map of input channel to output channels
    *
-   * For example, to downmix stereo (0, 1) to mono (0), use [ {0, 0}, {1, 0} ]
-   * To upmix mono (0) to stereo (0, 1), use [ {0, 0}, {0, 1} ]
+   * For example, to downmix stereo (0, 1) to mono (0), use [ [0, 1], [] ]
+   * To upmix mono (0) to stereo (0, 1), use [ [0], [0] ]
    *
    * @param mixerMap Vector of pairs of input channel to output channel
    */
-  void configure(const std::vector<std::pair<int, int>>& mixerMapping);
+  void configure(const std::vector<std::vector<int>>& mixerMapping);
 
   // Transform implementation, see Transform.h for details
   void process(DataSlots& sampleSlots) override;
@@ -31,10 +31,12 @@ class MixerTransform : public Transform {
 
  private:
   // Mixer config
-  std::vector<std::pair<int, int>> mixerMapping;
+  std::vector<std::array<bool, DataSlots::maxChannels>> mixerMapping;
+
+  using ChannelData = std::array<int32_t, DataSlots::maxSamples>;
 
   // A map to keep track of how many source channels are contributing to each target channel
-  std::unordered_map<int, std::pair<ChannelData, int>> outputDataAcc{};
+  std::unordered_map<int, std::pair<ChannelData, int>> outputDataAcc;
 
   // Calculates the input and output size
   // Currently unused
