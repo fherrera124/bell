@@ -24,8 +24,8 @@ void GainTransform::process(DataSlots& sampleSlots) {
   for (uint32_t i = 0; i < sampleSlots.numSamples; i++) {
     // Apply gain to all channels
     for (auto& channel : channels) {
-      sampleSlots.sampleSlots.at(channel)[i] =
-          _IQ30mpy(sampleSlots.sampleSlots.at(channel)[i], this->gainFactor);
+      sampleSlots.primarySlot->at(channel)[i] =
+          _IQ30mpy(sampleSlots.primarySlot->at(channel)[i], this->gainFactor);
     }
   }
 }

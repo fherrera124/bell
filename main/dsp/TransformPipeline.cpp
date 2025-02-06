@@ -82,8 +82,7 @@ std::shared_ptr<Transform> parseTransform(const tao::json::value& json) {
     auto mixer = std::make_shared<MixerTransform>();
 
     if (json.find("mapping") != nullptr && json.at("mapping").is_array()) {
-      mixer->configure(
-          json.at("mapping").as<std::vector<std::pair<int, int>>>());
+      mixer->configure(json.at("mapping").as<std::vector<std::vector<int>>>());
     } else {
       throw std::invalid_argument("Invalid mixer mapping");
     }

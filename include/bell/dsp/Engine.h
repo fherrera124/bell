@@ -38,7 +38,6 @@ class Engine {
  private:
   std::shared_ptr<TransformPipeline> activePipeline;
   DataSlots innerDataSlots{
-      .sampleSlots = {},
       .numSamples = 0,
       .sampleFormat = audio::Format(0, audio::BitWidth::BW_16,
                                     audio::SampleRate::SR_44100HZ),

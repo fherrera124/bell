@@ -21,10 +21,7 @@ DataSlots* Engine::process(const uint8_t* inputBuffer, size_t inputBufferLen,
 
   // Check if all the channels are set
   for (int x = 0; x < format.getNumChannels(); x++) {
-    if (innerDataSlots.sampleSlots.find(x) ==
-        innerDataSlots.sampleSlots.end()) {
-      innerDataSlots.sampleSlots[x] = {};
-    }
+    innerDataSlots.ensureChannel(x);
   }
 
   if (innerDataSlots.sampleFormat != format) {
@@ -44,7 +41,7 @@ DataSlots* Engine::process(const uint8_t* inputBuffer, size_t inputBufferLen,
       for (size_t frameIdx = 0; frameIdx < innerDataSlots.numSamples;
            frameIdx++) {
         for (auto chan = 0; chan < numChannels; chan++) {
-          innerDataSlots.sampleSlots.at(chan)[frameIdx] =
+          innerDataSlots.primarySlot->at(chan)[frameIdx] =
               inputAsInt16[(frameIdx * numChannels) + chan]
               << 15U;  // Shift left by 15 bits to roughly 32bit range
         }
@@ -57,7 +54,7 @@ DataSlots* Engine::process(const uint8_t* inputBuffer, size_t inputBufferLen,
            frameIdx++) {
         for (auto chan = 0; chan < numChannels; chan++) {
           // No need to shift left by 15 bits, as the input is already in 32bit range
-          innerDataSlots.sampleSlots.at(chan)[frameIdx] =
+          innerDataSlots.primarySlot->at(chan)[frameIdx] =
               inputAsInt32[(frameIdx * numChannels) + chan];
         }
       }
@@ -89,7 +86,7 @@ DataSlots* Engine::process(const uint8_t* inputBuffer, size_t inputBufferLen,
         for (auto chan = 0; chan < numChannels; chan++) {
           // Shift right by 15 bits to convert back to 16bit range
           outputData16[(frameIdx * numChannels) + chan] =
-              innerDataSlots.sampleSlots.at(chan)[frameIdx] >> 15U;
+              innerDataSlots.primarySlot->at(chan)[frameIdx] >> 15U;
         }
       }
       break;
@@ -101,7 +98,7 @@ DataSlots* Engine::process(const uint8_t* inputBuffer, size_t inputBufferLen,
         for (auto chan = 0; chan < numChannels; chan++) {
           // Shift right by 15 bits to convert back to 16bit range
           outputData32[(frameIdx * numChannels) + chan] =
-              innerDataSlots.sampleSlots.at(chan)[frameIdx];
+              innerDataSlots.primarySlot->at(chan)[frameIdx];
         }
       }
       break;

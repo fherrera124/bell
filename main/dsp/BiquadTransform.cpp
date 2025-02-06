@@ -555,7 +555,7 @@ void BiquadTransform::process(DataSlots& sampleSlots) {
                     this->gainValue, this->slopeValue, this->bandwidthValue);
   }
 
-  auto& input = sampleSlots.sampleSlots.at(this->channels[0]);
+  auto& input = sampleSlots.primarySlot->at(this->channels[0]);
 
   // Direct form 1 biquad filter, with basic noise shaping
   // Based on robert bristow-johnson code from https://dsp.stackexchange.com/questions/21792/best-implementation-of-a-real-time-fixed-point-iir-filter-with-constant-coeffic

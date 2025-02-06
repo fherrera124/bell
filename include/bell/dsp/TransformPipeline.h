@@ -18,11 +18,36 @@ namespace bell::dsp {
 // Holds the audio samples that are passed between the transforms in the pipeline.
 struct DataSlots {
   // Maximum number of samples that can be stored in the slots.
-  static const int maxSamples = 2048;
+  static const int maxSamples = 1024;
   static const int maxChannels = 8;
 
   // Per-channel sample storage.
-  std::unordered_map<int, std::array<int32_t, maxSamples>> sampleSlots{};
+  using ChannelMap = std::unordered_map<int, std::array<int32_t, maxSamples>>;
+
+  // Internal storage for the audio samples.
+  ChannelMap slotA{};
+  ChannelMap slotB{};
+
+  // Pointers to the primary and secondary slots.
+  ChannelMap* primarySlot = &slotA;
+  ChannelMap* secondarySlot = &slotB;
+
+  /**
+   * @brief Swaps data between the primary and secondary slot.
+   */
+  inline void swapSlots() { std::swap(primarySlot, secondarySlot); }
+
+  /**
+   * @brief Makes sure that the given channel exists in the slots.
+   * 
+   * @param channel channel index
+   */
+  inline void ensureChannel(int channel) const {
+    if (primarySlot->find(channel) == primarySlot->end()) {
+      primarySlot->emplace(channel, std::array<int32_t, maxSamples>{});
+      secondarySlot->emplace(channel, std::array<int32_t, maxSamples>{});
+    }
+  }
 
   // Number of samples stored in the slots.
   size_t numSamples = 0;
