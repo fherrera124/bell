@@ -6,8 +6,6 @@
 #include <tao/json/contrib/traits.hpp>
 #endif
 
-#include "bell/Logger.h"
-
 using namespace bell::dsp;
 
 void Transform::setChannels(const std::vector<uint8_t>& channels) {

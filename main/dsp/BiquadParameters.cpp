@@ -22,12 +22,10 @@ const float floatPi = M_PI;
 std::vector<float> calculateBWQ(int order) {
   std::vector<float> qValues;
   for (int n = 0; n < order / 2; n++) {
-    float q = 1.0F / (2.0F * sinf((floatPi / (float)order * (float)n) + 0.5F));
+    float angle = M_PI * (2.0F * (((float)n + 1.0F) + (float)order - 1) /
+                          (2.0F * (float)order));
+    float q = 1.0F / (2.0F * sinf(angle));
     qValues.push_back(q);
-  }
-
-  if (order % 2 > 0) {
-    qValues.push_back(-1.0);
   }
 
   return qValues;
@@ -81,9 +79,6 @@ std::vector<BiquadParameters> BiquadParameters::linkwitzRiley(Type type,
     if (q >= 0.0) {
       BiquadParameters biquadParams(type, frequency, q, std::nullopt,
                                     std::nullopt, std::nullopt);
-
-      printf("BiquadParameters::linkwitzRiley: %f %f\n",
-             biquadParams.fValue.value(), q);
       params.push_back(biquadParams);
     } else {
       BiquadParameters biquadParams(
@@ -152,8 +147,6 @@ std::array<int32_t, 5> BiquadParameters::calculateCoefficients(
         correctParams = false;
         break;
       }
-      std::cout << "BiquadParameters::calculateCoefficients: " << fValue.value()
-                << " " << qValue.value() << " " << sampleRateFloat << std::endl;
       this->lowPassCoEffs(sampleRateFloat, fValue.value(), qValue.value());
       break;
     case Type::LowpassFO:
@@ -340,8 +333,6 @@ void BiquadParameters::highPassCoEffs(float sampleRate, float f, float q) {
   float a2 = 1 - alpha;
 
   this->normalizeCoEffs(a0, a1, a2, b0, b1, b2);
-  std::cout << "BiquadParameters::highPassCoEffs: " << a0 << " " << a1 << " "
-            << a2 << " " << b0 << " " << b1 << " " << b2 << std::endl;
 }
 
 // coefficients for a high pass first order biquad filter
@@ -581,6 +572,7 @@ void BiquadParameters::bandPassCoEffs(float sampleRate, float f, float q) {
 
   this->normalizeCoEffs(a0, a1, a2, b0, b1, b2);
 }
+
 void BiquadParameters::bandPassCoEffsBandwidth(float sampleRate, float f,
                                                float bandwidth) {
   float w0 = 2 * floatPi * f / sampleRate;

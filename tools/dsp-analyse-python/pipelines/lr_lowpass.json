@@ -1,9 +1,9 @@
 [
   {
     "type": "biquad_combo",
-    "channel": 0,
-    "combo_type": "lr_highpass",
-    "freq": 15000,
+    "channel": 1,
+    "combo_type": "lr_lowpass",
+    "freq": 500,
     "order": 4
   }
 ]

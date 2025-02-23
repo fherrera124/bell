@@ -43,7 +43,7 @@ DataSlots* Engine::process(const uint8_t* inputBuffer, size_t inputBufferLen,
         for (auto chan = 0; chan < numChannels; chan++) {
           innerDataSlots.primarySlot->at(chan)[frameIdx] =
               inputAsInt16[(frameIdx * numChannels) + chan]
-              << 14U;  // Shift left by 15 bits to convert to IQ30 format (1.31)
+              << 15U;  // Shift left by 15 bits to convert to IQ30 format (1.31)
         }
       }
       break;
@@ -53,7 +53,6 @@ DataSlots* Engine::process(const uint8_t* inputBuffer, size_t inputBufferLen,
       for (size_t frameIdx = 0; frameIdx < innerDataSlots.numSamples;
            frameIdx++) {
         for (auto chan = 0; chan < numChannels; chan++) {
-          // No need to shift left by 15 bits, as the input is already in 32bit range
           innerDataSlots.primarySlot->at(chan)[frameIdx] =
               inputAsInt32[(frameIdx * numChannels) + chan];
         }
@@ -86,7 +85,7 @@ DataSlots* Engine::process(const uint8_t* inputBuffer, size_t inputBufferLen,
         for (auto chan = 0; chan < numChannels; chan++) {
           // Shift right by 15 bits to convert back to 16bit PCM
           outputData16[(frameIdx * numChannels) + chan] =
-              innerDataSlots.primarySlot->at(chan)[frameIdx] >> 14U;
+              innerDataSlots.primarySlot->at(chan)[frameIdx] >> 15U;
         }
       }
       break;
@@ -96,7 +95,6 @@ DataSlots* Engine::process(const uint8_t* inputBuffer, size_t inputBufferLen,
       for (size_t frameIdx = 0; frameIdx < innerDataSlots.numSamples;
            frameIdx++) {
         for (auto chan = 0; chan < numChannels; chan++) {
-          // Shift right by 15 bits to convert back to 16bit range
           outputData32[(frameIdx * numChannels) + chan] =
               innerDataSlots.primarySlot->at(chan)[frameIdx];
         }

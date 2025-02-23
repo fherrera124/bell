@@ -1,15 +1,10 @@
 #include "bell/dsp/BiquadTransform.h"
 
 // Standard includes
-#include <cmath>
-#include <iostream>
 #include <mutex>
 
 // IQmathLib
 #include <IQmathLib.h>
-
-// Bell includes
-#include "bell/Logger.h"
 
 using namespace bell::dsp;
 
@@ -71,17 +66,16 @@ void BiquadTransform::process(DataSlots& sampleSlots) {
   // Direct form 1 biquad filter, with basic noise shaping
   // Based on robert bristow-johnson code from https://dsp.stackexchange.com/questions/21792/best-implementation-of-a-real-time-fixed-point-iir-filter-with-constant-coeffic
   for (auto stageItr = stages.begin(); stageItr != stages.end(); ++stageItr) {
-    // TODO: Figure whats wrong
-    // if (stageItr != stages.begin()) {
-    //   // For inputs, use the output of the previous stage
-    //   stageItr->x1 = std::prev(stageItr)->y1;
-    //   stageItr->x2 = std::prev(stageItr)->y2;
-    // }
+    if (stageItr != stages.begin()) {
+      // For inputs, use the output of the previous stage
+      stageItr->x1 = std::prev(stageItr)->y1;
+      stageItr->x2 = std::prev(stageItr)->y2;
+    }
 
     int64_t accumulator = stageItr->savedFractional;
     for (size_t i = 0; i < sampleSlots.numSamples; i++) {
       // IQ30 * IQ28 = IQ58
-      accumulator = (int64_t)stageItr->b0 * input[i];
+      accumulator += (int64_t)stageItr->b0 * input[i];
       accumulator += (int64_t)stageItr->b1 * stageItr->x1;
       accumulator += (int64_t)stageItr->b2 * stageItr->x2;
       accumulator += (int64_t)stageItr->a1 * stageItr->y1;
@@ -89,10 +83,8 @@ void BiquadTransform::process(DataSlots& sampleSlots) {
 
       // Clip values
       if (accumulator > 0x07FFFFFFFFFFFFFFLL) {
-        std::cout << "Accumulator overflow, clipping" << std::endl;
         accumulator = 0x07FFFFFFFFFFFFFFLL;
       } else if (accumulator < -0x0800000000000000LL) {
-        std::cout << "Accumulator underflow, clipping" << std::endl;
         accumulator = -0x0800000000000000LL;
       }
 
@@ -106,7 +98,7 @@ void BiquadTransform::process(DataSlots& sampleSlots) {
       stageItr->y1 = y;
 
       // keep the fractional bits that were dropped for
-      accumulator &= 0x00000003FFFFFFFFLL;
+      accumulator &= 0x000000000FFFFFFFLL;
 
       input[i] = y;
     }

@@ -18,7 +18,8 @@ using namespace bell::dsp;
 namespace {
 std::shared_ptr<Transform> parseTransformJson(
     const tao::json::value& json,
-    const std::shared_ptr<Transform>& lastTransform) {
+    const std::shared_ptr<Transform>& lastTransform,
+    const std::shared_ptr<TransformPipeline>& transformPipeline) {
   if (!json.is_object()) {
     return nullptr;
   }
@@ -64,21 +65,14 @@ std::shared_ptr<Transform> parseTransformJson(
           f.value(), order.value());
     }
 
-    // Cascade
-    if (lastTransform && lastTransform->getType() == Transform::Type::BIQUAD &&
-        lastTransform->getChannels() == channels) {
-      for (const auto& param : params) {
-        reinterpret_cast<BiquadTransform*>(lastTransform.get())
-            ->addStage(param);
-      }
-
-      return lastTransform;
-    }
-    auto biquad = std::make_shared<BiquadTransform>();
-    biquad->setChannels(channels);
+    std::shared_ptr<BiquadTransform> biquad;
     for (const auto& param : params) {
+      biquad = std::make_shared<BiquadTransform>();
+      biquad->setChannels(channels);
       biquad->addStage(param);
+      transformPipeline->addTransform(biquad);
     }
+
     return biquad;
   }
 
@@ -91,19 +85,28 @@ std::shared_ptr<Transform> parseTransformJson(
     std::optional<float> gain = json.optional<float>("gain");
     std::optional<float> slope = json.optional<float>("slope");
     std::optional<float> bandwidth = json.optional<float>("bandwidth");
+    std::optional<bool> cascade = json.optional<float>("cascade");
 
     BiquadParameters params(BiquadParameters::stringToType(biquadType), f, q,
                             gain, slope, bandwidth);
 
+    // Check if the previous filter is a biquad filter valid for cascading
+    bool canCascade = lastTransform &&
+                      lastTransform->getType() == Transform::Type::BIQUAD &&
+                      lastTransform->getChannels() == channels;
+
     // Cascade
-    if (lastTransform && lastTransform->getType() == Transform::Type::BIQUAD &&
-        lastTransform->getChannels() == channels) {
+    if (cascade && canCascade) {
       reinterpret_cast<BiquadTransform*>(lastTransform.get())->addStage(params);
       return lastTransform;
     }
+
     auto biquad = std::make_shared<BiquadTransform>();
     biquad->setChannels(channels);
     biquad->addStage(params);
+
+    transformPipeline->addTransform(biquad);
+
     return biquad;
   }
 
@@ -119,6 +122,9 @@ std::shared_ptr<Transform> parseTransformJson(
     } else {
       throw std::invalid_argument("Gain not specified for gain transform");
     }
+
+    transformPipeline->addTransform(gain);
+
     return gain;
   }
 
@@ -131,6 +137,8 @@ std::shared_ptr<Transform> parseTransformJson(
     } else {
       throw std::invalid_argument("Invalid mixer mapping");
     }
+
+    transformPipeline->addTransform(mixer);
 
     return mixer;
   }
@@ -150,11 +158,10 @@ std::shared_ptr<TransformPipeline> bell::dsp::parseTaoJsonPipeline(
   std::shared_ptr<Transform> lastTransform = nullptr;
 
   for (const auto& transformJson : pipelineJson.get_array()) {
-    auto result = parseTransformJson(transformJson, lastTransform);
+    auto result = parseTransformJson(transformJson, lastTransform, pipeline);
 
     if (result != nullptr) {
       lastTransform = result;
-      pipeline->addTransform(result);
     } else {
       throw std::runtime_error("Invalid transform in pipeline");
     }
