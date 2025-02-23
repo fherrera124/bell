@@ -1,9 +1,11 @@
 #include <cstdint>
 #include <fstream>
 #include <iostream>
+#include <tao/json.hpp>
 
 #include "bell/Logger.h"
 #include "bell/dsp/Engine.h"
+#include "bell/dsp/TaoJSONParser.h"
 
 int main(int argc, char* argv[]) {
   bell::registerDefaultLogger();
@@ -25,7 +27,7 @@ int main(int argc, char* argv[]) {
   std::ofstream outputPCM(argv[3], std::ios::binary);
 
   // Apply the pipeline to the DSP engine
-  dspEngine.applyPipeline(bell::dsp::TransformPipeline::fromJson(pipelineJSON));
+  dspEngine.applyPipeline(bell::dsp::parseTaoJsonPipeline(pipelineJSON));
 
   // Pre-defined audio format
   auto format = bell::audio::Format(2, bell::audio::BitWidth::BW_16,

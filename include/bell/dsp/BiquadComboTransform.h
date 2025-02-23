@@ -41,7 +41,7 @@ class BiquadComboTransform : public Transform {
   float calculateHeadroom() override;
 
  private:
-  std::vector<std::unique_ptr<BiquadTransform>> biquads;
+  std::unique_ptr<BiquadTransform> biquad;
 
   // Calculates Q values for Nth order Butterworth
   static std::vector<float> calculateBWQ(int order);

@@ -20,6 +20,7 @@ class GainTransform : public Transform {
   // Transform implementation, see Transform.h for details
   void process(DataSlots& sampleSlots) override;
   float calculateHeadroom() override;
+  Type getType() const override { return Type::GAIN; }
 
  private:
   // 1.0 in IQ30

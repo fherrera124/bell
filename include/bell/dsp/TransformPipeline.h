@@ -5,14 +5,10 @@
 #include <cstdint>
 #include <mutex>
 #include <unordered_map>
+#include <vector>
 
 // bell includes
 #include "bell/audio/Types.h"
-
-#ifndef BELL_DISABLE_TAOJSON
-// Used for JSON deserialization of the transforms
-#include <tao/json.hpp>
-#endif
 
 namespace bell::dsp {
 // Holds the audio samples that are passed between the transforms in the pipeline.
@@ -62,18 +58,34 @@ class Transform {
   Transform() = default;
   virtual ~Transform() = default;
 
+  // Enumeration of standard transform types.
+  // Custom transform types can be added by subclassing Transform.
+  enum class Type { GAIN, MIXER, BIQUAD, OTHER };
+
   // Process the audio samples, modifying the samples in the slots.
   virtual void process(DataSlots& sampleSlots) = 0;
 
   // Calculate the required headroom for the transform. This is the amount of headroom required to prevent clipping in the output samples.
   virtual float calculateHeadroom() = 0;
 
+  // Update the sample rate of the transform.
+  virtual void sampleRateUpdated(const audio::SampleRate sampleRate) {
+    std::scoped_lock lock(accessMutex);
+    this->sampleRate = sampleRate;
+  }
+
+  virtual Type getType() const { return Type::OTHER; }
+
   // Set the channels that the transform will affect.
   void setChannels(const std::vector<uint8_t>& channels);
+
+  // Return the channels that the transform will affect.
+  std::vector<uint8_t> getChannels() const { return channels; }
 
  protected:
   std::recursive_mutex accessMutex;
   std::vector<uint8_t> channels{};
+  audio::SampleRate sampleRate = audio::SampleRate::SR_44100HZ;
 };
 
 // Pipeline of transforms that audio samples are passed through. The pipeline processes the samples in order, with the output of each transform being the input to the next transform.
@@ -85,17 +97,14 @@ class TransformPipeline {
   // Add a transform to the pipeline.
   void addTransform(const std::shared_ptr<Transform>& transform);
 
+  void addTransforms(const std::vector<std::shared_ptr<Transform>>& transforms);
+
   // Process the audio samples through the pipeline.
   void process(DataSlots& sampleSlots);
 
-#ifndef BELL_DISABLE_TAOJSON
-  // Create a TransformPipeline from a JSON description.
-  static std::shared_ptr<TransformPipeline> fromJson(
-      const tao::json::value& json);
-#endif
-
  private:
   std::mutex accessMutex;
+  std::optional<audio::SampleRate> lastSampleRate{};
   std::vector<std::shared_ptr<Transform>> transforms{};
 };
 }  // namespace bell::dsp

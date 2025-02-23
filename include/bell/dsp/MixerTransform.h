@@ -28,6 +28,7 @@ class MixerTransform : public Transform {
   // Transform implementation, see Transform.h for details
   void process(DataSlots& sampleSlots) override;
   float calculateHeadroom() override;
+  Type getType() const override { return Type::MIXER; }
 
  private:
   // Mixer config

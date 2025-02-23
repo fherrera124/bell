@@ -1,6 +1,8 @@
 #include "bell/Logger.h"
 #include "bell/audio/Types.h"
 #include "bell/dsp/Engine.h"
+#include "bell/dsp/TaoJSONParser.h"
+#include <tao/json.hpp>
 
 // DSP engine
 bell::dsp::Engine dspEngine;
@@ -14,7 +16,7 @@ bool parseDspPipeline(const char* jsonStr, size_t jsonStrLen) {
   try {
     const auto pipelineJson =
         tao::json::from_string(std::string(jsonStr, jsonStrLen));
-    const auto pipeline = bell::dsp::TransformPipeline::fromJson(pipelineJson);
+    const auto pipeline = bell::dsp::parseTaoJsonPipeline(pipelineJson);
     dspEngine.applyPipeline(pipeline);
     return true;
   } catch (const std::exception& e) {
