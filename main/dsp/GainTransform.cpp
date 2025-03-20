@@ -1,6 +1,7 @@
 #include "bell/dsp/GainTransform.h"
 
 // Standard includes
+#include <cmath>
 #include <mutex>
 
 // IQmathLib
@@ -11,7 +12,7 @@ using namespace bell::dsp;
 void GainTransform::configure(float gainDb) {
   std::scoped_lock lock(accessMutex);
   this->gainDb = gainDb;
-  this->gainFactor = _IQ30(std::pow(10.0F, gainDb / 20.0F));
+  this->gainFactor = _IQ30(powf(10.0F, gainDb / 20.0F));
 }
 
 float GainTransform::calculateHeadroom() {

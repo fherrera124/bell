@@ -85,7 +85,7 @@ std::shared_ptr<Transform> parseTransformJson(
     std::optional<float> gain = json.optional<float>("gain");
     std::optional<float> slope = json.optional<float>("slope");
     std::optional<float> bandwidth = json.optional<float>("bandwidth");
-    std::optional<bool> cascade = json.optional<float>("cascade");
+    std::optional<bool> cascade = json.optional<bool>("cascade");
 
     BiquadParameters params(BiquadParameters::stringToType(biquadType), f, q,
                             gain, slope, bandwidth);

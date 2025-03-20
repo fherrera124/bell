@@ -2,6 +2,8 @@
 
 #include "IQmathLib.h"
 
+#include <cstring>
+
 using namespace bell;
 
 void dsp::MixerTransform::configure(

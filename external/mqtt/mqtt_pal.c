@@ -41,7 +41,25 @@ int _mqtt_pal_dummy;
 
 #else /* defined(MQTT_USE_CUSTOM_SOCKET_HANDLE) */
 
-#if defined(MQTT_USE_MBEDTLS)
+#if defined(MQTT_USE_CALLBACKS)
+
+ssize_t mqtt_pal_sendall(mqtt_pal_socket_handle fd, const void* buf, size_t len, int flags) {
+    ssize_t sent = fd->write_cb(fd->user_context, buf, len);
+    if (sent < 0) {
+        return MQTT_ERROR_SOCKET_ERROR;
+    }
+    return sent;
+}
+
+ssize_t mqtt_pal_recvall(mqtt_pal_socket_handle fd, void* buf, size_t bufsz, int flags) {
+    ssize_t received = fd->read_cb(fd->user_context, buf, bufsz);
+    if (received < 0) {
+        return MQTT_ERROR_SOCKET_ERROR;
+    }
+    return received;
+}
+
+#elif defined(MQTT_USE_MBEDTLS)
 #include <mbedtls/ssl.h>
 
 ssize_t mqtt_pal_sendall(mqtt_pal_socket_handle fd, const void* buf, size_t len, int flags) {

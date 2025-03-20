@@ -4,6 +4,7 @@
 #include "bell/Logger.h"
 #include "bell/net/TCPSocket.h"
 #include "bell/net/TLSSocket.h"
+#include "mqtt_pal.h"
 
 using namespace bell;
 
@@ -13,12 +14,38 @@ void publishCallbackShim(void** state,
   auto* client = static_cast<net::MQTTClient*>(*state);
   client->cPublishCallback(publishResponse);
 }
+
+// Read callback for the MQTT lib
+ssize_t mqttPalRead(void* context, uint8_t* buf, size_t len) {
+  auto* socket = static_cast<net::Socket*>(context);
+
+  try {
+    return static_cast<ssize_t>(socket->read(buf, len));
+  } catch (const std::exception& e) {
+    BELL_LOG(error, "mqtt_pal", "Failed to read from socket: {}", e.what());
+    return -1;
+  }
+}
+
+// Write callback for the MQTT lib
+ssize_t mqttPalWrite(void* context, const uint8_t* buf, size_t len) {
+  auto* socket = static_cast<net::Socket*>(context);
+
+  try {
+    return static_cast<ssize_t>(socket->write(buf, len));
+  } catch (const std::exception& e) {
+    BELL_LOG(error, "mqtt_pal", "Failed to write to socket: {}", e.what());
+    return -1;
+  }
+}
 }  // namespace
 
 net::MQTTClient::~MQTTClient() {
   if (isConnected()) {
     mqtt_disconnect(&client);
     socket->close();
+
+    callbacksContext.user_context = nullptr;
   }
 }
 
@@ -46,8 +73,11 @@ void net::MQTTClient::connect(const std::string& host, uint16_t port,
 
   // Pass pointer to this object to the publish callback
   client.publish_response_callback_state = this;
+  callbacksContext.user_context = socket.get();
+  callbacksContext.read_cb = mqttPalRead;
+  callbacksContext.write_cb = mqttPalWrite;
 
-  if (mqtt_init(&client, socket->getFd(), sendbuf.data(), sendbuf.size(),
+  if (mqtt_init(&client, &callbacksContext, sendbuf.data(), sendbuf.size(),
                 recvbuf.data(), recvbuf.size(),
                 publishCallbackShim) != MQTT_OK) {
     socket->close();
@@ -56,8 +86,10 @@ void net::MQTTClient::connect(const std::string& host, uint16_t port,
 
   const char* clientId = nullptr;
   uint8_t connect_flags = MQTT_CONNECT_CLEAN_SESSION;
-  if (mqtt_connect(&client, clientId, nullptr, nullptr, 0, username.c_str(),
-                   password.c_str(), connect_flags, keepAlive) != MQTT_OK) {
+  if (mqtt_connect(&client, clientId, nullptr, nullptr, 0,
+                   username.empty() ? nullptr : username.c_str(),
+                   password.empty() ? nullptr : password.c_str(), connect_flags,
+                   keepAlive) != MQTT_OK) {
     socket->close();
     throw std::runtime_error("MQTT connect failed");
   }
@@ -81,7 +113,7 @@ void MQTTClient::publish(const std::string& topic, const std::string& message,
                          message.size(), static_cast<uint8_t>(qos));
 
   if (err != MQTT_OK) {
-    BELL_LOG(error, "mqtt", "MQTT publish failed: %d", err);
+    BELL_LOG(error, "mqtt", "MQTT publish failed: {}", err);
     throw std::runtime_error("MQTT publish failed");
   }
 }

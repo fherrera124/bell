@@ -11,11 +11,11 @@
 #include <string>
 #include <string_view>
 
-// Library includes
-#include "mqtt.h"
-
 // Bell includes
 #include "bell/net/Socket.h"
+
+// Library includes
+#include "mqtt.h"
 
 namespace bell::net {
 /// MQTTClient is a thin wrapper around the MQTT client library.
@@ -111,6 +111,7 @@ class MQTTClient {
   struct mqtt_client client {};
   std::array<uint8_t, 2048> sendbuf{};
   std::array<uint8_t, 1024> recvbuf{};
+  mqtt_callbacks_context callbacksContext{};
 };
 }  // namespace bell::net
 

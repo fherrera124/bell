@@ -3,6 +3,8 @@
 // Standard includes
 #include <array>
 #include <optional>
+#include <string>
+#include <vector>
 
 // Bell includes
 #include "bell/audio/Types.h"

@@ -3,7 +3,9 @@
 // Standard includes
 #include <array>
 #include <cstdint>
+#include <memory>
 #include <mutex>
+#include <optional>
 #include <unordered_map>
 #include <vector>
 

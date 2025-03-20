@@ -3,9 +3,9 @@
 // Standard includes
 #include <cmath>
 #include <iostream>
-#include <mutex>
 #include <optional>
 #include <stdexcept>
+#include <unordered_map>
 
 // Library includes
 #include "IQmathLib.h"

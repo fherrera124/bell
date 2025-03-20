@@ -135,6 +135,12 @@ size_t net::TLSSocket::read(uint8_t* buf, size_t len) {
 
   int ret = mbedtls_ssl_read(&sslCtx, buf, len);
 
+  if ((ret == MBEDTLS_ERR_SSL_WANT_READ) ||
+      (ret == MBEDTLS_ERR_SSL_WANT_WRITE)) {
+    // Timeout, ignore
+    return 0;
+  }
+
   if (ret < 0) {
     throw std::runtime_error(fmt::format(
         "Failed to read from the TLS socket, err={}", mbedtlsErrString(ret)));
@@ -149,6 +155,12 @@ size_t net::TLSSocket::write(const uint8_t* buf, size_t len) {
   }
 
   int ret = mbedtls_ssl_write(&sslCtx, buf, len);
+
+  if ((ret == MBEDTLS_ERR_SSL_WANT_READ) ||
+      (ret == MBEDTLS_ERR_SSL_WANT_WRITE)) {
+    // Timeout, ignore
+    return 0;
+  }
 
   if (ret < 0) {
     throw std::runtime_error(

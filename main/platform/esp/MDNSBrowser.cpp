@@ -53,7 +53,6 @@ class implMDNSBrowser : public mdns::Browser {
     DiscoveredRecord record;  // currently discovered record
 
     while (r) {
-      std::cout << "Found service: " << r->instance_name << std::endl;
       record.addresses.clear();
 
       // Assign netif index
@@ -74,7 +73,6 @@ class implMDNSBrowser : public mdns::Browser {
       record.regType = r->service_type;
 
       if (r->ttl == 0) {
-        std::cout << "  TTL 0, removing service" << std::endl;
         // Record is being removed
         // Notify of removed services, and remove
         std::erase_if(recordsCache, [this, &record](const auto& erasedRecord) {
