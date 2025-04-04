@@ -53,7 +53,7 @@ void TCPSocket::connect(const std::string& host, uint16_t port, int timeoutMs,
   isClosed = false;
 
   // Required for the connect call
-  setBlocking(timeoutMs == 0);
+  setBlocking((timeoutMs == 0) && !dontPoll);
 
   err = ::connect(sockFd, destinationAddress.getSockAddrPtr(),
                   destinationAddress.getSockAddrLen());
@@ -69,7 +69,7 @@ void TCPSocket::connect(const std::string& host, uint16_t port, int timeoutMs,
   if (timeoutMs > 0 && !dontPoll) {
     if (err < 0 && errno == EINPROGRESS) {
       // Connection is in progress; use poll to wait for completion
-      struct pollfd pfd {};
+      struct pollfd pfd{};
       pfd.fd = sockFd;
       pfd.events = POLLOUT;
 
@@ -123,7 +123,7 @@ void TCPSocket::listen(int backlog) {
 }
 
 std::unique_ptr<TCPSocket> TCPSocket::accept() {
-  struct sockaddr_in clientAddr {};
+  struct sockaddr_in clientAddr{};
   socklen_t addrLen = sizeof(clientAddr);
 
   // Accept the incoming connection
