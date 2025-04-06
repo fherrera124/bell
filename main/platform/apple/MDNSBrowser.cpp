@@ -252,21 +252,21 @@ class implMDNSBrowser : public mdns::Browser {
                         uint32_t interfaceIndex, DNSServiceErrorType errorCode,
                         const char* /*hostname*/,
                         const struct sockaddr* address, uint32_t /*ttl*/) {
-    assert(interfaceIndex == recordPtr->record.interfaceIndex);
+    if (interfaceIndex == recordPtr->record.interfaceIndex) {
+      if (errorCode != kDNSServiceErr_NoError) {
+        BELL_LOG(error, LOG_TAG,
+                 "Failed to resolve service's address. Name={}, errcode={}",
+                 recordPtr->record.name, dnsSdErrorToString(errorCode));
+        onEvent(mdns::EventType::AddressResolveFailed, recordPtr->record);
+        return;
+      }
 
-    if (errorCode != kDNSServiceErr_NoError) {
-      BELL_LOG(error, LOG_TAG,
-               "Failed to resolve service's address. Name={}, errcode={}",
-               recordPtr->record.name, dnsSdErrorToString(errorCode));
-      onEvent(mdns::EventType::AddressResolveFailed, recordPtr->record);
-      return;
+      // Successfuly resolved the service
+      recordPtr->record.addresses.emplace_back(address);
+
+      // Successfuly resolved service's address
+      onEvent(mdns::EventType::AddressResolved, recordPtr->record);
     }
-
-    // Successfuly resolved the service
-    recordPtr->record.addresses.emplace_back(address);
-
-    // Successfuly resolved service's address
-    onEvent(mdns::EventType::AddressResolved, recordPtr->record);
   }
 
   void resolveReply(CachedMDNSRecord* recordPtr, DNSServiceFlags /*flags*/,
