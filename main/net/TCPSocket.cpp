@@ -30,8 +30,8 @@ TCPSocket::~TCPSocket() {
   close();
 }
 
-void TCPSocket::connect(const std::string& host, uint16_t port, int timeoutMs,
-                        bool dontPoll) {
+Result<> TCPSocket::connect(const std::string& host, uint16_t port,
+                            int timeoutMs) {
   int err;
 
   // Close the socket if it is already open
@@ -39,7 +39,7 @@ void TCPSocket::connect(const std::string& host, uint16_t port, int timeoutMs,
     close();
   }
 
-  destinationAddress = IpAddress::resolveDomain(host, SOCK_STREAM);
+  destinationAddress = IpAddress::resolveDomain(host, SOCK_STREAM).unwrap();
   destinationAddress.setPort(port);
 
   sockFd = socket(destinationAddress.getFamily(), SOCK_STREAM, IPPROTO_IP);
@@ -52,8 +52,11 @@ void TCPSocket::connect(const std::string& host, uint16_t port, int timeoutMs,
 
   isClosed = false;
 
+  // Cache the isBlocking value
+  bool tmpIsBlocking = isBlocking;
+
   // Required for the connect call
-  setBlocking((timeoutMs == 0) && !dontPoll);
+  setBlocking(false);
 
   err = ::connect(sockFd, destinationAddress.getSockAddrPtr(),
                   destinationAddress.getSockAddrLen());
@@ -66,7 +69,7 @@ void TCPSocket::connect(const std::string& host, uint16_t port, int timeoutMs,
     throw std::runtime_error("Sock connect failed");
   }
 
-  if (timeoutMs > 0 && !dontPoll) {
+  if (timeoutMs > 0) {
     if (err < 0 && errno == EINPROGRESS) {
       // Connection is in progress; use poll to wait for completion
       struct pollfd pfd{};
@@ -101,18 +104,16 @@ void TCPSocket::connect(const std::string& host, uint16_t port, int timeoutMs,
       }
     }
 
-    // Set socket back to the requested blocking mode
-    if (timeoutMs > 0) {
-      setTimeout(timeoutMs);
-    } else {
-      setBlocking(isBlocking);
-    }
+    // Restore isBlocking
+    setBlocking(tmpIsBlocking);
   }
+
+  return {};
 }
 
-void TCPSocket::listen(int backlog) {
+Result<> TCPSocket::listen(int backlog) {
   if (!isOpen()) {
-    throw std::runtime_error("Socket is not open");
+    return Result<>::fromError(Error::SocketNotOpen);
   }
 
   if (::listen(sockFd, backlog) != 0) {

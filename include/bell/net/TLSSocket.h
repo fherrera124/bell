@@ -45,21 +45,19 @@ class TLSSocket : public Socket {
    * @param port The port number to connect to on the specified host.
    * @param timeout The maximum time to wait for the connection to be established, in milliseconds. This parameter is ignored, if the socket is set to a blocking mode.
    */
-  void connect(const std::string& host, uint16_t port, int timeoutMs = 0);
+  Result<> connect(const std::string& host, uint16_t port, int timeoutMs = 0);
 
   // Socket interface overrides
-  void setTimeout(int timeoutMs) override;
+  void setSendTimeout(int timeoutMs) override;
+  void setReceiveTimeout(int timeoutMs) override;
   void wrapFd(int fd) override;
   int getFd() override;
   Result<size_t> read(uint8_t* buf, size_t len) override;
   Result<size_t> write(const uint8_t* buf, size_t len) override;
-  void bind(const std::string& address, uint16_t port) override;
+  Result<> bind(const std::string& address, uint16_t port) override;
   void setBlocking(bool blocking) override;
-  int poll(int events, int timeoutMs = 0) override;
   bool isOpen() const override;
   void close() override;
-  std::string getLocalAddress() const override;
-  std::string getRemoteAddress() const override;
 
   // Callbacks passed to MbedTLS bio functions
   static int mbedtlsSend(void* ctx, const unsigned char* buf, size_t len);

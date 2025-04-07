@@ -3,6 +3,7 @@
 // Standard includes
 #include <sys/poll.h>
 #include <functional>
+#include <memory>
 #include <system_error>
 #include <unordered_map>
 #include <vector>
@@ -16,22 +17,22 @@ class SocketPollListener {
   SocketPollListener() = default;
 
   using EventCallback = std::function<void(Socket&)>;
-  using ErrorCallback = std::function<void(Socket&, std::error_code)>;
 
   /**
    * @brief Registers a socket with the poll listener.
    *
-   * @param fd File descriptor of the socket
-   * @param eventMask Bitmask of events to listen for, e.g., POLLIN, POLLOUT
-   * @param eventCallback Callback function to call when the event occurs
+   * @param socket Pointer to the socket to register
+   * @param onWriteable writeable / POLLOUT callback
+   * @param onReadable readable / POLLIN callback
+   * @param onError on error / POLLERR callback
    */
-  void pollSocket(std::shared_ptr<Socket> socket,
-                  const EventCallback& onWriteable = {},
-                  const EventCallback& onReadable = {},
-                  const EventCallback& onError = {});
+  void registerSocket(const std::shared_ptr<Socket>& socket,
+                      const EventCallback& onWriteable = {},
+                      const EventCallback& onReadable = {},
+                      const EventCallback& onError = {});
 
   // Polls the registered sockets for events
-  void poll(int timeoutMs = -1);
+  void poll(int timeoutMs = 100);
 
   // Unregisters a socket from the poll listener
   void unregisterSocket(int fd);
@@ -44,12 +45,12 @@ class SocketPollListener {
     // Callback functions for different events
     EventCallback onWriteable;
     EventCallback onReadable;
-    ErrorCallback onError;
+    EventCallback onError;
   };
 
   // keeps reference to socket we're listening to events from
   std::unordered_map<int, SocketCallbacks> handlers;
-  std::vector<pollfd> events;
+  std::vector<pollfd> fds;
 };
 }  // namespace bell::net
 

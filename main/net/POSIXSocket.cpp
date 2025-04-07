@@ -2,6 +2,7 @@
 
 #include <fmt/format.h>
 #include <cerrno>
+#include <stdexcept>
 
 #include "bell/Logger.h"
 #include "bell/net/IpAddress.h"
@@ -59,33 +60,17 @@ void POSIXSocket::wrapFd(int fd) {
   }
 }
 
-int POSIXSocket::lastError() const {
+std::error_code POSIXSocket::lastError() const {
   if (!isOpen()) {
     throw std::runtime_error("Socket is not open");
   }
 
-  return errno;
+  int err = errno;
+
+  return {err, std::system_category()};
 }
 
-int POSIXSocket::poll(int events, int timeoutMs) {
-  if (!isOpen()) {
-    throw std::runtime_error("Socket is not open");
-  }
-
-  struct pollfd pfd {};
-  pfd.fd = sockFd;
-  pfd.events = static_cast<short>(events);
-
-  int result = ::poll(&pfd, 1, timeoutMs);
-  if (result < 0) {
-    throw std::runtime_error("Poll failed");
-  }
-
-  return result > 0 ? pfd.revents
-                    : 0;  // Return the events that occurred or 0 if timeout.
-}
-
-size_t POSIXSocket::read(uint8_t* buf, size_t len) {
+Result<size_t> POSIXSocket::read(uint8_t* buf, size_t len) {
   if (!isOpen()) {
     throw std::runtime_error("Socket is not open");
   }
@@ -96,7 +81,8 @@ size_t POSIXSocket::read(uint8_t* buf, size_t len) {
     if (errno != EAGAIN && errno != EWOULDBLOCK) {
       close();
     }
-    throw std::runtime_error(fmt::format("Error in recv, {}", strerror(errno)));
+
+    return Result<size_t>::fromLastErrno();
   }
 
   return static_cast<size_t>(res);
@@ -104,7 +90,7 @@ size_t POSIXSocket::read(uint8_t* buf, size_t len) {
 
 Result<size_t> POSIXSocket::write(const uint8_t* buf, size_t len) {
   if (!isOpen()) {
-    return {Error::SocketNotOpen};
+    throw std::runtime_error("Socket is not open");
   }
 
   // Perform the actual write operation
@@ -114,7 +100,7 @@ Result<size_t> POSIXSocket::write(const uint8_t* buf, size_t len) {
     if (errno != EAGAIN && errno != EWOULDBLOCK) {
       close();
     }
-    return {0}; // 0 will result in errno to str
+    return Result<size_t>::fromLastErrno();
   }
 
   return {static_cast<size_t>(res)};
@@ -147,12 +133,18 @@ void POSIXSocket::close() {
   }
 }
 
-void POSIXSocket::bind(const std::string& address, uint16_t port) {
+Result<> POSIXSocket::bind(const std::string& address, uint16_t port) {
   if (isOpen()) {
     close();
   }
 
-  IpAddress resolved = IpAddress::resolveDomain(address, sockType);
+  auto res = IpAddress::resolveDomain(address, sockType);
+
+  if (!res) {
+    return res.getError();
+  }
+
+  auto resolved = res.getValue();
   resolved.setPort(port);
 
   createFd(resolved.getFamily(), IPPROTO_IP);
@@ -164,8 +156,10 @@ void POSIXSocket::bind(const std::string& address, uint16_t port) {
   if (::bind(sockFd, resolved.getSockAddrPtr(), resolved.getSockAddrLen()) !=
       0) {
     isClosed = true;
-    throw std::runtime_error(fmt::format("Bind failed: {}", strerror(errno)));
+    return Result<>::fromLastErrno();
   }
+
+  return {};
 }
 
 void POSIXSocket::setOptionImpl(int level, int optionName,

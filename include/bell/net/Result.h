@@ -1,7 +1,9 @@
 #pragma once
 
 #include <sys/errno.h>
+#include <optional>
 #include <system_error>
+#include <variant>
 
 namespace bell::net {
 enum class Error {
@@ -46,33 +48,43 @@ inline std::error_code errorFromPosix(int err = 0) {
 /**
  * @brief Network-specific result type (usable by sockets, HTTP, etc.).
  */
-template <typename T>
+template <typename T = std::monostate>
 class Result {
  public:
   // Success
-  Result(T value)
-      : value(std::move(value)),
-        error({static_cast<int>(Error::Success), std::generic_category()}) {}
+  Result() = default;
 
-  // Error from errno
-  Result(int err) : error(errorFromPosix(err)) {}
+  Result(const T& val) : value(val) {};
 
-  // Explicit NetworkError
-  Result(Error err) : error(static_cast<int>(err), std::system_category()) {}
+  Result(T&& val) : value(std::move(val)) {};
 
-  bool success() const { return error.value() == 0; }
+  Result(const std::error_code& err) : error(err) {};
+
+  static Result fromError(const std::error_code& err) { return Result(err); }
+
+  static Result fromLastErrno() {
+    int err = errno;
+    return Result({err, std::system_category()});
+  }
+
+  bool isSuccess() const { return !error; }
   const T& getValue() const { return value; }
   std::error_code getError() const { return error; }
 
+  std::string errorMessage() const { return error.message(); }
+
   // Throw on error (optional)
   T unwrap() const {
-    if (!success())
+    if (!isSuccess())
       throw std::system_error(error);
     return value;
   }
 
+  // override the boolean operator
+  explicit operator bool() const { return isSuccess(); }
+
  private:
-  T value;
+  T value = {};
   std::error_code error;
 };
 

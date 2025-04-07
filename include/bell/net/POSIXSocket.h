@@ -44,7 +44,7 @@ class POSIXSocket : public Socket {
   /**
    * @brief Returns the last error code from the socket, using SO_ERROR.
    */
-  int lastError() const;
+  std::error_code lastError() const;
 
   // Socket interface overrides
   void setReceiveTimeout(int timeoutMs) override;
@@ -53,9 +53,8 @@ class POSIXSocket : public Socket {
   int getFd() override;
   Result<size_t> read(uint8_t* buf, size_t len) override;
   Result<size_t> write(const uint8_t* buf, size_t len) override;
-  void bind(const std::string& address, uint16_t port) override;
+  Result<> bind(const std::string& address, uint16_t port) override;
   void setBlocking(bool blocking) override;
-  int poll(int events, int timeoutMs = 0) override;
   bool isOpen() const override;
   void close() override;
 
@@ -73,7 +72,7 @@ class POSIXSocket : public Socket {
   bool isClosed = true;
 
   // Flag indicating if the socket is blocking
-  bool isBlocking = false;
+  bool isBlocking = true;
 
   // Flag indicating if the socket is listening
   bool isListening = false;

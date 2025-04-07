@@ -61,15 +61,6 @@ class Socket {
   virtual void wrapFd(int fd) = 0;
 
   /**
-  * @brief Poll the socket for specific events.
-  *
-  * @param events Bitmask specifying the events to check for (e.g., readability, writability).
-  * @param timeoutMs Timeout in milliseconds. A value of 0 indicates a non-blocking poll.
-  * @return A bitmask indicating which events occurred, or 0 if the timeout expired.
-  */
-  virtual int poll(int events, int timeoutMs = 0) = 0;
-
-  /**
    * @brief Write data to the socket.
    *
    * This method sends data from the provided buffer to the socket. The method
@@ -103,7 +94,7 @@ class Socket {
    * @param address A string representation of the address to bind to (e.g., "127.0.0.1").
    * @param port The port number to bind to.
    */
-  virtual void bind(const std::string& address, uint16_t port) = 0;
+  virtual Result<> bind(const std::string& address, uint16_t port) = 0;
 
   /**
    * @brief Check if the socket is currently open.
