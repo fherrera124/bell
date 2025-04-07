@@ -47,18 +47,17 @@ class POSIXSocket : public Socket {
   int lastError() const;
 
   // Socket interface overrides
-  void setTimeout(int timeoutMs) override;
+  void setReceiveTimeout(int timeoutMs) override;
+  void setSendTimeout(int timeoutMs) override;
   void wrapFd(int fd) override;
   int getFd() override;
-  size_t read(uint8_t* buf, size_t len) override;
-  size_t write(const uint8_t* buf, size_t len) override;
+  Result<size_t> read(uint8_t* buf, size_t len) override;
+  Result<size_t> write(const uint8_t* buf, size_t len) override;
   void bind(const std::string& address, uint16_t port) override;
   void setBlocking(bool blocking) override;
   int poll(int events, int timeoutMs = 0) override;
   bool isOpen() const override;
   void close() override;
-  std::string getLocalAddress() const override;
-  std::string getRemoteAddress() const override;
 
  private:
   const char* LOG_TAG = "POSIXSocket";

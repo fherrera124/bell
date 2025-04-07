@@ -3,6 +3,8 @@
 #include <cstdint>
 #include <string>
 
+#include "bell/net/Result.h"
+
 namespace bell::net {
 /**
  * @brief Base pure socket class to be implemented by different socket types.
@@ -34,11 +36,18 @@ class Socket {
   virtual void setBlocking(bool blocking) = 0;
 
   /**
-   * @brief Set the timeout for socket operations.
+   * @brief Set the read timeout for socket operations.
    *
    * @param timeoutMs Timeout in milliseconds. A value of 0 indicates a non-blocking operation.
    */
-  virtual void setTimeout(int timeoutMs) = 0;
+  virtual void setReceiveTimeout(int timeoutMs) = 0;
+
+  /**
+   * @brief Sets the send timeout for socket operations
+   * 
+   * @param timeoutMs Timeout in milliseconds. A value of 0 indicates a non-blocking operation.
+   */
+  virtual void setSendTimeout(int timeoutMs) = 0;
 
   /**
    * @brief Wrap an existing file descriptor with this socket.
@@ -71,7 +80,7 @@ class Socket {
    * @param len The number of bytes to write from the buffer.
    * @return The number of bytes successfully written.
    */
-  virtual size_t write(const uint8_t* buf, size_t len) = 0;
+  virtual Result<size_t> write(const uint8_t* buf, size_t len) = 0;
 
   /**
    * @brief Read data from the socket.
@@ -86,7 +95,7 @@ class Socket {
    * that the connection was closed, while a value less than len could indicate that
    * no more data is currently available.
    */
-  virtual size_t read(uint8_t* buf, size_t len) = 0;
+  virtual Result<size_t> read(uint8_t* buf, size_t len) = 0;
 
   /**
    * @brief Bind the socket to a specific address and port.
@@ -95,20 +104,6 @@ class Socket {
    * @param port The port number to bind to.
    */
   virtual void bind(const std::string& address, uint16_t port) = 0;
-
-  /**
-   * @brief Get the local address and port of the socket.
-   *
-   * @return A string representation of the local address (e.g., "127.0.0.1:8080").
-   */
-  virtual std::string getLocalAddress() const = 0;
-
-  /**
-   * @brief Get the remote address and port of the connected socket.
-   *
-   * @return A string representation of the remote address (e.g., "192.168.1.1:12345").
-   */
-  virtual std::string getRemoteAddress() const = 0;
 
   /**
    * @brief Check if the socket is currently open.

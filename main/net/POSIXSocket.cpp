@@ -102,9 +102,9 @@ size_t POSIXSocket::read(uint8_t* buf, size_t len) {
   return static_cast<size_t>(res);
 }
 
-size_t POSIXSocket::write(const uint8_t* buf, size_t len) {
+Result<size_t> POSIXSocket::write(const uint8_t* buf, size_t len) {
   if (!isOpen()) {
-    throw std::runtime_error("Socket is not open");
+    return {Error::SocketNotOpen};
   }
 
   // Perform the actual write operation
@@ -114,10 +114,10 @@ size_t POSIXSocket::write(const uint8_t* buf, size_t len) {
     if (errno != EAGAIN && errno != EWOULDBLOCK) {
       close();
     }
-    throw std::runtime_error("Error in send");
+    return {0}; // 0 will result in errno to str
   }
 
-  return static_cast<size_t>(res);
+  return {static_cast<size_t>(res)};
 }
 
 void POSIXSocket::createFd(int domain, int protocol) {
@@ -180,7 +180,7 @@ void POSIXSocket::setOptionImpl(int level, int optionName,
   }
 }
 
-void POSIXSocket::setTimeout(int timeoutMs) {
+void POSIXSocket::setReceiveTimeout(int timeoutMs) {
   if (timeoutMs == 0) {
     // Switch to blocking mode
     setBlocking(true);
@@ -192,14 +192,18 @@ void POSIXSocket::setTimeout(int timeoutMs) {
   this->timeoutMs = timeoutMs;
 
   setOption(SOL_SOCKET, SO_RCVTIMEO, timeVal);
-  setOption(SOL_SOCKET, SO_SNDTIMEO, timeVal);
 }
 
-std::string POSIXSocket::getLocalAddress() const {
-  // TODO:
-  return "";
-};
+void POSIXSocket::setSendTimeout(int timeoutMs) {
+  if (timeoutMs == 0) {
+    // Switch to blocking mode
+    setBlocking(true);
+    return;
+  }
 
-std::string POSIXSocket::getRemoteAddress() const {
-  return "";
-};
+  setBlocking(false);
+  auto timeVal = bell::utils::millisecondsToTimeval(timeoutMs);
+  this->timeoutMs = timeoutMs;
+
+  setOption(SOL_SOCKET, SO_SNDTIMEO, timeVal);
+}

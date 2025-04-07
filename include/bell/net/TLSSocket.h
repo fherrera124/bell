@@ -51,8 +51,8 @@ class TLSSocket : public Socket {
   void setTimeout(int timeoutMs) override;
   void wrapFd(int fd) override;
   int getFd() override;
-  size_t read(uint8_t* buf, size_t len) override;
-  size_t write(const uint8_t* buf, size_t len) override;
+  Result<size_t> read(uint8_t* buf, size_t len) override;
+  Result<size_t> write(const uint8_t* buf, size_t len) override;
   void bind(const std::string& address, uint16_t port) override;
   void setBlocking(bool blocking) override;
   int poll(int events, int timeoutMs = 0) override;
