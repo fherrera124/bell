@@ -50,17 +50,6 @@ class Socket {
   virtual void setSendTimeout(int timeoutMs) = 0;
 
   /**
-   * @brief Wrap an existing file descriptor with this socket.
-   *
-   * This method allows an existing file descriptor (fd) to be wrapped and
-   * treated as a socket within the application. This can be useful for integrating
-   * sockets created by other means or from external sources.
-   *
-   * @param fd File descriptor to wrap.
-   */
-  virtual void wrapFd(int fd) = 0;
-
-  /**
    * @brief Write data to the socket.
    *
    * This method sends data from the provided buffer to the socket. The method
@@ -97,11 +86,11 @@ class Socket {
   virtual Result<> bind(const std::string& address, uint16_t port) = 0;
 
   /**
-   * @brief Check if the socket is currently open.
+   * @brief Check if the socket is open
    *
    * @return True if the socket is open, false otherwise.
    */
-  virtual bool isOpen() const = 0;
+  virtual bool isValid() const = 0;
 
   /**
    * @brief Close the socket.

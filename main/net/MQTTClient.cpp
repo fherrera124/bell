@@ -20,7 +20,7 @@ ssize_t mqttPalRead(void* context, uint8_t* buf, size_t len) {
   auto* socket = static_cast<net::Socket*>(context);
 
   try {
-    return static_cast<ssize_t>(socket->read(buf, len));
+    return static_cast<ssize_t>(socket->read(buf, len).unwrap());
   } catch (const std::exception& e) {
     BELL_LOG(error, "mqtt_pal", "Failed to read from socket: {}", e.what());
     return -1;
@@ -32,7 +32,7 @@ ssize_t mqttPalWrite(void* context, const uint8_t* buf, size_t len) {
   auto* socket = static_cast<net::Socket*>(context);
 
   try {
-    return static_cast<ssize_t>(socket->write(buf, len));
+    return static_cast<ssize_t>(socket->write(buf, len).unwrap());
   } catch (const std::exception& e) {
     BELL_LOG(error, "mqtt_pal", "Failed to write to socket: {}", e.what());
     return -1;
@@ -64,7 +64,7 @@ void net::MQTTClient::connect(const std::string& host, uint16_t port,
     socket = std::move(tcpSocket);
   }
 
-  if (!socket->isOpen()) {
+  if (!socket->isValid()) {
     throw std::runtime_error("Failed to connect to MQTT broker");
   }
 
@@ -159,7 +159,7 @@ void MQTTClient::disconnect() {
 }
 
 bool net::MQTTClient::isConnected() const {
-  return socket && socket->isOpen();
+  return socket && socket->isValid();
 }
 
 void MQTTClient::cPublishCallback(

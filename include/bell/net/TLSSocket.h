@@ -10,6 +10,7 @@
 #include "mbedtls/entropy.h"
 #include "mbedtls/ssl.h"
 
+#include "bell/net/Result.h"
 #include "bell/net/Socket.h"
 
 namespace bell::net {
@@ -32,8 +33,8 @@ class TLSSocket : public Socket {
    * @param optionValue The value of the option to be set.
    */
   template <typename T>
-  void setOption(int level, int optionName, const T& optionValue) {
-    setOptionImpl(level, optionName, &optionValue, sizeof(T));
+  Result<> setOption(int level, int optionName, const T& optionValue) {
+    return setOptionImpl(level, optionName, &optionValue, sizeof(T));
   }
 
   /**
@@ -50,13 +51,12 @@ class TLSSocket : public Socket {
   // Socket interface overrides
   void setSendTimeout(int timeoutMs) override;
   void setReceiveTimeout(int timeoutMs) override;
-  void wrapFd(int fd) override;
   int getFd() override;
   Result<size_t> read(uint8_t* buf, size_t len) override;
   Result<size_t> write(const uint8_t* buf, size_t len) override;
   Result<> bind(const std::string& address, uint16_t port) override;
   void setBlocking(bool blocking) override;
-  bool isOpen() const override;
+  bool isValid() const override;
   void close() override;
 
   // Callbacks passed to MbedTLS bio functions
@@ -74,8 +74,8 @@ class TLSSocket : public Socket {
   mbedtls_ssl_context sslCtx{};
   mbedtls_ssl_config sslConf{};
 
-  void setOptionImpl(int level, int optionName, const void* optionValue,
-                     socklen_t optionLen);
+  Result<> setOptionImpl(int level, int optionName, const void* optionValue,
+                         socklen_t optionLen);
 
  protected:
   std::shared_ptr<bell::TCPSocket> innerSocket;

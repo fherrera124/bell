@@ -115,10 +115,10 @@ int IpAddress::getFamily() const {
 }
 
 std::optional<IpAddress> IpAddress::fromString(const std::string& addrStr) {
-  struct sockaddr_in ipv4Addr {};
+  struct sockaddr_in ipv4Addr{};
   auto* sockAddrv4 = reinterpret_cast<sockaddr*>(&ipv4Addr);
 
-  struct sockaddr_in6 ipv6Addr {};
+  struct sockaddr_in6 ipv6Addr{};
   auto* sockAddrv6 = reinterpret_cast<sockaddr*>(&ipv6Addr);
 
   // Try to parse IPv4 address
@@ -144,8 +144,8 @@ std::optional<std::string> IpAddress::getOriginalHost() const {
   return originalHost;
 }
 
-IpAddress IpAddress::resolveDomain(const std::string& hostname, int sockType,
-                                   int family) {
+Result<IpAddress> IpAddress::resolveDomain(const std::string& hostname,
+                                           int sockType, int family) {
   if (hostname.empty()) {
     // Addr any on empty hostname
     sockaddr_in addr{};
@@ -162,7 +162,7 @@ IpAddress IpAddress::resolveDomain(const std::string& hostname, int sockType,
   }
 
   // Otherwise, treat it as a domain name and resolve it
-  struct addrinfo hints {};
+  struct addrinfo hints{};
   struct addrinfo* res = nullptr;
   memset(&hints, 0, sizeof(hints));
   hints.ai_family = family;      // Allow both IPv4 and IPv6
@@ -170,8 +170,7 @@ IpAddress IpAddress::resolveDomain(const std::string& hostname, int sockType,
 
   int result = getaddrinfo(hostname.c_str(), nullptr, &hints, &res);
   if (result != 0) {
-    throw std::runtime_error(
-        fmt::format("Failed to resolve domain, err={}", strerror(result)));
+    return Result<IpAddress>::fromError(result, std::system_category());
   }
 
   // We'll use the first valid result

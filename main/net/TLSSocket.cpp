@@ -57,8 +57,8 @@ net::TLSSocket::TLSSocket() {
   }
 }
 
-void net::TLSSocket::connect(const std::string& host, uint16_t port,
-                             int timeoutMs) {
+net::Result<> net::TLSSocket::connect(const std::string& host, uint16_t port,
+                                      int timeoutMs) {
   innerSocket = std::make_shared<TCPSocket>();  // Create the inner socket
 
   // Connect the inner socket
@@ -91,9 +91,6 @@ void net::TLSSocket::connect(const std::string& host, uint16_t port,
     throw std::runtime_error("Failed to set the hostname");
   }
 
-  setTimeout(timeoutMs);
-  setBlocking(timeoutMs == 0);
-
   while ((ret = mbedtls_ssl_handshake(&sslCtx)) != 0) {
     if (ret != MBEDTLS_ERR_SSL_WANT_READ && ret != MBEDTLS_ERR_SSL_WANT_WRITE) {
       BELL_LOG(error, LOG_TAG, "failed! config returned {}\n",
@@ -101,9 +98,11 @@ void net::TLSSocket::connect(const std::string& host, uint16_t port,
       throw std::runtime_error("mbedtls_ssl_handshake error");
     }
   }
+
+  return {};
 }
 
-void net::TLSSocket::setTimeout(int timeoutMs) {
+void net::TLSSocket::setReceiveTimeout(int timeoutMs) {
   if (!innerSocket) {
     throw std::runtime_error("Socket is not connected");
   }
@@ -115,12 +114,16 @@ void net::TLSSocket::setTimeout(int timeoutMs) {
     mbedtls_ssl_set_bio(&sslCtx, innerSocket.get(), mbedtlsSend, mbedtlsReceive,
                         nullptr);
   }
-  innerSocket->setTimeout(timeoutMs);
+  innerSocket->setReceiveTimeout(timeoutMs);
 };
 
-void net::TLSSocket::wrapFd(int /*fd*/) {
-  throw std::runtime_error("Not implemented");
-}
+void net::TLSSocket::setSendTimeout(int timeoutMs) {
+  if (!innerSocket) {
+    throw std::runtime_error("Socket is not connected");
+  }
+
+  innerSocket->setSendTimeout(timeoutMs);
+};
 
 int net::TLSSocket::getFd() {
   if (!innerSocket) {
@@ -128,7 +131,8 @@ int net::TLSSocket::getFd() {
   }
   return innerSocket->getFd();
 }
-size_t net::TLSSocket::read(uint8_t* buf, size_t len) {
+
+net::Result<size_t> net::TLSSocket::read(uint8_t* buf, size_t len) {
   if (!innerSocket) {
     throw std::runtime_error("Socket is not connected");
   }
@@ -149,7 +153,7 @@ size_t net::TLSSocket::read(uint8_t* buf, size_t len) {
   return ret;
 }
 
-size_t net::TLSSocket::write(const uint8_t* buf, size_t len) {
+net::Result<size_t> net::TLSSocket::write(const uint8_t* buf, size_t len) {
   if (!innerSocket) {
     throw std::runtime_error("Socket is not connected");
   }
@@ -170,7 +174,8 @@ size_t net::TLSSocket::write(const uint8_t* buf, size_t len) {
   return ret;
 }
 
-void net::TLSSocket::bind(const std::string& /*address*/, uint16_t /*port*/) {
+net::Result<> net::TLSSocket::bind(const std::string& /*address*/,
+                                   uint16_t /*port*/) {
   throw std::runtime_error("Not implemented");
 }
 
@@ -181,40 +186,25 @@ void net::TLSSocket::setBlocking(bool blocking) {
   innerSocket->setBlocking(blocking);
 };
 
-int net::TLSSocket::poll(int events, int timeoutMs) {
-  if (!innerSocket) {
-    throw std::runtime_error("Socket is not connected");
-  }
-
-  return innerSocket->poll(events, timeoutMs);
-}
-
-bool net::TLSSocket::isOpen() const {
-  return innerSocket && innerSocket->isOpen();
+bool net::TLSSocket::isValid() const {
+  return innerSocket && innerSocket->isValid();
 }
 
 void net::TLSSocket::close() {
-  if (innerSocket && innerSocket->isOpen()) {
+  if (innerSocket && innerSocket->isValid()) {
     mbedtls_ssl_close_notify(&sslCtx);
     innerSocket->close();
   }
 }
-std::string net::TLSSocket::getLocalAddress() const {
-  throw std::runtime_error("Not implemented");
-}
-
-std::string net::TLSSocket::getRemoteAddress() const {
-  throw std::runtime_error("Not implemented");
-};
 
 int net::TLSSocket::mbedtlsReceive(void* ctx, unsigned char* buf, size_t len) {
   auto* socket = static_cast<TCPSocket*>(ctx);
 
   try {
-    return socket->read(buf, len);
+    return socket->read(buf, len).unwrap();
   } catch (...) {
     // Handle the error
-    auto err = socket->lastError();
+    auto err = errno;
     switch (err) {
       case EWOULDBLOCK:
       case EINTR:
@@ -229,9 +219,9 @@ int net::TLSSocket::mbedtlsSend(void* ctx, const unsigned char* buf,
                                 size_t len) {
   auto* socket = static_cast<TCPSocket*>(ctx);
   try {
-    return socket->write(buf, len);
+    return socket->write(buf, len).unwrap();
   } catch (...) {
-    auto err = socket->lastError();
+    int err = errno;
     // Handle the error
     switch (err) {
       case EWOULDBLOCK:
@@ -244,15 +234,14 @@ int net::TLSSocket::mbedtlsSend(void* ctx, const unsigned char* buf,
 }
 
 int net::TLSSocket::mbedtlsReceiveTimeout(void* ctx, unsigned char* buf,
-                                          size_t len, uint32_t timeoutMs) {
+                                          size_t len, uint32_t /*timeoutMs*/) {
   auto* socket = static_cast<TCPSocket*>(ctx);
-  socket->setTimeout(timeoutMs);
 
   try {
-    return socket->read(buf, len);
+    return socket->read(buf, len).unwrap();
   } catch (...) {
     // Handle the error
-    auto err = socket->lastError();
+    auto err = errno;
     switch (err) {
       case EWOULDBLOCK:
       case EINTR:

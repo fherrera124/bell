@@ -2,6 +2,7 @@
 
 #include "bell/Logger.h"
 #include "bell/net/IpAddress.h"
+#include "bell/net/Result.h"
 
 // Platform specific socket includes
 #ifdef _WIN32
@@ -32,11 +33,10 @@ TCPSocket::~TCPSocket() {
 
 Result<> TCPSocket::connect(const std::string& host, uint16_t port,
                             int timeoutMs) {
-  int err;
-
   // Close the socket if it is already open
-  if (isOpen()) {
-    close();
+  if (sockFd != INVALID_FD) {
+    BELL_LOG(debug, LOG_TAG, "Socket already open");
+    return Result<>::fromError(std::errc::invalid_argument);
   }
 
   destinationAddress = IpAddress::resolveDomain(host, SOCK_STREAM).unwrap();
@@ -45,9 +45,8 @@ Result<> TCPSocket::connect(const std::string& host, uint16_t port,
   sockFd = socket(destinationAddress.getFamily(), SOCK_STREAM, IPPROTO_IP);
 
   if (sockFd < 0) {
-    BELL_LOG(error, LOG_TAG, "Could not create socket to {}, port {}. Error {}",
-             host.c_str(), port, errno);
-    throw std::runtime_error("Sock create failed");
+    sockFd = INVALID_FD;
+    return Result<>::fromLastErrno();
   }
 
   isClosed = false;
@@ -58,8 +57,8 @@ Result<> TCPSocket::connect(const std::string& host, uint16_t port,
   // Required for the connect call
   setBlocking(false);
 
-  err = ::connect(sockFd, destinationAddress.getSockAddrPtr(),
-                  destinationAddress.getSockAddrLen());
+  int err = ::connect(sockFd, destinationAddress.getSockAddrPtr(),
+                      destinationAddress.getSockAddrLen());
 
   if (err < 0 && errno != EINPROGRESS) {
     // Connection failed immediately
@@ -80,28 +79,22 @@ Result<> TCPSocket::connect(const std::string& host, uint16_t port,
       if (pollResult <= 0) {
         // Timeout or error
         close();
+
         if (pollResult == 0) {
-          BELL_LOG(error, LOG_TAG, "Connection to {} timed out after {} ms.",
-                   host.c_str(), timeoutMs);
-          throw std::runtime_error("Sock connect timeout");
+          return Result<>::fromError(std::errc::timed_out);
         }
 
-        BELL_LOG(error, LOG_TAG,
-                 "Polling error while connecting to {}. Error {}", host.c_str(),
-                 errno);
-        throw std::runtime_error("Sock connect poll failed");
+        return Result<>::fromLastErrno();
       }
 
       // Check for connection success or error
-      int sockErr;
-      socklen_t sockErrLen = sizeof(sockErr);
-      if (getsockopt(sockFd, SOL_SOCKET, SO_ERROR, &sockErr, &sockErrLen) < 0 ||
-          sockErr != 0) {
-        close();
-        BELL_LOG(error, LOG_TAG, "Connection to {} failed. Socket error {}",
-                 host.c_str(), strerror(sockErr));
-        throw std::runtime_error("Sock connect failed");
+      auto errCode = lastError();
+      if (errCode) {
+        return Result<>::fromError(errCode);
       }
+
+      // Success
+      err = 0;
     }
 
     // Restore isBlocking
@@ -112,15 +105,17 @@ Result<> TCPSocket::connect(const std::string& host, uint16_t port,
 }
 
 Result<> TCPSocket::listen(int backlog) {
-  if (!isOpen()) {
-    return Result<>::fromError(Error::SocketNotOpen);
+  if (!isValid()) {
+    return Result<>::fromError(std::errc::invalid_argument);
   }
 
   if (::listen(sockFd, backlog) != 0) {
-    throw std::runtime_error(fmt::format("Listen failed, {}", strerror(errno)));
+    return Result<>::fromLastErrno();
   }
 
   isListening = true;
+
+  return {};
 }
 
 std::unique_ptr<TCPSocket> TCPSocket::accept() {
@@ -136,9 +131,8 @@ std::unique_ptr<TCPSocket> TCPSocket::accept() {
   }
 
   // Create a new TCPSocket object for the accepted connection
-  std::unique_ptr<TCPSocket> clientSocket = std::make_unique<TCPSocket>();
-  clientSocket->wrapFd(
-      clientFd);  // Wrap the file descriptor in a new socket object
+  std::unique_ptr<TCPSocket> clientSocket =
+      std::make_unique<TCPSocket>(clientFd, AF_INET, SOCK_STREAM);
 
   return clientSocket;  // Return the new socket object for the accepted connection
 }

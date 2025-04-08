@@ -10,11 +10,9 @@ namespace bell::net {
 class UDPSocket : public POSIXSocket {
  public:
   /**
-  * @brief UDP socket constructor
-  * 
-  * @param initAsIpV6 
+  * @brief Default constructor for the UDPSocket class. Initializes the socket to INVALID_FD.
   */
-  UDPSocket(bool initAsIpV6 = false) { this->sockType = SOCK_DGRAM; };
+  UDPSocket() = default;
   ~UDPSocket() override;
 
   /**
@@ -45,7 +43,8 @@ class UDPSocket : public POSIXSocket {
    * @param address The address to which the data should be sent.
    * @return The number of bytes successfully written.
    */
-  Result<size_t> sendto(const uint8_t* buf, size_t len, const IpAddress& address);
+  Result<size_t> sendto(const uint8_t* buf, size_t len,
+                        const IpAddress& address);
 
  private:
   const char* LOG_TAG = "UDPSocket";

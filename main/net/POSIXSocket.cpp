@@ -6,6 +6,7 @@
 
 #include "bell/Logger.h"
 #include "bell/net/IpAddress.h"
+#include "bell/net/Result.h"
 #include "bell/utils/Utils.h"
 
 // Platform specific socket includes
@@ -34,7 +35,7 @@ using namespace bell::net;
 void POSIXSocket::setBlocking(bool blocking) {
   isBlocking = blocking;
 
-  if (isOpen()) {
+  if (isValid()) {
 #ifdef _WIN32
     unsigned long mode = blocking ? 0 : 1;
     if (ioctlsocket(sockFd, FIONBIO, &mode) != 0) {
@@ -53,35 +54,25 @@ void POSIXSocket::setBlocking(bool blocking) {
   }
 }
 
-void POSIXSocket::wrapFd(int fd) {
-  if (fd != -1) {
-    sockFd = fd;
-    isClosed = false;
-  }
-}
-
 std::error_code POSIXSocket::lastError() const {
-  if (!isOpen()) {
-    throw std::runtime_error("Socket is not open");
+  int sockErr;
+  socklen_t sockErrLen = sizeof(sockErr);
+  if (getsockopt(sockFd, SOL_SOCKET, SO_ERROR, &sockErr, &sockErrLen) < 0 ||
+      sockErr != 0) {
+    return {sockErr, std::system_category()};
   }
 
-  int err = errno;
-
-  return {err, std::system_category()};
+  return {0, std::system_category()};
 }
 
 Result<size_t> POSIXSocket::read(uint8_t* buf, size_t len) {
-  if (!isOpen()) {
-    throw std::runtime_error("Socket is not open");
+  if (!isValid()) {
+    return Result<size_t>::fromError(std::errc::invalid_argument);
   }
 
   // Perform the actual read operation
-  ssize_t res = recv(sockFd, buf, len, 0);
+  ssize_t res = ::recv(sockFd, buf, len, 0);
   if (res < 0) {
-    if (errno != EAGAIN && errno != EWOULDBLOCK) {
-      close();
-    }
-
     return Result<size_t>::fromLastErrno();
   }
 
@@ -89,59 +80,56 @@ Result<size_t> POSIXSocket::read(uint8_t* buf, size_t len) {
 }
 
 Result<size_t> POSIXSocket::write(const uint8_t* buf, size_t len) {
-  if (!isOpen()) {
-    throw std::runtime_error("Socket is not open");
+  if (!isValid()) {
+    return Result<size_t>::fromError(std::errc::invalid_argument);
   }
 
   // Perform the actual write operation
   ssize_t res = ::send(sockFd, buf, len, MSG_NOSIGNAL);
   if (res < 0) {
-    BELL_LOG(error, "POSIXSocket", "Error in send: {}", strerror(errno));
-    if (errno != EAGAIN && errno != EWOULDBLOCK) {
-      close();
-    }
     return Result<size_t>::fromLastErrno();
   }
 
   return {static_cast<size_t>(res)};
 }
 
-void POSIXSocket::createFd(int domain, int protocol) {
-  sockFd = socket(domain, sockType, protocol);
+Result<> POSIXSocket::createFd(int domain, int type, int protocol) {
+  sockFd = socket(domain, type, protocol);
   if (sockFd < 0) {
-    throw std::runtime_error(fmt::format("Could not create socket {}", errno));
+    return Result<>::fromLastErrno();
   }
-  isClosed = false;
+
+  return {};
 }
 
 int POSIXSocket::getFd() {
   return sockFd;
 }
 
-bool POSIXSocket::isOpen() const {
-  return !isClosed;
+bool POSIXSocket::isValid() const {
+  return sockFd != INVALID_FD;
 }
 
 void POSIXSocket::close() {
-  if (isOpen()) {
+  if (isValid()) {
 #ifdef _WIN32
     closesocket(sockFd);
 #else
     ::close(sockFd);
 #endif
-    isClosed = true;
+    sockFd = INVALID_FD;
   }
 }
 
 Result<> POSIXSocket::bind(const std::string& address, uint16_t port) {
-  if (isOpen()) {
-    close();
+  if (!isValid()) {
+    return Result<>::fromError(std::errc::invalid_argument);
   }
 
   auto res = IpAddress::resolveDomain(address, sockType);
 
   if (!res) {
-    return res.getError();
+    return Result<>::fromError(res.getError());
   }
 
   auto resolved = res.getValue();
@@ -151,27 +139,33 @@ Result<> POSIXSocket::bind(const std::string& address, uint16_t port) {
   isClosed = false;
 
   // Set REUSEADDR option
-  setOption(SOL_SOCKET, SO_REUSEADDR, 1);
+  auto optionRes = setOption(SOL_SOCKET, SO_REUSEADDR, 1);
+
+  if (!optionRes) {
+    return optionRes;
+  }
 
   if (::bind(sockFd, resolved.getSockAddrPtr(), resolved.getSockAddrLen()) !=
       0) {
-    isClosed = true;
+    close();
     return Result<>::fromLastErrno();
   }
 
   return {};
 }
 
-void POSIXSocket::setOptionImpl(int level, int optionName,
-                                const void* optionValue, socklen_t optionLen) {
-  if (!isOpen()) {
-    throw std::runtime_error("Socket is not open");
+Result<> POSIXSocket::setOptionImpl(int level, int optionName,
+                                    const void* optionValue,
+                                    socklen_t optionLen) {
+  if (!isValid()) {
+    return Result<>::fromError(std::errc::invalid_argument);
   }
 
   if (setsockopt(getFd(), level, optionName, optionValue, optionLen) == -1) {
-    throw std::runtime_error(
-        fmt::format("Failed to set socket option: {}", strerror(errno)));
+    return Result<>::fromLastErrno();
   }
+
+  return {};
 }
 
 void POSIXSocket::setReceiveTimeout(int timeoutMs) {

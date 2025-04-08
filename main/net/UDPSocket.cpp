@@ -30,9 +30,10 @@ UDPSocket::~UDPSocket() {
   close();
 }
 
-size_t UDPSocket::recvfrom(uint8_t* buf, size_t len, const IpAddress& address) {
-  if (!isOpen()) {
-    throw std::runtime_error("Socket is not open");
+Result<size_t> UDPSocket::recvfrom(uint8_t* buf, size_t len,
+                                   const IpAddress& address) {
+  if (!isValid()) {
+    return Result<size_t>::fromError(std::errc::invalid_argument);
   }
 
   socklen_t addressLen = address.getSockAddrLen();
@@ -45,18 +46,16 @@ size_t UDPSocket::recvfrom(uint8_t* buf, size_t len, const IpAddress& address) {
                  const_cast<sockaddr*>(address.getSockAddrPtr()),  // NOLINT
                  &addressLen);
   if (res < 0) {
-    BELL_LOG(error, "UDPSocket", "Error in recv, {}", strerror(errno));
-    close();
-    throw std::runtime_error(fmt::format("Error in recv, {}", strerror(errno)));
+    return Result<size_t>::fromLastErrno();
   }
 
   return static_cast<size_t>(res);
 }
 
-size_t UDPSocket::sendto(const uint8_t* buf, size_t len,
-                         const IpAddress& address) {
-  if (!isOpen()) {
-    throw std::runtime_error("Socket is not open");
+Result<size_t> UDPSocket::sendto(const uint8_t* buf, size_t len,
+                                 const IpAddress& address) {
+  if (!isValid()) {
+    return Result<size_t>::fromError(std::errc::invalid_argument);
   }
 
   // Using const_cast to remove the const qualifier from the address, as sendto expects a non-const
@@ -66,9 +65,7 @@ size_t UDPSocket::sendto(const uint8_t* buf, size_t len,
                const_cast<sockaddr*>(address.getSockAddrPtr()),  // NOLINT
                address.getSockAddrLen());
   if (res < 0) {
-    BELL_LOG(error, "UDPSocket", "Error in sendto, {}", strerror(errno));
-    close();
-    throw std::runtime_error(fmt::format("Error in send, {}", strerror(errno)));
+    return Result<size_t>::fromLastErrno();
   }
 
   return static_cast<size_t>(res);

@@ -48,7 +48,7 @@ class SocketStream : public std::iostream {
   SocketStream(const std::shared_ptr<Socket>& socket)
       : std::iostream(&socketBuf), socketBuf(socket), socket(socket) {}
 
-  bool isOpen() { return socket->isOpen(); }
+  bool isOpen() { return socket->isValid(); }
 
   SocketBuffer* rdbuf() { return &socketBuf; }
 };

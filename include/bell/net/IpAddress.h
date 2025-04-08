@@ -63,9 +63,9 @@ class IpAddress {
    * @param addrStr The string representation of the IP address. This can be either an IPv4 or IPv6 address.
    *
    * @remark This function does not perform any DNS resolution. Use resolveDomain() for that.
-   * @return Result<Address> The address structure, or an error
+   * @return optional<Address> The address structure if the string is a valid IP address, or std::nullopt if it is not.
    */
-  static Result<IpAddress> fromString(const std::string& addrStr);
+  static std::optional<IpAddress> fromString(const std::string& addrStr);
 
   /**
    * @brief Resolve the provided hostname to an IP address. In case the hostname is already an IP address, it is directly stored in the Address structure.

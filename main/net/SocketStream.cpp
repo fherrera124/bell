@@ -13,31 +13,31 @@ SocketBuffer::SocketBuffer(std::shared_ptr<Socket> socket)
 
 int SocketBuffer::sync() {
   size_t n = pptr() - pbase();
-  try {
-    while (n > 0) {
-      auto bw =
-          internalSocket->write(reinterpret_cast<uint8_t*>(pptr() - n), n);
-      n -= bw;
+  while (n > 0) {
+    auto bw = internalSocket->write(reinterpret_cast<uint8_t*>(pptr() - n), n);
+
+    if (!bw) {
+      BELL_LOG(error, "SocketBuffer", "Error writing to socket: {}",
+               bw.errorMessage());
+      setp(pptr() - n, obuf.data() + bufLen);
+      pbump(n);
+      return -1;
     }
-  } catch (const std::exception& e) {
-    BELL_LOG(error, "SocketBuffer", "Error writing to socket: {}", e.what());
-    setp(pptr() - n, obuf.data() + bufLen);
-    pbump(n);
-    return -1;
+    n -= bw.getValue();
   }
+
   setp(obuf.data(), obuf.data() + bufLen);
   return 0;
 }
 
 SocketBuffer::int_type SocketBuffer::underflow() {
-  size_t br = 0;
-  try {
-    br = internalSocket->read(reinterpret_cast<uint8_t*>(ibuf.data()), bufLen);
-  } catch (std::exception& e) {
+  auto br =
+      internalSocket->read(reinterpret_cast<uint8_t*>(ibuf.data()), bufLen);
+  if (!br) {
     setg(nullptr, nullptr, nullptr);
     return traits_type::eof();
   }
-  setg(ibuf.data(), ibuf.data(), ibuf.data() + br);
+  setg(ibuf.data(), ibuf.data(), ibuf.data() + br.getValue());
   return traits_type::to_int_type(*ibuf.data());
 }
 
@@ -62,18 +62,18 @@ std::streamsize SocketBuffer::xsgetn(char_type* _s, std::streamsize _n) {
   setg(nullptr, nullptr, nullptr);
   std::streamsize remain = _n - bn;
   char_type* end = _s + _n;
-  size_t br;
-  try {
-    while (remain > 0) {
-      br = internalSocket->read(reinterpret_cast<uint8_t*>(end - remain),
-                                remain);
-      if (br == 0) {
-        return (_n - remain);
-      }
-      remain -= br;
+  while (remain > 0) {
+    auto br =
+        internalSocket->read(reinterpret_cast<uint8_t*>(end - remain), remain);
+
+    if (!br) {
+      return (_n - remain);
     }
-  } catch (...) {
-    return (_n - remain);
+
+    if (br.getValue() == 0) {
+      return (_n - remain);
+    }
+    remain -= br.getValue();
   }
   return _n;
 }
@@ -86,17 +86,17 @@ std::streamsize SocketBuffer::xsputn(const char_type* _s, std::streamsize _n) {
   }
   if (sync() < 0)
     return 0;
-  ssize_t bw;
   std::streamsize remain = _n;
   const char_type* end = _s + _n;
-  try {
-    while (remain > bufLen) {
-      bw = internalSocket->write((uint8_t*)(end - remain), remain);
-      remain -= bw;
+  while (remain > bufLen) {
+    auto bw = internalSocket->write((uint8_t*)(end - remain), remain);
+
+    if (!bw) {
+      return (_n - remain);
     }
-  } catch (...) {
-    return (_n - remain);
+    remain -= bw.getValue();
   }
+
   if (remain > 0) {
     traits_type::copy(pptr(), end - remain, remain);
     pbump(remain);

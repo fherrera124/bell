@@ -10,7 +10,23 @@ namespace bell::net {
  */
 class TCPSocket : public POSIXSocket {
  public:
-  TCPSocket() { this->sockType = SOCK_STREAM; };
+  /**
+  * @brief Default constructor for the TCPSocket class. Initializes the socket to INVALID_FD.
+  */
+  TCPSocket() = default;
+  /**
+   * @brief Constructor that wraps an existing file descriptor.
+   *
+   * @param wrapFd The file descriptor to wrap.
+   * @param family The address family (e.g., AF_INET, AF_INET6). Default is AF_UNSPEC.
+   * @param sockType The socket type (e.g., SOCK_STREAM). Default is SOCK_STREAM.
+   */
+  TCPSocket(int wrapFd, int family = AF_UNSPEC, int sockType = SOCK_STREAM) {
+    this->sockFd = wrapFd;
+    this->sockFamily = family;
+    this->sockType = sockType;
+  }
+
   ~TCPSocket() override;
 
   /**

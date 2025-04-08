@@ -33,8 +33,9 @@ void http::Server::listen(int port) {
 
   // Try to bind to the specified port
   listenSocket->bind("", port);
-  // Set socket timeout
-  listenSocket->setTimeout(defaultHttpOperationTimeout);
+
+  // Set the socket to non-blocking mode
+  listenSocket->setBlocking(false);
 
   // Start listening for incoming connections
   listenSocket->listen(maxConnections);
@@ -55,7 +56,7 @@ void http::Server::registerCustom404(const RequestHandler& handler) {
 void http::Server::acceptConnection() {
   // Accept the connection
   std::shared_ptr<net::TCPSocket> clientSocket = listenSocket->accept();
-  clientSocket->setTimeout(defaultHttpOperationTimeout);
+  clientSocket->setBlocking(false);
 
   int clientFd = clientSocket->getFd();
   FD_SET(clientFd, &masterFdSet);
