@@ -14,20 +14,21 @@ class TCPSocket : public POSIXSocket {
   * @brief Default constructor for the TCPSocket class. Initializes the socket to INVALID_FD.
   */
   TCPSocket() = default;
+
+  /**
+   * @brief Destructor for the TCPSocket class. Closes the socket if it is open.
+   */
+  ~TCPSocket() override { close(); }
+
   /**
    * @brief Constructor that wraps an existing file descriptor.
-   *
-   * @param wrapFd The file descriptor to wrap.
-   * @param family The address family (e.g., AF_INET, AF_INET6). Default is AF_UNSPEC.
-   * @param sockType The socket type (e.g., SOCK_STREAM). Default is SOCK_STREAM.
    */
-  TCPSocket(int wrapFd, int family = AF_UNSPEC, int sockType = SOCK_STREAM) {
-    this->sockFd = wrapFd;
-    this->sockFamily = family;
-    this->sockType = sockType;
-  }
+  explicit TCPSocket(int sockFd) noexcept { this->sockFd = sockFd; }
 
-  ~TCPSocket() override;
+  /**
+   * @brief Move constructor for the TCPSocket class
+   */
+  TCPSocket(TCPSocket&& sock) noexcept { this->sockFd = sock.getFd(true); }
 
   /**
    * @brief Resolve the provided host and port, and attempt to create a socket connected there.
@@ -50,9 +51,12 @@ class TCPSocket : public POSIXSocket {
   /**
    * @brief Accept an incoming connection on the socket.
    *
-   * @return std::unique_ptr<TCPSocket> A unique pointer to the accepted socket.
+   * @return Accepted socket, or an error if the accept operation fails.
    */
-  std::unique_ptr<TCPSocket> accept();
+  Result<TCPSocket> accept();
+
+  // POSIXSocket interface override
+  int getSockType() override { return SOCK_STREAM; }
 
  private:
   const char* LOG_TAG = "TCPSocket";

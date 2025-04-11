@@ -4,7 +4,6 @@
 #include <sys/poll.h>
 #include <functional>
 #include <memory>
-#include <system_error>
 #include <unordered_map>
 #include <vector>
 
@@ -16,20 +15,25 @@ class SocketPollListener {
   // Default constructor
   SocketPollListener() = default;
 
+  enum class Event {
+    Readable = POLLIN,    // Readable
+    Writeable = POLLOUT,  // Writable
+    Error = POLLERR,      // Error
+    Hangup = POLLHUP,     // Hangup
+    Priority = POLLPRI,   // Priority
+  };
+
   using EventCallback = std::function<void(Socket&)>;
 
   /**
    * @brief Registers a socket with the poll listener.
    *
    * @param socket Pointer to the socket to register
-   * @param onWriteable writeable / POLLOUT callback
-   * @param onReadable readable / POLLIN callback
-   * @param onError on error / POLLERR callback
+   * @param polledEvent Event to poll for
+   * @param onEvent Callback function to be called when the event occurs
    */
-  void registerSocket(const std::shared_ptr<Socket>& socket,
-                      const EventCallback& onWriteable = {},
-                      const EventCallback& onReadable = {},
-                      const EventCallback& onError = {});
+  void registerSocket(const std::shared_ptr<Socket>& socket, Event polledEvent,
+                      const EventCallback& onEvent = {});
 
   // Polls the registered sockets for events
   void poll(int timeoutMs = 100);
@@ -42,18 +46,21 @@ class SocketPollListener {
     // Weak pointer to the registered socket
     std::weak_ptr<Socket> socketPtr;
 
-    // Callback functions for different events
-    EventCallback onWriteable;
-    EventCallback onReadable;
-    EventCallback onError;
+    // Registered callbacks for events
+    std::unordered_map<Event, EventCallback> callbacks;
   };
 
   // keeps reference to socket we're listening to events from
   std::unordered_map<int, SocketCallbacks> handlers;
   std::vector<pollfd> fds;
+  std::recursive_mutex pollMutex;
+
+  // Updates the file descriptor list for polling, based on the registered sockets
+  void updateFdList();
 };
 }  // namespace bell::net
 
 namespace bell {
 using SocketPollListener = net::SocketPollListener;
-}
+using PollEvent = net::SocketPollListener::Event;
+}  // namespace bell

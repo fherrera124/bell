@@ -2,6 +2,7 @@
 
 #include <fmt/format.h>
 #include <cerrno>
+#include <iostream>
 #include <stdexcept>
 
 #include "bell/Logger.h"
@@ -33,8 +34,6 @@
 using namespace bell::net;
 
 void POSIXSocket::setBlocking(bool blocking) {
-  isBlocking = blocking;
-
   if (isValid()) {
 #ifdef _WIN32
     unsigned long mode = blocking ? 0 : 1;
@@ -93,8 +92,8 @@ Result<size_t> POSIXSocket::write(const uint8_t* buf, size_t len) {
   return {static_cast<size_t>(res)};
 }
 
-Result<> POSIXSocket::createFd(int domain, int type, int protocol) {
-  sockFd = socket(domain, type, protocol);
+Result<> POSIXSocket::createFd(int domain, int protocol) {
+  this->sockFd = socket(domain, getSockType(), protocol);
   if (sockFd < 0) {
     return Result<>::fromLastErrno();
   }
@@ -102,7 +101,13 @@ Result<> POSIXSocket::createFd(int domain, int type, int protocol) {
   return {};
 }
 
-int POSIXSocket::getFd() {
+int POSIXSocket::getFd(bool invalidate) {
+  if (invalidate) {
+    int fd = sockFd;
+    sockFd = INVALID_FD;
+    return fd;
+  }
+
   return sockFd;
 }
 
@@ -122,11 +127,7 @@ void POSIXSocket::close() {
 }
 
 Result<> POSIXSocket::bind(const std::string& address, uint16_t port) {
-  if (!isValid()) {
-    return Result<>::fromError(std::errc::invalid_argument);
-  }
-
-  auto res = IpAddress::resolveDomain(address, sockType);
+  auto res = IpAddress::resolveDomain(address, getSockType());
 
   if (!res) {
     return Result<>::fromError(res.getError());
@@ -136,7 +137,6 @@ Result<> POSIXSocket::bind(const std::string& address, uint16_t port) {
   resolved.setPort(port);
 
   createFd(resolved.getFamily(), IPPROTO_IP);
-  isClosed = false;
 
   // Set REUSEADDR option
   auto optionRes = setOption(SOL_SOCKET, SO_REUSEADDR, 1);
@@ -168,6 +168,19 @@ Result<> POSIXSocket::setOptionImpl(int level, int optionName,
   return {};
 }
 
+Result<> POSIXSocket::getOptionImpl(int level, int optionName,
+                                    void* optionValue, socklen_t optionLen) {
+  if (!isValid()) {
+    return Result<>::fromError(std::errc::invalid_argument);
+  }
+
+  if (getsockopt(getFd(), level, optionName, optionValue, &optionLen) == -1) {
+    return Result<>::fromLastErrno();
+  }
+
+  return {};
+}
+
 void POSIXSocket::setReceiveTimeout(int timeoutMs) {
   if (timeoutMs == 0) {
     // Switch to blocking mode
@@ -177,8 +190,6 @@ void POSIXSocket::setReceiveTimeout(int timeoutMs) {
 
   setBlocking(false);
   auto timeVal = bell::utils::millisecondsToTimeval(timeoutMs);
-  this->timeoutMs = timeoutMs;
-
   setOption(SOL_SOCKET, SO_RCVTIMEO, timeVal);
 }
 
@@ -191,7 +202,18 @@ void POSIXSocket::setSendTimeout(int timeoutMs) {
 
   setBlocking(false);
   auto timeVal = bell::utils::millisecondsToTimeval(timeoutMs);
-  this->timeoutMs = timeoutMs;
-
   setOption(SOL_SOCKET, SO_SNDTIMEO, timeVal);
+}
+
+Result<bool> POSIXSocket::getBlocking() const {
+  if (!isValid()) {
+    return Result<bool>::fromError(std::errc::invalid_argument);
+  }
+
+  int flags = fcntl(sockFd, F_GETFL, 0);
+  if (flags == -1) {
+    return Result<bool>::fromLastErrno();
+  }
+
+  return !(flags & O_NONBLOCK);
 }

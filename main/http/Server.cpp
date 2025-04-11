@@ -29,21 +29,23 @@ void http::Server::listen(int port) {
   // Stop the task if it's already running
   stopTask();
 
-  listenSocket = std::make_unique<net::TCPSocket>();
+  if (listenSocket.isValid()) {
+    listenSocket.close();
+  }
 
   // Try to bind to the specified port
-  listenSocket->bind("", port);
+  listenSocket.bind("", port).unwrap();
 
   // Set the socket to non-blocking mode
-  listenSocket->setBlocking(false);
+  listenSocket.setBlocking(false);
 
   // Start listening for incoming connections
-  listenSocket->listen(maxConnections);
+  listenSocket.listen(maxConnections).unwrap();
 
   // Prepare master fd set for select
   FD_ZERO(&masterFdSet);
-  FD_SET(listenSocket->getFd(), &masterFdSet);
-  maxFd = listenSocket->getFd();
+  FD_SET(listenSocket.getFd(), &masterFdSet);
+  maxFd = listenSocket.getFd();
 
   startTask();  // Will begin the task loop
   BELL_LOG(info, LOG_TAG, "Server listening on port {}", port);
@@ -55,13 +57,23 @@ void http::Server::registerCustom404(const RequestHandler& handler) {
 
 void http::Server::acceptConnection() {
   // Accept the connection
-  std::shared_ptr<net::TCPSocket> clientSocket = listenSocket->accept();
-  clientSocket->setBlocking(false);
+  auto res = listenSocket.accept();
 
-  int clientFd = clientSocket->getFd();
-  FD_SET(clientFd, &masterFdSet);
-  BELL_LOG(debug, LOG_TAG, "Accepted connection");
-  connections.push_back({std::move(clientSocket), false});
+  if (res) {
+    auto sock = res.takeValue();
+    sock.setBlocking(false);
+
+    int clientFd = sock.getFd();
+    FD_SET(clientFd, &masterFdSet);
+    BELL_LOG(debug, LOG_TAG, "Accepted connection");
+    connections.push_back({
+        std::make_shared<net::TCPSocket>(std::move(sock)),
+        false,
+    });
+  } else {
+    BELL_LOG(error, LOG_TAG, "Error accepting connection: {}",
+             res.getError().message());
+  }
 }
 
 void http::Server::registerHandler(Method method, const std::string& path,
@@ -134,7 +146,7 @@ void http::Server::taskLoop() {
 
   auto selectTV = bell::utils::millisecondsToTimeval(1000);
 
-  maxFd = listenSocket->getFd();
+  maxFd = listenSocket.getFd();
   for (const auto& it : connections) {
     if (it.socket->getFd() > maxFd) {
       maxFd = it.socket->getFd();
@@ -150,7 +162,7 @@ void http::Server::taskLoop() {
   }
 
   // Check for new connections
-  if (FD_ISSET(listenSocket->getFd(), &readFdSet)) {
+  if (FD_ISSET(listenSocket.getFd(), &readFdSet)) {
     acceptConnection();
   }
 

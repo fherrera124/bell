@@ -13,7 +13,21 @@ class UDPSocket : public POSIXSocket {
   * @brief Default constructor for the UDPSocket class. Initializes the socket to INVALID_FD.
   */
   UDPSocket() = default;
-  ~UDPSocket() override;
+
+  /**
+   * @brief Destructor for the UDPSocket class. Closes the socket if it is open.
+   */
+  ~UDPSocket() override { close(); }
+
+  /**
+   * @brief Constructor that wraps an existing file descriptor.
+   */
+  explicit UDPSocket(int sockFd) noexcept { this->sockFd = sockFd; }
+
+  /**
+   * @brief Move constructor for the UDPSocket class
+   */
+  UDPSocket(UDPSocket&& sock) noexcept { this->sockFd = sock.getFd(true); }
 
   /**
    * @brief Receive data from the provided address
@@ -45,6 +59,9 @@ class UDPSocket : public POSIXSocket {
    */
   Result<size_t> sendto(const uint8_t* buf, size_t len,
                         const IpAddress& address);
+
+  // POSIXSocket interface override
+  int getSockType() override { return SOCK_DGRAM; }
 
  private:
   const char* LOG_TAG = "UDPSocket";

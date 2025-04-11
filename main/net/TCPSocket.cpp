@@ -27,10 +27,6 @@
 
 using namespace bell::net;
 
-TCPSocket::~TCPSocket() {
-  close();
-}
-
 Result<> TCPSocket::connect(const std::string& host, uint16_t port,
                             int timeoutMs) {
   // Close the socket if it is already open
@@ -39,20 +35,35 @@ Result<> TCPSocket::connect(const std::string& host, uint16_t port,
     return Result<>::fromError(std::errc::invalid_argument);
   }
 
-  destinationAddress = IpAddress::resolveDomain(host, SOCK_STREAM).unwrap();
-  destinationAddress.setPort(port);
+  auto resolveRes = IpAddress::resolveDomain(host, SOCK_STREAM);
 
-  sockFd = socket(destinationAddress.getFamily(), SOCK_STREAM, IPPROTO_IP);
-
-  if (sockFd < 0) {
-    sockFd = INVALID_FD;
-    return Result<>::fromLastErrno();
+  if (!resolveRes) {
+    BELL_LOG(error, LOG_TAG, "Could not resolve {}. Error {}", host.c_str(),
+             resolveRes.getError().message());
+    return Result<>::fromError(resolveRes.getError());
   }
 
-  isClosed = false;
+  auto destinationAddress = resolveRes.getValue();
+  destinationAddress.setPort(port);
+
+  auto res = createFd(destinationAddress.getFamily(), IPPROTO_IP);
+
+  if (!res) {
+    BELL_LOG(error, LOG_TAG, "Could not create socket. Error {}",
+             res.errorMessage());
+    return res;
+  }
+
+  auto isBlockingRes = getBlocking();
+
+  if (!isBlockingRes) {
+    BELL_LOG(error, LOG_TAG, "Could not get socket flags. Error {}",
+             isBlockingRes.errorMessage());
+    return Result<>::fromError(isBlockingRes.getError());
+  }
 
   // Cache the isBlocking value
-  bool tmpIsBlocking = isBlocking;
+  bool tmpIsBlocking = isBlockingRes.getValue();
 
   // Required for the connect call
   setBlocking(false);
@@ -63,15 +74,14 @@ Result<> TCPSocket::connect(const std::string& host, uint16_t port,
   if (err < 0 && errno != EINPROGRESS) {
     // Connection failed immediately
     close();
-    BELL_LOG(error, LOG_TAG, "Could not connect to {}, port {}. Error {}",
-             host.c_str(), port, errno);
-    throw std::runtime_error("Sock connect failed");
+
+    return Result<>::fromLastErrno();
   }
 
   if (timeoutMs > 0) {
     if (err < 0 && errno == EINPROGRESS) {
       // Connection is in progress; use poll to wait for completion
-      struct pollfd pfd{};
+      struct pollfd pfd {};
       pfd.fd = sockFd;
       pfd.events = POLLOUT;
 
@@ -113,26 +123,20 @@ Result<> TCPSocket::listen(int backlog) {
     return Result<>::fromLastErrno();
   }
 
-  isListening = true;
-
   return {};
 }
 
-std::unique_ptr<TCPSocket> TCPSocket::accept() {
-  struct sockaddr_in clientAddr{};
+Result<TCPSocket> TCPSocket::accept() {
+  struct sockaddr_in clientAddr {};
   socklen_t addrLen = sizeof(clientAddr);
 
   // Accept the incoming connection
   int clientFd = ::accept(
       sockFd, reinterpret_cast<struct sockaddr*>(&clientAddr), &addrLen);
+
   if (clientFd < 0) {
-    throw std::runtime_error(
-        fmt::format("Socket accept failed, {}", strerror(errno)));
+    return Result<TCPSocket>::fromLastErrno();
   }
 
-  // Create a new TCPSocket object for the accepted connection
-  std::unique_ptr<TCPSocket> clientSocket =
-      std::make_unique<TCPSocket>(clientFd, AF_INET, SOCK_STREAM);
-
-  return clientSocket;  // Return the new socket object for the accepted connection
+  return TCPSocket(clientFd);
 }

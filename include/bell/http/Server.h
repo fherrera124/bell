@@ -44,7 +44,7 @@ class Server : bell::utils::Task {
   int maxConnections;
 
   // TCP socket used for listening for incoming connections
-  std::unique_ptr<bell::net::TCPSocket> listenSocket;
+  bell::net::TCPSocket listenSocket;
 
   // Type used to represent an active connection
   struct Connection {

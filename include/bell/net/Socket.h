@@ -36,6 +36,13 @@ class Socket {
   virtual void setBlocking(bool blocking) = 0;
 
   /**
+   * @brief Get the blocking mode of the socket.
+   * 
+   * @return true if the socket is in blocking mode, false otherwise.
+   */
+  virtual Result<bool> getBlocking() const = 0;
+
+  /**
    * @brief Set the read timeout for socket operations.
    *
    * @param timeoutMs Timeout in milliseconds. A value of 0 indicates a non-blocking operation.
@@ -103,9 +110,11 @@ class Socket {
   /**
    * @brief Get the file descriptor associated with the socket.
    *
+   * @param invalidate If true, the file descriptor will be invalidated after retrieval. Used during move operations.
+   *
    * @return The file descriptor associated with the socket.
    */
-  virtual int getFd() = 0;
+  virtual int getFd(bool invalidate = false) = 0;
 };
 }  // namespace bell::net
 

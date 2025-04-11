@@ -19,11 +19,10 @@ class POSIXSocket : public Socket {
    * @brief Create a socket file descriptor with the specified family, type and protocol
    *
    * @param domain The address family (e.g., AF_INET for IPv4, AF_INET6 for IPv6).
-   * @param type The socket type (e.g., SOCK_STREAM for TCP, SOCK_DGRAM for UDP).
    * @param protocol The protocol to be used (e.g., IPPROTO_TCP for TCP, IPPROTO_UDP for UDP).
    * @return Result<> indicating success or failure.
    */
-  Result<> createFd(int domain, int type, int protocol = 0);
+  Result<> createFd(int domain, int protocol = 0);
 
   /**
    * @brief Set a socket option with a templated value.
@@ -41,6 +40,29 @@ class POSIXSocket : public Socket {
   }
 
   /**
+   * @brief Get a socket option with a templated value.
+   *
+   * This method wraps the getsockopt function to retrieve various socket options, inferring the value's size based on the type of optionValue. 
+   *
+   * @param level The level at which the option is defined (e.g., SOL_SOCKET).
+   * @param optionName The name of the option to be retrieved (e.g., SO_REUSEADDR).
+   * @return Result<T> containing the value of the option or an error code.
+   */
+  template <typename T>
+  Result<T> getOption(int level, int optionName) {
+    T optionValue{};
+    socklen_t optionLen = sizeof(T);
+
+    auto res = getOptionImpl(level, optionName, &optionValue, optionLen);
+
+    if (!res) {
+      return Result<T>::fromError(res.getError());
+    }
+
+    return Result<T>(optionValue);
+  }
+
+  /**
    * @brief Returns the last error code from the socket, using SO_ERROR.
    */
   std::error_code lastError() const;
@@ -48,15 +70,20 @@ class POSIXSocket : public Socket {
   // Socket interface overrides
   void setReceiveTimeout(int timeoutMs) override;
   void setSendTimeout(int timeoutMs) override;
-  int getFd() override;
   Result<size_t> read(uint8_t* buf, size_t len) override;
   Result<size_t> write(const uint8_t* buf, size_t len) override;
   Result<> bind(const std::string& address, uint16_t port) override;
   void setBlocking(bool blocking) override;
+  Result<bool> getBlocking() const override;
   bool isValid() const override;
   void close() override;
+  int getFd(bool invalidate = false) override;
 
-  static const int INVALID_FD = -1;  //  file descriptor
+  // To be implemented by derived classes
+  virtual int getSockType() = 0;
+
+  // Default value for invalid file descriptor
+  static const int INVALID_FD = -1;
 
  private:
   const char* LOG_TAG = "POSIXSocket";
@@ -64,28 +91,12 @@ class POSIXSocket : public Socket {
   Result<> setOptionImpl(int level, int optionName, const void* optionValue,
                          socklen_t optionLen);
 
+  Result<> getOptionImpl(int level, int optionName, void* optionValue,
+                         socklen_t optionLen);
+
  protected:
   // File descriptor associated with the socket
   int sockFd = INVALID_FD;
-
-  // Flag indicating if the socket is closed
-  bool isClosed = true;
-
-  // Flag indicating if the socket is blocking
-  bool isBlocking = true;
-
-  // Flag indicating if the socket is listening
-  bool isListening = false;
-
-  // Timeout for socket operations, assigned to SO_RCVTIMEO and SO_SNDTIMEO
-  int timeoutMs = 0;
-
-  int sockType = -1;  // SOCK_STREAM or SOCK_DGRAM, set by derived classes
-
-  int sockFamily = -1;  // AF_INET or AF_INET6, set by derived classes
-
-  // Destination address, as resolved by the connect method
-  IpAddress destinationAddress;
 };
 }  // namespace bell::net
 

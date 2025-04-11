@@ -55,9 +55,9 @@ void net::MQTTClient::connect(const std::string& host, uint16_t port,
                               bool secure, int keepAlive) {
   // Connect to the broker
   if (secure) {
-    auto tlsSocket = std::make_unique<net::TLSSocket>();
-    tlsSocket->connect(host, port, timeoutMs);
-    socket = std::move(tlsSocket);
+    // auto tlsSocket = std::make_unique<net::TLSSocket>();
+    // tlsSocket->connect(host, port, timeoutMs);
+    // socket = std::move(tlsSocket);
   } else {
     auto tcpSocket = std::make_unique<net::TCPSocket>();
     tcpSocket->connect(host, port, timeoutMs);

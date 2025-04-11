@@ -23,13 +23,13 @@ class Result {
   // Success
   Result() = default;
 
-  Result(const T& val) : value(val) {};
+  Result(const T& val) : value(val){};
 
-  Result(T&& val) : value(std::move(val)) {};
+  Result(T&& val) : value(std::move(val)){};
 
   // Result(const std::error_code& err) : error(err) {};
 
-  Result(std::error_code err) : error(err) {};
+  Result(std::error_code err) : error(err){};
 
   static Result fromError(std::errc err) {
     return Result(std::make_error_code(err));
@@ -48,6 +48,13 @@ class Result {
 
   bool isSuccess() const { return !error; }
   const T& getValue() const { return value; }
+
+  T&& takeValue() {
+    if (!isSuccess())
+      throw std::system_error(error);
+    return std::move(value);
+  }
+
   std::error_code getError() const { return error; }
 
   std::string errorMessage() const { return error.message(); }

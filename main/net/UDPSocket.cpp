@@ -26,10 +26,6 @@
 
 using namespace bell::net;
 
-UDPSocket::~UDPSocket() {
-  close();
-}
-
 Result<size_t> UDPSocket::recvfrom(uint8_t* buf, size_t len,
                                    const IpAddress& address) {
   if (!isValid()) {

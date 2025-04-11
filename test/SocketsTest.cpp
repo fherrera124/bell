@@ -18,33 +18,31 @@ void runEchoServer(std::shared_ptr<bell::net::TCPSocket> serverSocket) {
 
   bell::net::SocketPollListener pollListener;
 
-  std::vector<std::unique_ptr<bell::net::TCPSocket>> clientSockets;
+  std::vector<std::shared_ptr<bell::net::TCPSocket>> clientSockets;
 
   pollListener.registerSocket(
-      serverSocket, POLLRDNORM,
-      [&pollListener, serverSocket, &clientSockets](short /*event*/) {
+      serverSocket, bell::PollEvent::Readable,
+      [&serverSocket, &pollListener, &clientSockets](auto& /*sock*/) {
         BELL_LOG(info, "Echo server", "Accepting new connection");
-        // Handle ::accept
-        clientSockets.emplace_back(serverSocket->accept());
 
-        bell::net::TCPSocket* clientSocket = clientSockets.back().get();
+        auto sock = std::make_shared<bell::TCPSocket>(
+            serverSocket->accept().takeValue());
+        // Handle ::accept
+        clientSockets.push_back(sock);
 
         pollListener.registerSocket(
-            clientSocket->getFd(), POLLIN | POLLHUP,
-            [clientSocket](short event) {
-              if (event & POLLHUP) {
-                BELL_LOG(info, "Echo server", "Client disconnected");
-                return;
-              }
+            clientSockets.back(), bell::PollEvent::Readable, [](auto& sock) {
               // Handle client socket read
               std::string buffer;
               buffer.resize(1024);
-              size_t bytesRead = clientSocket->read(
-                  reinterpret_cast<uint8_t*>(buffer.data()), buffer.size());
+              size_t bytesRead =
+                  sock.read(reinterpret_cast<uint8_t*>(buffer.data()),
+                            buffer.size())
+                      .unwrap();
               if (bytesRead > 0) {
                 BELL_LOG(info, "Echo server", "Received {} bytes", bytesRead);
-                clientSocket->write(
-                    reinterpret_cast<const uint8_t*>(buffer.data()), bytesRead);
+                sock.write(reinterpret_cast<const uint8_t*>(buffer.data()),
+                           bytesRead);
               }
             });
       });
@@ -59,7 +57,7 @@ void runEchoServer(std::shared_ptr<bell::net::TCPSocket> serverSocket) {
 
 TEST_CASE("bell::io::Socket and derieved classes tests", "[bell::io::Socket]") {
   int echoServerPort = 7542;
-  auto echoServerSocket = std::make_unique<bell::net::TCPSocket>();
+  auto echoServerSocket = std::make_shared<bell::net::TCPSocket>();
 
   // Bind the socket to the echo server port
   REQUIRE(echoServerSocket->bind("127.0.0.1", echoServerPort).isSuccess());
@@ -71,7 +69,7 @@ TEST_CASE("bell::io::Socket and derieved classes tests", "[bell::io::Socket]") {
   REQUIRE(echoServerSocket->listen(5).isSuccess());
 
   // Start the echo server runner
-  std::thread echoServerRunner(runEchoServer, echoServerSocket.get());
+  std::thread echoServerRunner(runEchoServer, echoServerSocket);
 
   // Ensure the server is running
   bell::utils::sleepMs(500);
@@ -86,7 +84,8 @@ TEST_CASE("bell::io::Socket and derieved classes tests", "[bell::io::Socket]") {
   }
 
   SECTION("Write to and read from echo server") {
-    REQUIRE(clientSocket->connect("127.0.0.1", echoServerPort).isSuccess());
+    REQUIRE(
+        clientSocket->connect("127.0.0.1", echoServerPort, 2000).isSuccess());
     std::string message = "Hello, Echo Server!";
     auto bytesWritten = clientSocket->write(
         reinterpret_cast<const uint8_t*>(message.data()), message.size());
@@ -107,7 +106,8 @@ TEST_CASE("bell::io::Socket and derieved classes tests", "[bell::io::Socket]") {
     // Test if the client handles connection timeouts correctly
     clientSocket->setBlocking(false);
     REQUIRE_THROWS(clientSocket->connect("10.255.255.1", echoServerPort,
-                                         500));  // Impossible address for demo
+                                         500)
+                       .unwrap());  // Impossible address for demo
   }
 
   SECTION("Other basic operations") {
