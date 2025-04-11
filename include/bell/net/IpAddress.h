@@ -35,7 +35,10 @@ class IpAddress {
   std::optional<uint16_t> getPort() const;
 
   // Returns the sockaddr structure pointer, for use with socket functions
-  const sockaddr* getSockAddrPtr() const;
+  const sockaddr* getSockAddrPtrConst() const;
+
+  // Returns the sockaddr structure pointer, for use with socket functions
+  sockaddr* getSockAddrPtr();
 
   // Returns the size of the sockaddr structure
   socklen_t getSockAddrLen() const;

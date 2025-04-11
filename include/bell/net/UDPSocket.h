@@ -27,7 +27,7 @@ class UDPSocket : public POSIXSocket {
   /**
    * @brief Move constructor for the UDPSocket class
    */
-  UDPSocket(UDPSocket&& sock) noexcept { this->sockFd = sock.getFd(true); }
+  UDPSocket(UDPSocket&& sock) noexcept { this->sockFd = sock.takeFd(); }
 
   /**
    * @brief Receive data from the provided address

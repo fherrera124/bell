@@ -1,253 +1,242 @@
-// #include "bell/net/TLSSocket.h"
+#include "bell/net/TLSSocket.h"
 
-// // Standard includes
-// #include <cerrno>
-// #include <stdexcept>
+// Standard includes
+#include <cerrno>
+#include <stdexcept>
+#include <system_error>
 
-// // MbedTLS includes
-// #include "mbedtls/error.h"
+// MbedTLS includes
+#include "bell/net/Result.h"
+#include "mbedtls/error.h"
 
-// #include "bell/Logger.h"
+#include "bell/Logger.h"
+#include "mbedtls/net_sockets.h"
+#include "mbedtls/ssl.h"
 
-// using namespace bell;
+using namespace bell;
 
-// namespace {
-// // Personalization string used to seed the entropy context
-// const char* socketPers = "bell-tls";
+namespace {
+// Personalization string used to seed the entropy context
+const char* socketPers = "bell-tls";
 
-// // Convert a MbedTLS error code to a human-readable string
-// std::string mbedtlsErrString(int error) {
-//   std::string result(128, '\0');
-//   mbedtls_strerror(error, result.data(), result.size());
+// Transform MbedTLS error codes to std::error_code, while attempting to map the errors to common errc values
+std::error_code mbedtlsToCommonErrc(int mbedtlsErr) {
+  switch (mbedtlsErr) {
+    case MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY:
+    case MBEDTLS_ERR_NET_CONN_RESET:
+      return std::make_error_code(std::errc::connection_reset);
+    case MBEDTLS_ERR_SSL_WANT_READ:
+    case MBEDTLS_ERR_SSL_WANT_WRITE:
+      return std::make_error_code(std::errc::operation_would_block);
+    case MBEDTLS_ERR_NET_RECV_FAILED:
+    case MBEDTLS_ERR_NET_SEND_FAILED:
+      return std::make_error_code(std::errc::io_error);
+    default:
+      return net::make_tls_error_code(mbedtlsErr);
+  }
+}
 
-//   result.resize(std::strlen(result.c_str()));
+// Maps the TCP socket result values to MbedTLS BIO result values
+net::Result<int> makeBioResult(net::Result<size_t> res, bool reading) {
+  if (res) {
+    return {static_cast<int>(res.getValue())};
+  }
 
-//   return result;
-// }
-// }  // namespace
+  auto err = res.getError();
 
-// net::TLSSocket::~TLSSocket() {
-//   close();
+  if (err == std::errc::broken_pipe || err == std::errc::connection_reset) {
+    return net::make_tls_error_code(MBEDTLS_ERR_NET_CONN_RESET);
+  }
 
-//   // Free the MbedTLS structures
-//   mbedtls_ssl_free(&sslCtx);
-//   mbedtls_ssl_config_free(&sslConf);
-//   mbedtls_ctr_drbg_free(&ctrDrbgCtx);
-//   mbedtls_entropy_free(&entropyCtx);
-// }
+  if (err == std::errc::operation_would_block ||
+      err == std::errc::interrupted || err == std::errc::timed_out) {
+    return reading ? net::Result<int>(MBEDTLS_ERR_SSL_WANT_READ)
+                   : net::Result<int>(MBEDTLS_ERR_SSL_WANT_WRITE);
+  }
 
-// net::TLSSocket::TLSSocket() {
-//   // Initialize the MbedTLS structures
-//   mbedtls_entropy_init(&entropyCtx);
-//   mbedtls_ctr_drbg_init(&ctrDrbgCtx);
-//   mbedtls_ssl_init(&sslCtx);
-//   mbedtls_ssl_config_init(&sslConf);
+  return reading ? net::Result<int>(MBEDTLS_ERR_NET_RECV_FAILED)
+                 : net::Result<int>(MBEDTLS_ERR_NET_SEND_FAILED);
+}
+}  // namespace
 
-//   // TODO: Attach a bundle here
+net::TLSSocket::~TLSSocket() {
+  close();
 
-//   // Seed the ctr_drbg context
-//   int ret = mbedtls_ctr_drbg_seed(
-//       &ctrDrbgCtx, mbedtls_entropy_func, &entropyCtx,
-//       reinterpret_cast<const uint8_t*>(socketPers), std::strlen(socketPers));
+  // Free the MbedTLS structures
+  mbedtls_ssl_free(&sslCtx);
+  mbedtls_ssl_config_free(&sslConf);
+  mbedtls_ctr_drbg_free(&ctrDrbgCtx);
+  mbedtls_entropy_free(&entropyCtx);
+}
 
-//   if (ret != 0) {
-//     BELL_LOG(error, LOG_TAG, "Failed to seed the ctr_drbg context: {}",
-//              mbedtlsErrString(ret));
-//     throw std::runtime_error("Failed to seed the ctr_drbg context");
-//   }
-// }
+net::TLSSocket::TLSSocket() {
+  // Initialize the MbedTLS structures
+  mbedtls_entropy_init(&entropyCtx);
+  mbedtls_ctr_drbg_init(&ctrDrbgCtx);
+  mbedtls_ssl_init(&sslCtx);
+  mbedtls_ssl_config_init(&sslConf);
 
-// net::Result<> net::TLSSocket::connect(const std::string& host, uint16_t port,
-//                                       int timeoutMs) {
-//   innerSocket = std::make_shared<TCPSocket>();  // Create the inner socket
+  // TODO: Attach a bundle here
 
-//   // Connect the inner socket
-//   innerSocket->connect(host, port, timeoutMs);
+  // Seed the ctr_drbg context
+  int ret = mbedtls_ctr_drbg_seed(
+      &ctrDrbgCtx, mbedtls_entropy_func, &entropyCtx,
+      reinterpret_cast<const uint8_t*>(socketPers), std::strlen(socketPers));
 
-//   int ret = mbedtls_ssl_config_defaults(&sslConf, MBEDTLS_SSL_IS_CLIENT,
-//                                         MBEDTLS_SSL_TRANSPORT_STREAM,
-//                                         MBEDTLS_SSL_PRESET_DEFAULT);
-//   if (ret != 0) {
-//     BELL_LOG(error, LOG_TAG, "Failed to set the SSL config defaults: {}",
-//              mbedtlsErrString(ret));
-//     throw std::runtime_error("Failed to set the SSL config defaults");
-//   }
+  if (ret != 0) {
+    auto err = make_tls_error_code(ret);
+    throw std::system_error(err);
+  }
+}
 
-//   // TODO: Bundle verification & TLS 1.3
-//   mbedtls_ssl_conf_authmode(&sslConf, MBEDTLS_SSL_VERIFY_NONE);
-//   mbedtls_ssl_conf_max_tls_version(&sslConf, MBEDTLS_SSL_VERSION_TLS1_2);
+net::Result<> net::TLSSocket::connect(const std::string& host, uint16_t port,
+                                      int timeoutMs) {
+  auto res = innerSocket.connect(host, port, timeoutMs);
+  if (!res) {
+    return res;
+  }
 
-//   mbedtls_ssl_conf_rng(&sslConf, mbedtls_ctr_drbg_random, &ctrDrbgCtx);
-//   ret = mbedtls_ssl_setup(&sslCtx, &sslConf);
-//   if (ret != 0) {
-//     BELL_LOG(error, LOG_TAG, "Failed to set up the SSL context: {}", ret);
-//     throw std::runtime_error("Failed to set up the SSL context");
-//   }
+  int ret = mbedtls_ssl_config_defaults(&sslConf, MBEDTLS_SSL_IS_CLIENT,
+                                        MBEDTLS_SSL_TRANSPORT_STREAM,
+                                        MBEDTLS_SSL_PRESET_DEFAULT);
+  if (ret != 0) {
+    return Result<>::fromError(make_tls_error_code(ret));
+  }
+  // TODO: Bundle verification & TLS 1.3
+  mbedtls_ssl_conf_authmode(&sslConf, MBEDTLS_SSL_VERIFY_NONE);
+  mbedtls_ssl_conf_max_tls_version(&sslConf, MBEDTLS_SSL_VERSION_TLS1_2);
 
-//   ret = mbedtls_ssl_set_hostname(&sslCtx, host.c_str());
-//   if (ret != 0) {
-//     BELL_LOG(error, LOG_TAG, "Failed to set the hostname: {}",
-//              mbedtlsErrString(ret));
-//     throw std::runtime_error("Failed to set the hostname");
-//   }
+  mbedtls_ssl_conf_rng(&sslConf, mbedtls_ctr_drbg_random, &ctrDrbgCtx);
+  ret = mbedtls_ssl_setup(&sslCtx, &sslConf);
+  if (ret != 0) {
+    return Result<>::fromError(make_tls_error_code(ret));
+  }
 
-//   while ((ret = mbedtls_ssl_handshake(&sslCtx)) != 0) {
-//     if (ret != MBEDTLS_ERR_SSL_WANT_READ && ret != MBEDTLS_ERR_SSL_WANT_WRITE) {
-//       BELL_LOG(error, LOG_TAG, "failed! config returned {}\n",
-//                mbedtlsErrString(ret));
-//       throw std::runtime_error("mbedtls_ssl_handshake error");
-//     }
-//   }
+  ret = mbedtls_ssl_set_hostname(&sslCtx, host.c_str());
+  if (ret != 0) {
+    return Result<>::fromError(make_tls_error_code(ret));
+  }
 
-//   return {};
-// }
+  while ((ret = mbedtls_ssl_handshake(&sslCtx)) != 0) {
+    if (ret != MBEDTLS_ERR_SSL_WANT_READ && ret != MBEDTLS_ERR_SSL_WANT_WRITE) {
+      return Result<>::fromError(make_tls_error_code(ret));
+    }
+  }
 
-// void net::TLSSocket::setReceiveTimeout(int timeoutMs) {
-//   if (!innerSocket) {
-//     throw std::runtime_error("Socket is not connected");
-//   }
+  return {};
+}
 
-//   if (timeoutMs > 0) {
-//     mbedtls_ssl_set_bio(&sslCtx, innerSocket.get(), mbedtlsSend, nullptr,
-//                         mbedtlsReceiveTimeout);
-//   } else {
-//     mbedtls_ssl_set_bio(&sslCtx, innerSocket.get(), mbedtlsSend, mbedtlsReceive,
-//                         nullptr);
-//   }
-//   innerSocket->setReceiveTimeout(timeoutMs);
-// };
+void net::TLSSocket::setupBioCallbacks(bool blocking) {
+  mbedtls_ssl_send_t* sendFunc = [](void* ctx, const unsigned char* buf,
+                                    size_t len) {
+    auto* socket = static_cast<TCPSocket*>(ctx);
 
-// void net::TLSSocket::setSendTimeout(int timeoutMs) {
-//   if (!innerSocket) {
-//     throw std::runtime_error("Socket is not connected");
-//   }
+    auto res = makeBioResult(socket->write(buf, len), false);
+    if (res) {
+      return res.getValue();
+    }
 
-//   innerSocket->setSendTimeout(timeoutMs);
-// };
+    return res.getError().value();
+  };
 
-// int net::TLSSocket::getFd() {
-//   if (!innerSocket) {
-//     throw std::runtime_error("Socket is not connected");
-//   }
-//   return innerSocket->getFd();
-// }
+  mbedtls_ssl_recv_t* recvFunc = nullptr;
+  mbedtls_ssl_recv_timeout_t* recvTimeoutFunc = nullptr;
 
-// net::Result<size_t> net::TLSSocket::read(uint8_t* buf, size_t len) {
-//   if (!innerSocket) {
-//     throw std::runtime_error("Socket is not connected");
-//   }
+  if (blocking) {
+    recvTimeoutFunc = [](void* ctx, unsigned char* buf, size_t len,
+                         uint32_t timeoutMs) {
+      auto* socket = static_cast<TCPSocket*>(ctx);
 
-//   int ret = mbedtls_ssl_read(&sslCtx, buf, len);
+      auto timeoutRes = socket->setReceiveTimeout(timeoutMs);
+      if (!timeoutRes) {
+        return timeoutRes.getError().value();
+      }
 
-//   if ((ret == MBEDTLS_ERR_SSL_WANT_READ) ||
-//       (ret == MBEDTLS_ERR_SSL_WANT_WRITE)) {
-//     // Timeout, ignore
-//     return 0;
-//   }
+      auto res = makeBioResult(socket->read(buf, len), true);
+      if (res) {
+        return res.getValue();
+      }
 
-//   if (ret < 0) {
-//     throw std::runtime_error(fmt::format(
-//         "Failed to read from the TLS socket, err={}", mbedtlsErrString(ret)));
-//   }
+      return res.getError().value();
+    };
+  } else {
 
-//   return ret;
-// }
+    recvFunc = [](void* ctx, unsigned char* buf, size_t len) {
+      auto* socket = static_cast<TCPSocket*>(ctx);
 
-// net::Result<size_t> net::TLSSocket::write(const uint8_t* buf, size_t len) {
-//   if (!innerSocket) {
-//     throw std::runtime_error("Socket is not connected");
-//   }
+      auto res = makeBioResult(socket->read(buf, len), true);
+      if (res) {
+        return res.getValue();
+      }
 
-//   int ret = mbedtls_ssl_write(&sslCtx, buf, len);
+      return res.getError().value();
+    };
+  }
 
-//   if ((ret == MBEDTLS_ERR_SSL_WANT_READ) ||
-//       (ret == MBEDTLS_ERR_SSL_WANT_WRITE)) {
-//     // Timeout, ignore
-//     return 0;
-//   }
+  mbedtls_ssl_set_bio(&sslCtx, &innerSocket, sendFunc, recvFunc,
+                      recvTimeoutFunc);
+}
 
-//   if (ret < 0) {
-//     throw std::runtime_error(
-//         fmt::format("Failed to write to the TLS socket, err={}", ret));
-//   }
+net::Result<> net::TLSSocket::setReceiveTimeout(int timeoutMs) {
+  return innerSocket.setReceiveTimeout(timeoutMs);
+};
 
-//   return ret;
-// }
+net::Result<> net::TLSSocket::setSendTimeout(int timeoutMs) {
+  return innerSocket.setSendTimeout(timeoutMs);
+};
 
-// net::Result<> net::TLSSocket::bind(const std::string& /*address*/,
-//                                    uint16_t /*port*/) {
-//   throw std::runtime_error("Not implemented");
-// }
+net::Result<int> net::TLSSocket::getReceiveTimeout() {
+  return innerSocket.getReceiveTimeout();
+};
 
-// void net::TLSSocket::setBlocking(bool blocking) {
-//   if (!innerSocket) {
-//     throw std::runtime_error("Socket is not connected");
-//   }
-//   innerSocket->setBlocking(blocking);
-// };
+net::Result<int> net::TLSSocket::getSendTimeout() {
+  return innerSocket.getSendTimeout();
+};
 
-// bool net::TLSSocket::isValid() const {
-//   return innerSocket && innerSocket->isValid();
-// }
+net::Result<> net::TLSSocket::setBlocking(bool blocking) {
+  setupBioCallbacks(blocking);
+  return innerSocket.setBlocking(blocking);
+}
 
-// void net::TLSSocket::close() {
-//   if (innerSocket && innerSocket->isValid()) {
-//     mbedtls_ssl_close_notify(&sslCtx);
-//     innerSocket->close();
-//   }
-// }
+net::Result<bool> net::TLSSocket::getBlocking() const {
+  return innerSocket.getBlocking();
+}
 
-// int net::TLSSocket::mbedtlsReceive(void* ctx, unsigned char* buf, size_t len) {
-//   auto* socket = static_cast<TCPSocket*>(ctx);
+int net::TLSSocket::getFd() const {
+  return innerSocket.getFd();
+}
 
-//   try {
-//     return socket->read(buf, len).unwrap();
-//   } catch (...) {
-//     // Handle the error
-//     auto err = errno;
-//     switch (err) {
-//       case EWOULDBLOCK:
-//       case EINTR:
-//         return MBEDTLS_ERR_SSL_WANT_READ;
-//       default:
-//         return err;
-//     }
-//   }
-// }
+int net::TLSSocket::takeFd() {
+  return innerSocket.takeFd();
+}
 
-// int net::TLSSocket::mbedtlsSend(void* ctx, const unsigned char* buf,
-//                                 size_t len) {
-//   auto* socket = static_cast<TCPSocket*>(ctx);
-//   try {
-//     return socket->write(buf, len).unwrap();
-//   } catch (...) {
-//     int err = errno;
-//     // Handle the error
-//     switch (err) {
-//       case EWOULDBLOCK:
-//       case EINTR:
-//         return MBEDTLS_ERR_SSL_WANT_WRITE;
-//       default:
-//         return err;
-//     }
-//   }
-// }
+net::Result<size_t> net::TLSSocket::read(uint8_t* buf, size_t len) {
+  int res = mbedtls_ssl_read(&sslCtx, buf, len);
 
-// int net::TLSSocket::mbedtlsReceiveTimeout(void* ctx, unsigned char* buf,
-//                                           size_t len, uint32_t /*timeoutMs*/) {
-//   auto* socket = static_cast<TCPSocket*>(ctx);
+  if (res < 0) {
+    return Result<size_t>::fromError(mbedtlsToCommonErrc(res));
+  }
 
-//   try {
-//     return socket->read(buf, len).unwrap();
-//   } catch (...) {
-//     // Handle the error
-//     auto err = errno;
-//     switch (err) {
-//       case EWOULDBLOCK:
-//       case EINTR:
-//         return MBEDTLS_ERR_SSL_WANT_READ;
-//       default:
-//         return err;
-//     }
-//   }
-// }
+  return static_cast<size_t>(res);
+}
+
+net::Result<size_t> net::TLSSocket::write(const uint8_t* buf, size_t len) {
+  int res = mbedtls_ssl_write(&sslCtx, buf, len);
+
+  if (res < 0) {
+    return Result<size_t>::fromError(mbedtlsToCommonErrc(res));
+  }
+
+  return static_cast<size_t>(res);
+}
+
+bool net::TLSSocket::isValid() const {
+  return innerSocket.isValid();
+}
+
+void net::TLSSocket::close() {
+  if (innerSocket.isValid()) {
+    mbedtls_ssl_close_notify(&sslCtx);
+    innerSocket.close();
+  }
+}

@@ -37,10 +37,10 @@ Result<size_t> UDPSocket::recvfrom(uint8_t* buf, size_t len,
   // Perform the actual read operation
   // Using const_cast to remove the const qualifier from the address, as recvfrom expects a non-const
   // This is quite ugly, but recvfrom is a C API and we can't change it.
-  ssize_t res =
-      ::recvfrom(sockFd, buf, len, 0,
-                 const_cast<sockaddr*>(address.getSockAddrPtr()),  // NOLINT
-                 &addressLen);
+  ssize_t res = ::recvfrom(
+      sockFd, buf, len, 0,
+      const_cast<sockaddr*>(address.getSockAddrPtrConst()),  // NOLINT
+      &addressLen);
   if (res < 0) {
     return Result<size_t>::fromLastErrno();
   }
@@ -58,7 +58,7 @@ Result<size_t> UDPSocket::sendto(const uint8_t* buf, size_t len,
   // This is quite ugly, but recvfrom is a C API and we can't change it.
   ssize_t res =
       ::sendto(sockFd, buf, len, 0,
-               const_cast<sockaddr*>(address.getSockAddrPtr()),  // NOLINT
+               const_cast<sockaddr*>(address.getSockAddrPtrConst()),  // NOLINT
                address.getSockAddrLen());
   if (res < 0) {
     return Result<size_t>::fromLastErrno();

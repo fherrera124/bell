@@ -28,12 +28,12 @@ http::Connection::Connection(const std::string& url, int timeoutMs,
   bool useTLS = secure && parsedUri->scheme == "https";
 
   if (useTLS) {
-    // auto socket = std::make_shared<net::TLSSocket>();
-    // socket->connect(parsedUri->host.value(), parsedUri->port.value_or(443),
-    //                 timeoutMs);
+    auto socket = std::make_shared<net::TLSSocket>();
+    socket->connect(parsedUri->host.value(), parsedUri->port.value_or(443),
+                    timeoutMs);
 
-    // // Wrap the socket in socket stream
-    // socketStream = std::make_shared<net::SocketStream>(std::move(socket));
+    // Wrap the socket in socket stream
+    socketStream = std::make_shared<net::SocketStream>(std::move(socket));
   } else {
     auto socket = std::make_shared<net::TCPSocket>();
     socket->connect(parsedUri->host.value(), parsedUri->port.value_or(80),

@@ -19,7 +19,7 @@ void SocketPollListener::registerSocket(const std::shared_ptr<Socket>& socket,
 
   if (handlers.find(socket->getFd()) == handlers.end()) {
     // Create a new handler for the socket
-    handlers[socket->getFd()] = {socket, {}};
+    handlers[socket->getFd()] = {.socketPtr = socket, .callbacks = {}};
   }
 
   handlers[socket->getFd()].callbacks[polledEvent] = onEvent;

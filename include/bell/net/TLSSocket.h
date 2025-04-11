@@ -1,87 +1,122 @@
-// #pragma once
+#pragma once
 
-// // Standard includes
-// #include <netinet/in.h>
-// #include <cstdint>
+// Standard includes
+#include <netinet/in.h>
+#include <array>
+#include <cstdint>
 
-// // MbedTLS includes
-// #include "bell/net/TCPSocket.h"
-// #include "mbedtls/ctr_drbg.h"
-// #include "mbedtls/entropy.h"
-// #include "mbedtls/ssl.h"
+// MbedTLS includes
+#include "bell/net/TCPSocket.h"
+#include "mbedtls/ctr_drbg.h"
+#include "mbedtls/entropy.h"
+#include "mbedtls/error.h"
+#include "mbedtls/ssl.h"
 
-// #include "bell/net/Result.h"
-// #include "bell/net/Socket.h"
+#include "bell/net/Result.h"
+#include "bell/net/Socket.h"
 
-// namespace bell::net {
-// /**
-//  * @brief TLSSocket implementation of the bell::Socket, using MbedTLS.
-//  */
-// class TLSSocket : public Socket {
-//  public:
-//   TLSSocket();
-//   ~TLSSocket() override;
+namespace internal {
+class tls_errc_category : public std::error_category {
+ public:
+  const char* name() const noexcept override { return "MbedTLS"; }
+  std::string message(int ev) const override {
+    std::array<char, 256> errBuf;
+    mbedtls_strerror(ev, errBuf.data(), sizeof(errBuf));
+    return {errBuf.data()};
+  }
+};
+}  // namespace internal
 
-//   /**
-//    * @brief Set a socket option with a templated value.
-//    *
-//    * This method wraps the setsockopt function to set various socket options,
-//    * inferring the value's size based on the type of optionValue.
-//    *
-//    * @param level The level at which the option is defined (e.g., SOL_SOCKET).
-//    * @param optionName The name of the option to be set (e.g., SO_REUSEADDR).
-//    * @param optionValue The value of the option to be set.
-//    */
-//   template <typename T>
-//   Result<> setOption(int level, int optionName, const T& optionValue) {
-//     return setOptionImpl(level, optionName, &optionValue, sizeof(T));
-//   }
+namespace bell::net {
 
-//   /**
-//    * @brief Resolve the provided host and port, and attempt to create a socket connected there.
-//    *
-//    * This method resolves the hostname and attempts to connect to the specified port. It will also set the default timeout for the socket.
-//    *
-//    * @param host String containing a hostname or IP address to connect to.
-//    * @param port The port number to connect to on the specified host.
-//    * @param timeout The maximum time to wait for the connection to be established, in milliseconds. This parameter is ignored, if the socket is set to a blocking mode.
-//    */
-//   Result<> connect(const std::string& host, uint16_t port, int timeoutMs = 0);
+// Define a custom error category for MbedTLS errors
+const ::internal::tls_errc_category& tls_errc_category();
 
-//   // Socket interface overrides
-//   void setSendTimeout(int timeoutMs) override;
-//   void setReceiveTimeout(int timeoutMs) override;
-//   int getFd() override;
-//   Result<size_t> read(uint8_t* buf, size_t len) override;
-//   Result<size_t> write(const uint8_t* buf, size_t len) override;
-//   Result<> bind(const std::string& address, uint16_t port) override;
-//   void setBlocking(bool blocking) override;
-//   bool isValid() const override;
-//   void close() override;
+// Make a custom error code for MbedTLS errors
+inline ::std::error_code make_tls_error_code(int err) {
+  return {err, tls_errc_category()};
+}
 
-//   // Callbacks passed to MbedTLS bio functions
-//   static int mbedtlsSend(void* ctx, const unsigned char* buf, size_t len);
-//   static int mbedtlsReceive(void* ctx, unsigned char* buf, size_t len);
-//   static int mbedtlsReceiveTimeout(void* ctx, unsigned char* buf, size_t len,
-//                                    uint32_t timeoutMs);
+// TLS Error type
+class tls_error : public ::std::system_error {
+ public:
+  tls_error(int err) : system_error{make_tls_error_code(err)} {}
+};
 
-//  private:
-//   const char* LOG_TAG = "TLSSocket";
+/**
+ * @brief TLSSocket implementation of the bell::Socket, using MbedTLS.
+ */
+class TLSSocket : public Socket {
+ public:
+  // Delete copy constructor and copy assignment operator
+  TLSSocket(const TLSSocket&) = delete;
+  TLSSocket& operator=(const TLSSocket&) = delete;
 
-//   // MbedTLS structures
-//   mbedtls_entropy_context entropyCtx{};
-//   mbedtls_ctr_drbg_context ctrDrbgCtx{};
-//   mbedtls_ssl_context sslCtx{};
-//   mbedtls_ssl_config sslConf{};
+  // implement move constructor and move assignment operator
+  TLSSocket(TLSSocket&& sock) noexcept {
+    this->innerSocket = std::move(sock.innerSocket);
+    this->sslCtx = sock.sslCtx;
+    this->sslConf = sock.sslConf;
+    this->ctrDrbgCtx = sock.ctrDrbgCtx;
+    this->entropyCtx = sock.entropyCtx;
+  }
 
-//   Result<> setOptionImpl(int level, int optionName, const void* optionValue,
-//                          socklen_t optionLen);
+  TLSSocket& operator=(TLSSocket&& sock) noexcept {
+    if (this != &sock) {
+      this->innerSocket = std::move(sock.innerSocket);
+      this->sslCtx = sock.sslCtx;
+      this->sslConf = sock.sslConf;
+      this->ctrDrbgCtx = sock.ctrDrbgCtx;
+      this->entropyCtx = sock.entropyCtx;
+    }
+    return *this;
+  }
 
-//  protected:
-//   std::shared_ptr<bell::TCPSocket> innerSocket;
-// };
-// }  // namespace bell::net
+  TLSSocket();
+  ~TLSSocket() override;
 
-// namespace bell {
-// using TLSSocket = net::TLSSocket;
-// }
+  /**
+   * @brief Resolve the provided host and port, and attempt to create a socket connected there.
+   *
+   * This method resolves the hostname and attempts to connect to the specified port. It will also set the default timeout for the socket.
+   *
+   * @param host String containing a hostname or IP address to connect to.
+   * @param port The port number to connect to on the specified host.
+   * @param timeout The maximum time to wait for the connection to be established, in milliseconds. This parameter is ignored, if the socket is set to a blocking mode.
+   */
+  Result<> connect(const std::string& host, uint16_t port, int timeoutMs = 0);
+
+  // Socket interface overrides
+  Result<> setSendTimeout(int timeoutMs) override;
+  Result<> setReceiveTimeout(int timeoutMs) override;
+  Result<int> getSendTimeout() override;
+  Result<int> getReceiveTimeout() override;
+  Result<size_t> read(uint8_t* buf, size_t len) override;
+  Result<size_t> write(const uint8_t* buf, size_t len) override;
+  Result<> setBlocking(bool blocking) override;
+  Result<bool> getBlocking() const override;
+  bool isValid() const override;
+  void close() override;
+  int getFd() const override;
+  int takeFd() override;
+
+ private:
+  const char* LOG_TAG = "TLSSocket";
+
+  // MbedTLS structures
+  mbedtls_entropy_context entropyCtx{};
+  mbedtls_ctr_drbg_context ctrDrbgCtx{};
+  mbedtls_ssl_context sslCtx{};
+  mbedtls_ssl_config sslConf{};
+
+  // Hooks for MbedTLS bio functions, depending on the blocking mode
+  void setupBioCallbacks(bool blocking);
+
+ protected:
+  bell::TCPSocket innerSocket;  // Inner socket for TLS connection
+};
+}  // namespace bell::net
+
+namespace bell {
+using TLSSocket = net::TLSSocket;
+}

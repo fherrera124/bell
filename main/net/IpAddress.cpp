@@ -72,11 +72,18 @@ IpAddress::Type IpAddress::getType() const {
   return addressType;
 }
 
-const sockaddr* IpAddress::getSockAddrPtr() const {
+const sockaddr* IpAddress::getSockAddrPtrConst() const {
   if (addressType == Type::Unknown) {
     throw std::runtime_error("Unknown address type");
   }
   return reinterpret_cast<const sockaddr*>(&storage);
+}
+
+sockaddr* IpAddress::getSockAddrPtr() {
+  if (addressType == Type::Unknown) {
+    throw std::runtime_error("Unknown address type");
+  }
+  return reinterpret_cast<sockaddr*>(&storage);
 }
 
 socklen_t IpAddress::getSockAddrLen() const {
@@ -91,15 +98,16 @@ void IpAddress::setPort(uint16_t port) {
     throw std::runtime_error("Unknown address type");
   }
 
-  this->port = port;
+  // In case port is 0, we set it to the default port for the address type
+  uint16_t actualPort = port > 0 ? htons(port) : port;
 
   // Set the port in the address structure
   if (addressType == Type::IPv4) {
     auto* addr_in = reinterpret_cast<sockaddr_in*>(&storage);
-    addr_in->sin_port = htons(port);
+    addr_in->sin_port = actualPort;
   } else if (addressType == Type::IPv6) {
     auto* addr_in6 = reinterpret_cast<sockaddr_in6*>(&storage);
-    addr_in6->sin6_port = htons(port);
+    addr_in6->sin6_port = actualPort;
   }
 }
 
@@ -115,10 +123,10 @@ int IpAddress::getFamily() const {
 }
 
 std::optional<IpAddress> IpAddress::fromString(const std::string& addrStr) {
-  struct sockaddr_in ipv4Addr{};
+  struct sockaddr_in ipv4Addr {};
   auto* sockAddrv4 = reinterpret_cast<sockaddr*>(&ipv4Addr);
 
-  struct sockaddr_in6 ipv6Addr{};
+  struct sockaddr_in6 ipv6Addr {};
   auto* sockAddrv6 = reinterpret_cast<sockaddr*>(&ipv6Addr);
 
   // Try to parse IPv4 address
@@ -137,7 +145,17 @@ std::optional<IpAddress> IpAddress::fromString(const std::string& addrStr) {
 }
 
 std::optional<uint16_t> IpAddress::getPort() const {
-  return port;
+  if (addressType == Type::IPv4) {
+    const auto* addr_in = reinterpret_cast<const sockaddr_in*>(&storage);
+    return ntohs(addr_in->sin_port);
+  }
+
+  if (addressType == Type::IPv6) {
+    const auto* addr_in = reinterpret_cast<const sockaddr_in6*>(&storage);
+    return ntohs(addr_in->sin6_port);
+  }
+
+  return std::nullopt;
 }
 
 std::optional<std::string> IpAddress::getOriginalHost() const {
@@ -162,7 +180,7 @@ Result<IpAddress> IpAddress::resolveDomain(const std::string& hostname,
   }
 
   // Otherwise, treat it as a domain name and resolve it
-  struct addrinfo hints{};
+  struct addrinfo hints {};
   struct addrinfo* res = nullptr;
   memset(&hints, 0, sizeof(hints));
   hints.ai_family = family;      // Allow both IPv4 and IPv6

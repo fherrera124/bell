@@ -4,6 +4,7 @@
 #include <sys/poll.h>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <unordered_map>
 #include <vector>
 
@@ -20,7 +21,7 @@ class SocketPollListener {
     Writeable = POLLOUT,  // Writable
     Error = POLLERR,      // Error
     Hangup = POLLHUP,     // Hangup
-    Priority = POLLPRI,   // Priority
+    Priority = POLLPRI    // Priority
   };
 
   using EventCallback = std::function<void(Socket&)>;

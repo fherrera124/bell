@@ -10,6 +10,10 @@ namespace bell::net {
  */
 class TCPSocket : public POSIXSocket {
  public:
+  // Delete copy constructor and copy assignment operator
+  TCPSocket(const TCPSocket&) = delete;
+  TCPSocket& operator=(const TCPSocket&) = delete;
+
   /**
   * @brief Default constructor for the TCPSocket class. Initializes the socket to INVALID_FD.
   */
@@ -28,7 +32,15 @@ class TCPSocket : public POSIXSocket {
   /**
    * @brief Move constructor for the TCPSocket class
    */
-  TCPSocket(TCPSocket&& sock) noexcept { this->sockFd = sock.getFd(true); }
+  TCPSocket(TCPSocket&& sock) noexcept { this->sockFd = sock.takeFd(); }
+
+  // Define move assignment operator
+  TCPSocket& operator=(TCPSocket&& sock) noexcept {
+    if (this != &sock) {
+      this->sockFd = sock.takeFd();
+    }
+    return *this;
+  }
 
   /**
    * @brief Resolve the provided host and port, and attempt to create a socket connected there.

@@ -2,10 +2,6 @@
 
 #include <fmt/format.h>
 #include <cerrno>
-#include <iostream>
-#include <stdexcept>
-
-#include "bell/Logger.h"
 #include "bell/net/IpAddress.h"
 #include "bell/net/Result.h"
 #include "bell/utils/Utils.h"
@@ -33,12 +29,13 @@
 
 using namespace bell::net;
 
-void POSIXSocket::setBlocking(bool blocking) {
+Result<> POSIXSocket::setBlocking(bool blocking) {
   if (isValid()) {
 #ifdef _WIN32
     unsigned long mode = blocking ? 0 : 1;
     if (ioctlsocket(sockFd, FIONBIO, &mode) != 0) {
-      throw std::runtime_error("Could not set socket flags");
+      // throw std::runtime_error("Could not set socket flags");
+      return Result<>::fromLastErrno();
     }
 #else
     int flags = fcntl(sockFd, F_GETFL, 0);
@@ -47,10 +44,12 @@ void POSIXSocket::setBlocking(bool blocking) {
     }
     flags = blocking ? (flags & ~O_NONBLOCK) : (flags | O_NONBLOCK);
     if (fcntl(sockFd, F_SETFL, flags) != 0) {
-      throw std::runtime_error("Could not set socket flags");
+      return Result<>::fromLastErrno();
     }
 #endif
   }
+
+  return {};
 }
 
 std::error_code POSIXSocket::lastError() const {
@@ -101,14 +100,14 @@ Result<> POSIXSocket::createFd(int domain, int protocol) {
   return {};
 }
 
-int POSIXSocket::getFd(bool invalidate) {
-  if (invalidate) {
-    int fd = sockFd;
-    sockFd = INVALID_FD;
-    return fd;
-  }
-
+int POSIXSocket::getFd() const {
   return sockFd;
+}
+
+int POSIXSocket::takeFd() {
+  int fd = sockFd;
+  sockFd = INVALID_FD;
+  return fd;
 }
 
 bool POSIXSocket::isValid() const {
@@ -126,32 +125,50 @@ void POSIXSocket::close() {
   }
 }
 
-Result<> POSIXSocket::bind(const std::string& address, uint16_t port) {
+Result<int> POSIXSocket::bind(const std::string& address, uint16_t port,
+                              bool reuseAddr) {
   auto res = IpAddress::resolveDomain(address, getSockType());
 
   if (!res) {
-    return Result<>::fromError(res.getError());
+    return Result<int>::fromError(res.getError());
   }
 
   auto resolved = res.getValue();
   resolved.setPort(port);
 
-  createFd(resolved.getFamily(), IPPROTO_IP);
+  auto fdRes = createFd(resolved.getFamily(), IPPROTO_IP);
 
-  // Set REUSEADDR option
-  auto optionRes = setOption(SOL_SOCKET, SO_REUSEADDR, 1);
-
-  if (!optionRes) {
-    return optionRes;
+  if (!fdRes) {
+    return Result<int>::fromError(fdRes.getError());
   }
 
-  if (::bind(sockFd, resolved.getSockAddrPtr(), resolved.getSockAddrLen()) !=
-      0) {
+  if (reuseAddr) {
+    auto optionRes = setOption(SOL_SOCKET, SO_REUSEADDR, 1);
+
+    if (!optionRes) {
+      return Result<int>::fromError(optionRes.getError());
+    }
+  }
+
+  if (::bind(sockFd, resolved.getSockAddrPtrConst(),
+             resolved.getSockAddrLen()) != 0) {
     close();
-    return Result<>::fromLastErrno();
+    return Result<int>::fromLastErrno();
   }
 
-  return {};
+  socklen_t servSockLen = resolved.getSockAddrLen();
+
+  // Retrieve assigned port
+  if (getsockname(sockFd, resolved.getSockAddrPtr(), &servSockLen) != 0) {
+    close();
+    return Result<int>::fromLastErrno();
+  }
+
+  if (resolved.getPort().has_value()) {
+    return *resolved.getPort();
+  }
+
+  return Result<int>::fromError(std::errc::invalid_argument);
 }
 
 Result<> POSIXSocket::setOptionImpl(int level, int optionName,
@@ -181,28 +198,36 @@ Result<> POSIXSocket::getOptionImpl(int level, int optionName,
   return {};
 }
 
-void POSIXSocket::setReceiveTimeout(int timeoutMs) {
-  if (timeoutMs == 0) {
-    // Switch to blocking mode
-    setBlocking(true);
-    return;
-  }
-
-  setBlocking(false);
+Result<> POSIXSocket::setReceiveTimeout(int timeoutMs) {
   auto timeVal = bell::utils::millisecondsToTimeval(timeoutMs);
-  setOption(SOL_SOCKET, SO_RCVTIMEO, timeVal);
+  return setOption(SOL_SOCKET, SO_RCVTIMEO, timeVal);
 }
 
-void POSIXSocket::setSendTimeout(int timeoutMs) {
-  if (timeoutMs == 0) {
-    // Switch to blocking mode
-    setBlocking(true);
-    return;
+Result<> POSIXSocket::setSendTimeout(int timeoutMs) {
+  auto timeVal = bell::utils::millisecondsToTimeval(timeoutMs);
+  return setOption(SOL_SOCKET, SO_SNDTIMEO, timeVal);
+}
+
+Result<int> POSIXSocket::getReceiveTimeout() {
+  struct timeval timeVal {};
+  auto res = getOptionImpl(SOL_SOCKET, SO_RCVTIMEO, &timeVal, sizeof(timeVal));
+
+  if (!res) {
+    return Result<int>::fromError(res.getError());
   }
 
-  setBlocking(false);
-  auto timeVal = bell::utils::millisecondsToTimeval(timeoutMs);
-  setOption(SOL_SOCKET, SO_SNDTIMEO, timeVal);
+  return static_cast<int>(utils::timevalToMilliseconds(timeVal));
+}
+
+Result<int> POSIXSocket::getSendTimeout() {
+  struct timeval timeVal {};
+  auto res = getOptionImpl(SOL_SOCKET, SO_SNDTIMEO, &timeVal, sizeof(timeVal));
+
+  if (!res) {
+    return Result<int>::fromError(res.getError());
+  }
+
+  return static_cast<int>(utils::timevalToMilliseconds(timeVal));
 }
 
 Result<bool> POSIXSocket::getBlocking() const {

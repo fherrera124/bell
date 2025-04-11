@@ -63,21 +63,35 @@ class POSIXSocket : public Socket {
   }
 
   /**
+   * @brief Bind the socket to a specific address and port.
+   *
+   * @param address A string representation of the address to bind to (e.g., "127.0.0.1").
+   * @param port The port number to bind to, or 0 for a random port.
+   * @param reuseAddr If true, allows the socket to bind to an address that is already in use.
+   *
+   * @return Result<int> resulting port number or an error code.
+   */
+  Result<int> bind(const std::string& address, uint16_t port,
+                   bool reuseAddr = true);
+
+  /**
    * @brief Returns the last error code from the socket, using SO_ERROR.
    */
   std::error_code lastError() const;
 
   // Socket interface overrides
-  void setReceiveTimeout(int timeoutMs) override;
-  void setSendTimeout(int timeoutMs) override;
+  Result<> setReceiveTimeout(int timeoutMs) override;
+  Result<> setSendTimeout(int timeoutMs) override;
+  Result<int> getReceiveTimeout() override;
+  Result<int> getSendTimeout() override;
   Result<size_t> read(uint8_t* buf, size_t len) override;
   Result<size_t> write(const uint8_t* buf, size_t len) override;
-  Result<> bind(const std::string& address, uint16_t port) override;
-  void setBlocking(bool blocking) override;
+  Result<> setBlocking(bool blocking) override;
   Result<bool> getBlocking() const override;
   bool isValid() const override;
   void close() override;
-  int getFd(bool invalidate = false) override;
+  int takeFd() override;
+  int getFd() const override;
 
   // To be implemented by derived classes
   virtual int getSockType() = 0;

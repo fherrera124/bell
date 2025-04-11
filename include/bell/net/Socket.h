@@ -33,7 +33,7 @@ class Socket {
    *
    * @param blocking True to set the socket to blocking mode, false for non-blocking.
    */
-  virtual void setBlocking(bool blocking) = 0;
+  virtual Result<> setBlocking(bool blocking) = 0;
 
   /**
    * @brief Get the blocking mode of the socket.
@@ -47,14 +47,28 @@ class Socket {
    *
    * @param timeoutMs Timeout in milliseconds. A value of 0 indicates a non-blocking operation.
    */
-  virtual void setReceiveTimeout(int timeoutMs) = 0;
+  virtual Result<> setReceiveTimeout(int timeoutMs) = 0;
 
   /**
    * @brief Sets the send timeout for socket operations
    * 
    * @param timeoutMs Timeout in milliseconds. A value of 0 indicates a non-blocking operation.
    */
-  virtual void setSendTimeout(int timeoutMs) = 0;
+  virtual Result<> setSendTimeout(int timeoutMs) = 0;
+
+  /**
+   * @brief Get the read timeout for socket operations.
+   *
+   * @return The read timeout in milliseconds. A value of 0 indicates a non-blocking operation.
+   */
+  virtual Result<int> getReceiveTimeout() = 0;
+
+  /**
+   * @brief Get the send timeout for socket operations.
+   *
+   * @return The send timeout in milliseconds. A value of 0 indicates a non-blocking operation.
+   */
+  virtual Result<int> getSendTimeout() = 0;
 
   /**
    * @brief Write data to the socket.
@@ -85,14 +99,6 @@ class Socket {
   virtual Result<size_t> read(uint8_t* buf, size_t len) = 0;
 
   /**
-   * @brief Bind the socket to a specific address and port.
-   *
-   * @param address A string representation of the address to bind to (e.g., "127.0.0.1").
-   * @param port The port number to bind to.
-   */
-  virtual Result<> bind(const std::string& address, uint16_t port) = 0;
-
-  /**
    * @brief Check if the socket is open
    *
    * @return True if the socket is open, false otherwise.
@@ -110,11 +116,19 @@ class Socket {
   /**
    * @brief Get the file descriptor associated with the socket.
    *
-   * @param invalidate If true, the file descriptor will be invalidated after retrieval. Used during move operations.
+   * @return The file descriptor associated with the socket.
+   */
+  virtual int getFd() const = 0;
+
+  /**
+   * @brief Take ownership of the file descriptor associated with the socket.
+   *
+   * This method transfers ownership of the file descriptor to the caller, making
+   * the socket invalid for further operations.
    *
    * @return The file descriptor associated with the socket.
    */
-  virtual int getFd(bool invalidate = false) = 0;
+  virtual int takeFd() = 0;
 };
 }  // namespace bell::net
 
