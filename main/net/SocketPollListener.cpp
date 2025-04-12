@@ -3,7 +3,9 @@
 // Standar includes
 #include <sys/poll.h>
 #include <cstring>
+#include <iostream>
 
+#include "bell/utils/Utils.h"
 #include "fmt/format.h"
 
 using namespace bell::net;
@@ -28,6 +30,7 @@ void SocketPollListener::registerSocket(const std::shared_ptr<Socket>& socket,
 }
 void SocketPollListener::updateFdList() {
   fds.clear();
+
   for (const auto& handler : handlers) {
     pollfd pfd{};
     pfd.fd = handler.first;
@@ -51,6 +54,9 @@ void SocketPollListener::updateFdList() {
         case Event::Priority:
           pfd.events |= POLLPRI;
           break;
+        case Event::All:
+          pfd.events |= POLLIN | POLLOUT | POLLERR | POLLHUP | POLLPRI;
+          break;
       }
     }
 
@@ -59,11 +65,18 @@ void SocketPollListener::updateFdList() {
   }
 }
 
-void SocketPollListener::unregisterSocket(int fd) {
+void SocketPollListener::unregisterSocket(const std::shared_ptr<Socket>& socket,
+                                          Event polledEvent) {
   std::scoped_lock lock(pollMutex);
-
-  // Remove the handler
-  handlers.erase(fd);
+  if (socket->isValid() && handlers.find(socket->getFd()) != handlers.end()) {
+    if (polledEvent == Event::All) {
+      // Remove all events for the socket
+      handlers.erase(socket->getFd());
+    } else {
+      // Remove the specific event for the socket
+      handlers[socket->getFd()].callbacks.erase(polledEvent);
+    }
+  }
 
   updateFdList();
 }
@@ -72,6 +85,7 @@ void SocketPollListener::poll(int timeoutMs) {
   std::scoped_lock lock(pollMutex);
 
   if (fds.empty()) {
+    bell::utils::sleepMs(timeoutMs);
     return;  // Nothing to poll
   }
 
@@ -131,7 +145,7 @@ void SocketPollListener::poll(int timeoutMs) {
         if ((pfd.revents & POLLERR) &&
             it->second.callbacks.contains(Event::Error)) {
           // Call the writeable callback
-          it->second.callbacks[Event::Writeable](*socketPtr);
+          it->second.callbacks[Event::Error](*socketPtr);
         }
 
         if (pfd.revents & POLLHUP) {

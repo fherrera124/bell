@@ -175,8 +175,8 @@ void http::Server::taskLoop() {
 
     if (it->closed) {
       BELL_LOG(debug, LOG_TAG, "Closing connection");
-      it->socket->close();
       FD_CLR(it->socket->getFd(), &masterFdSet);
+      it->socket->close();
       it = connections.erase(it);
     } else {
       ++it;

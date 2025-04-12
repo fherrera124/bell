@@ -21,7 +21,8 @@ class SocketPollListener {
     Writeable = POLLOUT,  // Writable
     Error = POLLERR,      // Error
     Hangup = POLLHUP,     // Hangup
-    Priority = POLLPRI    // Priority
+    Priority = POLLPRI,   // Priority
+    All = 0xFFFF          // All events, used for unregistering
   };
 
   using EventCallback = std::function<void(Socket&)>;
@@ -40,7 +41,8 @@ class SocketPollListener {
   void poll(int timeoutMs = 100);
 
   // Unregisters a socket from the poll listener
-  void unregisterSocket(int fd);
+  void unregisterSocket(const std::shared_ptr<Socket>& socket,
+                        Event polledEvent = Event::All);
 
  private:
   struct SocketCallbacks {

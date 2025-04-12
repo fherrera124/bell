@@ -54,7 +54,7 @@ class Task {
    * @brief The task loop function. This function is called repeatedly by the runTask method.
    * @remark This method should be implemented by the derived class to perform the task's work, unless a custom runTask method is provided.
    */
-  virtual void taskLoop() {};
+  virtual void taskLoop(){};
 
   // @brief Starts the task's execution. This method is implemented per-platform.
   bool startTask();
