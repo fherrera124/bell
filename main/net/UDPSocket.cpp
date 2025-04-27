@@ -26,8 +26,8 @@
 
 using namespace bell::net;
 
-Result<size_t> UDPSocket::recvfrom(uint8_t* buf, size_t len,
-                                   const IpAddress& address) {
+bell::Result<size_t> UDPSocket::recvfrom(uint8_t* buf, size_t len,
+                                         const IpAddress& address) {
   if (!isValid()) {
     return Result<size_t>::fromError(std::errc::invalid_argument);
   }
@@ -48,8 +48,8 @@ Result<size_t> UDPSocket::recvfrom(uint8_t* buf, size_t len,
   return static_cast<size_t>(res);
 }
 
-Result<size_t> UDPSocket::sendto(const uint8_t* buf, size_t len,
-                                 const IpAddress& address) {
+bell::Result<size_t> UDPSocket::sendto(const uint8_t* buf, size_t len,
+                                       const IpAddress& address) {
   if (!isValid()) {
     return Result<size_t>::fromError(std::errc::invalid_argument);
   }

@@ -8,7 +8,7 @@
 #include <string>
 
 // Bell includes
-#include "bell/net/Result.h"
+#include "bell/Result.h"
 
 namespace bell::net {
 class IpAddress {

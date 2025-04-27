@@ -1,9 +1,9 @@
 #pragma once
 
+// Standard includes
 #include <cstdint>
-#include <string>
 
-#include "bell/net/Result.h"
+#include "bell/Result.h"
 
 namespace bell::net {
 /**
@@ -37,7 +37,7 @@ class Socket {
 
   /**
    * @brief Get the blocking mode of the socket.
-   * 
+   *
    * @return true if the socket is in blocking mode, false otherwise.
    */
   virtual Result<bool> getBlocking() const = 0;
@@ -51,7 +51,7 @@ class Socket {
 
   /**
    * @brief Sets the send timeout for socket operations
-   * 
+   *
    * @param timeoutMs Timeout in milliseconds. A value of 0 indicates a non-blocking operation.
    */
   virtual Result<> setSendTimeout(int timeoutMs) = 0;

@@ -1,9 +1,8 @@
 #include "bell/net/POSIXSocket.h"
 
 #include <fmt/format.h>
-#include <cerrno>
+#include "bell/Result.h"
 #include "bell/net/IpAddress.h"
-#include "bell/net/Result.h"
 #include "bell/utils/Utils.h"
 
 // Platform specific socket includes
@@ -29,7 +28,7 @@
 
 using namespace bell::net;
 
-Result<> POSIXSocket::setBlocking(bool blocking) {
+bell::Result<> POSIXSocket::setBlocking(bool blocking) {
   if (isValid()) {
 #ifdef _WIN32
     unsigned long mode = blocking ? 0 : 1;
@@ -63,7 +62,7 @@ std::error_code POSIXSocket::lastError() const {
   return {0, std::system_category()};
 }
 
-Result<size_t> POSIXSocket::read(uint8_t* buf, size_t len) {
+bell::Result<size_t> POSIXSocket::read(uint8_t* buf, size_t len) {
   if (!isValid()) {
     return Result<size_t>::fromError(std::errc::invalid_argument);
   }
@@ -77,7 +76,7 @@ Result<size_t> POSIXSocket::read(uint8_t* buf, size_t len) {
   return static_cast<size_t>(res);
 }
 
-Result<size_t> POSIXSocket::write(const uint8_t* buf, size_t len) {
+bell::Result<size_t> POSIXSocket::write(const uint8_t* buf, size_t len) {
   if (!isValid()) {
     return Result<size_t>::fromError(std::errc::invalid_argument);
   }
@@ -91,7 +90,7 @@ Result<size_t> POSIXSocket::write(const uint8_t* buf, size_t len) {
   return {static_cast<size_t>(res)};
 }
 
-Result<> POSIXSocket::createFd(int domain, int protocol) {
+bell::Result<> POSIXSocket::createFd(int domain, int protocol) {
   this->sockFd = socket(domain, getSockType(), protocol);
   if (sockFd < 0) {
     return Result<>::fromLastErrno();
@@ -125,8 +124,8 @@ void POSIXSocket::close() {
   }
 }
 
-Result<int> POSIXSocket::bind(const std::string& address, uint16_t port,
-                              bool reuseAddr) {
+bell::Result<int> POSIXSocket::bind(const std::string& address, uint16_t port,
+                                    bool reuseAddr) {
   auto res = IpAddress::resolveDomain(address, getSockType());
 
   if (!res) {
@@ -165,15 +164,15 @@ Result<int> POSIXSocket::bind(const std::string& address, uint16_t port,
   }
 
   if (resolved.getPort().has_value()) {
-    return *resolved.getPort();
+    return resolved.getPort().value();
   }
 
   return Result<int>::fromError(std::errc::invalid_argument);
 }
 
-Result<> POSIXSocket::setOptionImpl(int level, int optionName,
-                                    const void* optionValue,
-                                    socklen_t optionLen) {
+bell::Result<> POSIXSocket::setOptionImpl(int level, int optionName,
+                                          const void* optionValue,
+                                          socklen_t optionLen) {
   if (!isValid()) {
     return Result<>::fromError(std::errc::invalid_argument);
   }
@@ -185,8 +184,9 @@ Result<> POSIXSocket::setOptionImpl(int level, int optionName,
   return {};
 }
 
-Result<> POSIXSocket::getOptionImpl(int level, int optionName,
-                                    void* optionValue, socklen_t optionLen) {
+bell::Result<> POSIXSocket::getOptionImpl(int level, int optionName,
+                                          void* optionValue,
+                                          socklen_t optionLen) {
   if (!isValid()) {
     return Result<>::fromError(std::errc::invalid_argument);
   }
@@ -198,17 +198,17 @@ Result<> POSIXSocket::getOptionImpl(int level, int optionName,
   return {};
 }
 
-Result<> POSIXSocket::setReceiveTimeout(int timeoutMs) {
+bell::Result<> POSIXSocket::setReceiveTimeout(int timeoutMs) {
   auto timeVal = bell::utils::millisecondsToTimeval(timeoutMs);
   return setOption(SOL_SOCKET, SO_RCVTIMEO, timeVal);
 }
 
-Result<> POSIXSocket::setSendTimeout(int timeoutMs) {
+bell::Result<> POSIXSocket::setSendTimeout(int timeoutMs) {
   auto timeVal = bell::utils::millisecondsToTimeval(timeoutMs);
   return setOption(SOL_SOCKET, SO_SNDTIMEO, timeVal);
 }
 
-Result<int> POSIXSocket::getReceiveTimeout() {
+bell::Result<int> POSIXSocket::getReceiveTimeout() {
   struct timeval timeVal {};
   auto res = getOptionImpl(SOL_SOCKET, SO_RCVTIMEO, &timeVal, sizeof(timeVal));
 
@@ -219,7 +219,7 @@ Result<int> POSIXSocket::getReceiveTimeout() {
   return static_cast<int>(utils::timevalToMilliseconds(timeVal));
 }
 
-Result<int> POSIXSocket::getSendTimeout() {
+bell::Result<int> POSIXSocket::getSendTimeout() {
   struct timeval timeVal {};
   auto res = getOptionImpl(SOL_SOCKET, SO_SNDTIMEO, &timeVal, sizeof(timeVal));
 
@@ -230,7 +230,7 @@ Result<int> POSIXSocket::getSendTimeout() {
   return static_cast<int>(utils::timevalToMilliseconds(timeVal));
 }
 
-Result<bool> POSIXSocket::getBlocking() const {
+bell::Result<bool> POSIXSocket::getBlocking() const {
   if (!isValid()) {
     return Result<bool>::fromError(std::errc::invalid_argument);
   }

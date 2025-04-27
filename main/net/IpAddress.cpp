@@ -162,8 +162,8 @@ std::optional<std::string> IpAddress::getOriginalHost() const {
   return originalHost;
 }
 
-Result<IpAddress> IpAddress::resolveDomain(const std::string& hostname,
-                                           int sockType, int family) {
+bell::Result<IpAddress> IpAddress::resolveDomain(const std::string& hostname,
+                                                 int sockType, int family) {
   if (hostname.empty()) {
     // Addr any on empty hostname
     sockaddr_in addr{};

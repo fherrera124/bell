@@ -9,9 +9,13 @@ namespace bell::net {
  */
 class UDPSocket : public POSIXSocket {
  public:
+  // Delete copy constructor and copy assignment operator
+  UDPSocket(const UDPSocket&) = delete;
+  UDPSocket& operator=(const UDPSocket&) = delete;
+
   /**
-  * @brief Default constructor for the UDPSocket class. Initializes the socket to INVALID_FD.
-  */
+   * @brief Default constructor for the UDPSocket class. Initializes the socket to INVALID_FD.
+   */
   UDPSocket() = default;
 
   /**

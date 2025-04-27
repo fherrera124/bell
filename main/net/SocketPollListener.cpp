@@ -28,6 +28,7 @@ void SocketPollListener::registerSocket(const std::shared_ptr<Socket>& socket,
 
   updateFdList();
 }
+
 void SocketPollListener::updateFdList() {
   fds.clear();
 
@@ -55,7 +56,7 @@ void SocketPollListener::updateFdList() {
           pfd.events |= POLLPRI;
           break;
         case Event::All:
-          pfd.events |= POLLIN | POLLOUT | POLLERR | POLLHUP | POLLPRI;
+          pfd.events |= (POLLIN | POLLOUT | POLLERR | POLLHUP | POLLPRI);
           break;
       }
     }
@@ -82,14 +83,36 @@ void SocketPollListener::unregisterSocket(const std::shared_ptr<Socket>& socket,
 }
 
 void SocketPollListener::poll(int timeoutMs) {
-  std::scoped_lock lock(pollMutex);
+  std::vector<pollfd> fdsCopy{};
 
-  if (fds.empty()) {
-    bell::utils::sleepMs(timeoutMs);
-    return;  // Nothing to poll
+  {
+    std::scoped_lock lock(pollMutex);
+
+    bool rebuildFdList = false;
+
+    // Erase all FDS with expired weakptr
+    for (auto it = handlers.begin(); it != handlers.end();) {
+      if (it->second.socketPtr.expired()) {
+        rebuildFdList = true;
+        it = handlers.erase(it);
+      } else {
+        ++it;
+      }
+    }
+
+    if (rebuildFdList) {
+      updateFdList();
+    }
+
+    fdsCopy = fds;
   }
 
-  int pollResult = ::poll(fds.data(), fds.size(), timeoutMs);
+  if (fdsCopy.empty()) {
+    bell::utils::sleepMs(timeoutMs);
+    return;
+  }
+
+  int pollResult = ::poll(fdsCopy.data(), fdsCopy.size(), timeoutMs);
 
   if (pollResult < 0) {  // Handle polling error
     throw std::runtime_error(
@@ -97,23 +120,6 @@ void SocketPollListener::poll(int timeoutMs) {
     return;
   }
 
-  bool rebuildFdList = false;
-
-  // Erase all FDS with expired weakptr
-  for (auto it = handlers.begin(); it != handlers.end();) {
-    if (it->second.socketPtr.expired()) {
-      rebuildFdList = true;
-      it = handlers.erase(it);
-    } else {
-      ++it;
-    }
-  }
-
-  if (rebuildFdList) {
-    updateFdList();
-  }
-
-  auto fdsCopy = fds;  // Copy the file descriptors to avoid modification
   for (auto& pfd : fdsCopy) {
     if (pfd.revents != 0) {  // If there are any events
       auto it = handlers.find(pfd.fd);

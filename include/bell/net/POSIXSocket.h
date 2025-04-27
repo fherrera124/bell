@@ -2,9 +2,9 @@
 
 // Standard includes
 #include <netinet/in.h>
+#include <sys/socket.h>
 #include <cstdint>
 
-#include "bell/net/IpAddress.h"
 #include "bell/net/Socket.h"
 
 namespace bell::net {
@@ -42,7 +42,7 @@ class POSIXSocket : public Socket {
   /**
    * @brief Get a socket option with a templated value.
    *
-   * This method wraps the getsockopt function to retrieve various socket options, inferring the value's size based on the type of optionValue. 
+   * This method wraps the getsockopt function to retrieve various socket options, inferring the value's size based on the type of optionValue.
    *
    * @param level The level at which the option is defined (e.g., SOL_SOCKET).
    * @param optionName The name of the option to be retrieved (e.g., SO_REUSEADDR).

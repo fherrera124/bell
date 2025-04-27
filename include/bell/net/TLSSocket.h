@@ -12,7 +12,7 @@
 #include "mbedtls/error.h"
 #include "mbedtls/ssl.h"
 
-#include "bell/net/Result.h"
+#include "bell/Result.h"
 #include "bell/net/Socket.h"
 
 namespace internal {

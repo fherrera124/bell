@@ -1,21 +1,13 @@
 #pragma once
 
 #include <sys/errno.h>
-#include <optional>
 #include <system_error>
 #include <variant>
 
-namespace bell::net {
-enum class Error {
-  // Protocol-level errors (HTTP/WebSockets/DNS)
-  InvalidHeader,
-  InvalidResponse,
-  RedirectLoop,
-  DnsResolutionFailed,
-};
+namespace bell {
 
 /**
- * @brief Network-specific result type (usable by sockets, HTTP, etc.).
+ * @brief A Result class that encapsulates a value or an error code.
  */
 template <typename T = std::monostate>
 class Result {
@@ -23,13 +15,18 @@ class Result {
   // Success
   Result() = default;
 
-  Result(const T& val) : value(val){};
+  template <typename U = T,
+            typename = std::enable_if_t<
+                !std::is_same_v<std::decay_t<U>, std::error_code> &&
+                !std::is_same_v<std::decay_t<U>, std::errc>>>
+  Result(U&& val) : value(std::forward<U>(val)) {}
 
-  Result(T&& val) : value(std::move(val)){};
+  // Error cases - explicit handling
+  Result(std::error_code err) : error(err) {}
+  Result(std::errc err) : error(std::make_error_code(err)) {}
 
-  // Result(const std::error_code& err) : error(err) {};
-
-  Result(std::error_code err) : error(err){};
+  // Special case for errno-style errors
+  Result(int ec, const std::error_category& category) : error(ec, category) {}
 
   static Result fromError(std::errc err) {
     return Result(std::make_error_code(err));
@@ -39,11 +36,11 @@ class Result {
 
   static Result fromLastErrno() {
     int err = errno;
-    return Result({err, std::system_category()});
+    return Result(err, std::system_category());
   }
 
   static Result fromError(int ec, const std::error_category& category) {
-    return Result({ec, category});
+    return Result(ec, category);
   }
 
   bool isSuccess() const { return !error; }
@@ -66,6 +63,12 @@ class Result {
     return value;
   }
 
+  T&& unwrapAndTake() {
+    if (!isSuccess())
+      throw std::system_error(error);
+    return std::move(value);
+  }
+
   // override the boolean operator
   explicit operator bool() const { return isSuccess(); }
 
@@ -73,5 +76,4 @@ class Result {
   T value = {};
   std::error_code error;
 };
-
-}  // namespace bell::net
+}  // namespace bell

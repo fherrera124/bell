@@ -1,8 +1,8 @@
 #include "bell/net/TCPSocket.h"
 
 #include "bell/Logger.h"
+#include "bell/Result.h"
 #include "bell/net/IpAddress.h"
-#include "bell/net/Result.h"
 
 // Platform specific socket includes
 #ifdef _WIN32
@@ -27,8 +27,8 @@
 
 using namespace bell::net;
 
-Result<> TCPSocket::connect(const std::string& host, uint16_t port,
-                            int timeoutMs) {
+bell::Result<> TCPSocket::connect(const std::string& host, uint16_t port,
+                                  int timeoutMs) {
   // Close the socket if it is already open
   if (sockFd != INVALID_FD) {
     BELL_LOG(debug, LOG_TAG, "Socket already open");
@@ -114,7 +114,7 @@ Result<> TCPSocket::connect(const std::string& host, uint16_t port,
   return {};
 }
 
-Result<> TCPSocket::listen(int backlog) {
+bell::Result<> TCPSocket::listen(int backlog) {
   if (!isValid()) {
     return Result<>::fromError(std::errc::invalid_argument);
   }
@@ -126,7 +126,7 @@ Result<> TCPSocket::listen(int backlog) {
   return {};
 }
 
-Result<TCPSocket> TCPSocket::accept() {
+bell::Result<TCPSocket> TCPSocket::accept() {
   struct sockaddr_in clientAddr {};
   socklen_t addrLen = sizeof(clientAddr);
 
