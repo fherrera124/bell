@@ -72,7 +72,7 @@ class BrowseExecutor : public bell::Task {
       std::string regService = regType.substr(0, regType.find_first_of('.'));
       std::string regProto = regType.substr(regType.find_first_of('.') + 1);
 
-      auto res = mdns_query_ptr(regService.c_str(), regProto.c_str(), 1000,
+      auto res = mdns_query_ptr(regService.c_str(), regProto.c_str(), 3000,
                                 maxResultsPerQuery, &result);
       if (res != ESP_OK) {
         BELL_LOG(error, LOG_TAG, "Failed to query mDNS service: {}", res);

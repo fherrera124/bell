@@ -6,24 +6,8 @@
 #include <thread>
 
 #include "bell/mdns/Browser.h"
-#include "bell/mdns/Service.h"
+#include "bell/mdns/Manager.h"
 #include "bell/utils/Utils.h"
-
-namespace {
-// Set to false to stop the browser runner thread
-std::atomic<bool> mdnsBrowserRunning = false;
-std::mutex mdnsBrowserMutex;
-
-// Runs the MDNS browser update loop in a separate thread, till mdnsBrowserRunning is false
-void runDiscoveryLoop(bell::mdns::Browser* browser) {
-  std::scoped_lock lock(mdnsBrowserMutex);
-  mdnsBrowserRunning = true;
-
-  while (mdnsBrowserRunning) {
-    browser->processEvents(100);
-  }
-}
-}  // namespace
 
 TEST_CASE("bell::mdns tests", "[bell::mdns]") {
   std::string serviceName = "mdns-discovery-test";
@@ -31,20 +15,20 @@ TEST_CASE("bell::mdns tests", "[bell::mdns]") {
   std::atomic<bool> serviceAddrResolved = false;
   std::atomic<bool> serviceRemoved = false;
 
-  auto browser = bell::mdns::Browser::startDiscovery(
+  auto browser = bell::mdns::getDefaultManager()->browse(
       "_bell._tcp", "", 0,
-      [&serviceName, &serviceAdded, &serviceAddrResolved, &serviceRemoved](
-          const auto& eventType, const auto& service) {
+      [&serviceName, &serviceAdded, &serviceAddrResolved,
+       &serviceRemoved](const bell::MDNSDiscoveryEvent& discoveryEvent) {
         // Save up events for the requested service
-        if (service.name == serviceName) {
-          switch (eventType) {
-            case bell::mdns::EventType::ServiceAdded:
+        if (discoveryEvent.service.name == serviceName) {
+          switch (discoveryEvent.type) {
+            case bell::MDNSDiscoveryEventType::Added:
               serviceAdded = true;
               break;
-            case bell::mdns::EventType::AddressResolved:
+            case bell::MDNSDiscoveryEventType::Resolved:
               serviceAddrResolved = true;
               break;
-            case bell::mdns::EventType::ServiceRemoved:
+            case bell::MDNSDiscoveryEventType::Removed:
               serviceRemoved = true;
               break;
             default:
@@ -53,16 +37,14 @@ TEST_CASE("bell::mdns tests", "[bell::mdns]") {
         }
       });
 
-  std::thread mdnsBrowserRunner(runDiscoveryLoop, browser.get());
-
   SECTION("Properly registers and unregisters a service") {
     REQUIRE_FALSE(serviceAdded);
     REQUIRE_FALSE(serviceAddrResolved);
     REQUIRE_FALSE(serviceRemoved);
 
     {
-      auto service = bell::mdns::Service::registerService(
-          serviceName, "_bell", "_tcp", "", 1234,
+      auto service = bell::mdns::getDefaultManager()->advertise(
+          serviceName, "_bell._tcp", "", "", 1234,
           {{"dupa", "value"}, {"dupa2", "value2"}});
       bell::utils::sleepMs(1000);
 
@@ -77,12 +59,5 @@ TEST_CASE("bell::mdns tests", "[bell::mdns]") {
 
     // Service should be removed by now
     REQUIRE(serviceRemoved);
-  }
-
-  {
-    // Stop the browser
-    mdnsBrowserRunning = false;
-    std::scoped_lock lock(mdnsBrowserMutex);
-    mdnsBrowserRunner.join();
   }
 }
