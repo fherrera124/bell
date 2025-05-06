@@ -1,6 +1,6 @@
 #pragma once
 
-#include <sys/errno.h>
+#include <cerrno>
 #include <system_error>
 #include <variant>
 

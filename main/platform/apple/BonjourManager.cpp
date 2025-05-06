@@ -202,8 +202,8 @@ class BonjourBrowser : public Browser {
             // Resolve failed, notify
             DiscoveryEvent event{
                 .type = EventType::ResolveFailure,
-                .error = res.getError(),
                 .service = service,
+                .error = res.getError(),
             };
             onEvent(event);
           }
@@ -263,8 +263,8 @@ class BonjourBrowser : public Browser {
         // Resolve failed, notify
         DiscoveryEvent event{
             .type = EventType::ResolveFailure,
-            .error = err,
             .service = *serviceItr,
+            .error = err,
         };
         onEvent(event);
       } else {
@@ -358,8 +358,8 @@ class BonjourBrowser : public Browser {
       if (err) {
         DiscoveryEvent event{
             .type = EventType::AddressResolveFailure,
-            .error = err,
             .service = *serviceItr,
+            .error = err,
         };
         onEvent(event);
       } else {
@@ -373,8 +373,8 @@ class BonjourBrowser : public Browser {
 
         DiscoveryEvent event{
             .type = EventType::AddressResolved,
-            .error = err,
             .service = *serviceItr,
+            .error = err,
         };
         onEvent(event);
       }

@@ -24,7 +24,6 @@
 #endif
 
 #include <fcntl.h>
-#include <sys/poll.h>
 
 using namespace bell::net;
 

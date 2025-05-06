@@ -12,6 +12,7 @@ enum class MdnsErrc {
   resolution_failed,
   invalid_parameters,
   network_unavailable,
+  name_conflict,
   unknown
 };
 
