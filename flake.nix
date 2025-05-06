@@ -26,7 +26,7 @@
         overlays = [overlay];
       };
 
-      llvm = pkgs.llvmPackages_18;
+      llvm = pkgs.llvmPackages_19;
 
       common-pkgs = with pkgs;
             [

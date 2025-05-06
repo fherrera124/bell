@@ -6,11 +6,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-    - uses: actions/checkout@v4
-      with:
-        submodules: recursive
-    - uses: cachix/install-nix-action@v27
-      with:
-        nix_path: nixpkgs=channel:nixos-24.05
-        github_access_token: ${{ secrets.GITHUB_TOKEN }}
-    - run: nix develop --command python3 .github/scripts/run-clang-format.py -r main/ include/
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: cachix/install-nix-action@v27
+        with:
+          nix_path: nixpkgs=channel:nixos-24.11
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+      - run: nix develop --command python3 .github/scripts/run-clang-format.py -r main/ include/
