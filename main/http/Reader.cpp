@@ -15,14 +15,24 @@ http::Reader::Reader(Direction readerDirection, std::istream* istream,
     bufferPtr = &internalBuffer;
   } else {
     bufferPtr->clear();
-  }
 
-  headersValid = false;
+    usingExternalBuffer = true;
+  }
 }
 
-void http::Reader::readHeaders() {
+http::Reader::Reader(Direction readerDirection,
+                     std::shared_ptr<std::istream> istreamPtr)
+    : readerDirection(readerDirection),
+      sharedIstream(std::move(istreamPtr)),
+      istream(sharedIstream.get()),
+      bufferPtr(&internalBuffer) {
+  // Use the internal buffer for reading
+  bufferPtr->clear();
+}
+
+bell::Result<> http::Reader::readHeaders() {
   if (headersValid) {
-    throw std::runtime_error("Headers already read");
+    return std::errc::operation_not_permitted;
   }
 
   int minorVersion = 0;
@@ -45,10 +55,14 @@ void http::Reader::readHeaders() {
   char lastChar = 0;
   size_t lastLineStart = 0;
 
+  if (!usingExternalBuffer) {
+    bufferPtr = &internalBuffer;
+  }
+
   // Consume the stream byte by byte, so we dont read into the body
   while (lastPhrResult <= 0 && istream->get(lastChar)) {
     if (bufferPtr->size() > maxRequestLen) {
-      throw std::runtime_error("Request too large");
+      return std::errc::io_error;
     }
 
     bufferPtr->push_back(lastChar);
@@ -79,7 +93,7 @@ void http::Reader::readHeaders() {
 
       // Throw on phr error, or if the parser is not done yet and we're at the end
       if (lastPhrResult == -1 || (isLastLine && lastPhrResult <= 0)) {
-        throw std::runtime_error("Error parsing HTTP headers");
+        return std::errc::io_error;
       }
 
       lastLineStart = bufferPtr->size();
@@ -87,8 +101,7 @@ void http::Reader::readHeaders() {
   }
 
   if (lastPhrResult <= 0) {
-    throw std::runtime_error(
-        "Could not read all headers, possibly due to a broken connection");
+    return std::errc::io_error;
   }
 
   headersValid = true;  // Mark headers as read
@@ -106,27 +119,34 @@ void http::Reader::readHeaders() {
     statusMessage = std::string(statusMessagePtr, statusMessageLen);
 
     if (statusCode < 100 || statusCode >= 600) {
-      throw std::runtime_error("Invalid status code");
+      return std::errc::protocol_not_supported;
     }
   } else {
     path = std::string_view(pathPtr, pathLen);
     method = parseMethod({methodPtr, methodLen});
 
     if (minorVersion == 1 && getHeader("Host").empty()) {
-      throw std::runtime_error("Host header required for HTTP/1.1");
+      return std::errc::protocol_not_supported;
     }
 
-    parseQueryParams();
+    auto res = parseQueryParams();
+    if (!res) {
+      return res.getError();
+    }
   }
+
+  return {};
 }
 
 size_t http::Reader::getContentLength() const {
   return contentLength.value();
 }
 
-std::unordered_map<std::string, std::string> http::Reader::getQueryParams()
-    const {
-  ensureValid(Direction::Request);
+bell::Result<std::unordered_map<std::string, std::string>>
+http::Reader::getQueryParams() const {
+  if (!isValid(Direction::Request)) {
+    return std::errc::operation_not_permitted;
+  }
 
   return queryParams;
 }
@@ -155,40 +175,68 @@ http::Headers http::Reader::getAllHeaders() const {
   return headers;
 }
 
-std::string_view http::Reader::getBodyStringView() {
-  if (readContentLength == 0) {
-    readBody();
+bell::Result<std::string_view> http::Reader::getBodyStringView() {
+  if (!usingExternalBuffer) {
+    bufferPtr = &internalBuffer;
   }
 
-  return {bufferPtr->data() + bufferPtr->size() - readContentLength,
-          readContentLength};
+  if (readContentLength == 0) {
+    auto res = readBody();
+    if (!res) {
+      return res.getError();
+    }
+  }
+
+  if (!usingExternalBuffer) {
+    bufferPtr = &internalBuffer;
+  }
+
+  return std::string_view{
+      bufferPtr->data() + bufferPtr->size() - readContentLength,
+      readContentLength};
 }
 
-std::vector<std::byte> http::Reader::getBodyBytes() {
-  if (readContentLength == 0) {
-    readBody();
+bell::Result<std::vector<std::byte>> http::Reader::getBodyBytes() {
+  if (!usingExternalBuffer) {
+    bufferPtr = &internalBuffer;
   }
 
-  return {
+  if (readContentLength == 0) {
+    auto res = readBody();
+    if (!res) {
+      return res.getError();
+    }
+  }
+
+  return std::vector<std::byte>{
       reinterpret_cast<std::byte*>(bufferPtr->data() + bufferPtr->size() -
                                    readContentLength),
       reinterpret_cast<std::byte*>(bufferPtr->data() + bufferPtr->size()),
   };
 }
 
-const char* http::Reader::getBodyBytesPtr() {
+bell::Result<const char*> http::Reader::getBodyBytesPtr() {
+  if (!usingExternalBuffer) {
+    bufferPtr = &internalBuffer;
+  }
+
   if (readContentLength == 0) {
-    readBody();
+    auto res = readBody();
+    if (!res) {
+      return res.getError();
+    }
   }
 
   return bufferPtr->data() + bufferPtr->size() - readContentLength;
 }
 
-void http::Reader::parseQueryParams() {
-  ensureValid(Direction::Request);
+bell::Result<> http::Reader::parseQueryParams() {
+  if (!isValid(Direction::Request)) {
+    return std::errc::operation_not_permitted;
+  }
 
   if (!path.has_value()) {
-    throw std::runtime_error("Path not set");
+    return std::errc::operation_not_permitted;
   }
 
   auto queryStart = path->find('?');
@@ -210,21 +258,32 @@ void http::Reader::parseQueryParams() {
     // Remove query parameters from the path
     path = path->substr(0, queryStart);
   }
+
+  return {};
 }
 
-size_t http::Reader::getBodyBytesLength() {
+bell::Result<size_t> http::Reader::getBodyBytesLength() {
   if (readContentLength == 0) {
-    readBody();
+    auto res = readBody();
+    if (!res) {
+      return res.getError();
+    }
   }
 
   return readContentLength;
 }
 
-void http::Reader::readBody() {
-  ensureValid(readerDirection);
+bell::Result<> http::Reader::readBody() {
+  if (!usingExternalBuffer) {
+    bufferPtr = &internalBuffer;
+  }
+
+  if (!isValid(readerDirection)) {
+    return std::errc::operation_not_permitted;
+  }
 
   if (contentLength == 0 || readContentLength == contentLength) {
-    return;  // Nothing to read
+    return {};  // Nothing to read
   }
 
   // Ensure that the response buffer has enough space to read the content
@@ -236,34 +295,60 @@ void http::Reader::readBody() {
       bufferPtr->data() + bufferPtr->size() - contentLength.value(),
       static_cast<std::streamsize>(contentLength.value() - readContentLength));
 
+  if (istream->fail() && !istream->eof()) {
+    return std::errc::io_error;
+  }
+
   // Update the read content length
   readContentLength += istream->gcount();
+
+  return {};
 }
 
-void http::Reader::ensureValid(Direction expectedDirection) const {
+bool http::Reader::isValid(Direction expectedDirection) const {
   if (!headersValid) {
-    throw std::runtime_error("HTTP headers not read yet. Call readHeaders()");
+    return false;
   }
 
   if (readerDirection != expectedDirection) {
-    throw std::runtime_error("This method is not valid for this reader type");
+    return false;
   }
+
+  return true;
 }
 
-int http::Reader::getStatusCode() const {
-  ensureValid(Direction::Response);
+bell::Result<int> http::Reader::getStatusCode() const {
+  if (!isValid(Direction::Response)) {
+    return std::errc::operation_not_permitted;
+  }
+
+  if (!statusCode.has_value()) {
+    return std::errc::operation_not_permitted;
+  }
 
   return statusCode.value();
 }
 
-http::Method http::Reader::getMethod() const {
-  ensureValid(Direction::Request);
+bell::Result<http::Method> http::Reader::getMethod() const {
+  if (!isValid(Direction::Request)) {
+    return std::errc::operation_not_permitted;
+  }
+
+  if (!method.has_value()) {
+    return std::errc::operation_not_permitted;
+  }
 
   return method.value();
 }
 
-std::string_view http::Reader::getPath() const {
-  ensureValid(Direction::Request);
+bell::Result<std::string_view> http::Reader::getPath() const {
+  if (!isValid(Direction::Request)) {
+    return std::errc::operation_not_permitted;
+  }
+
+  if (!path.has_value()) {
+    return std::errc::operation_not_permitted;
+  }
 
   return path.value();
 }

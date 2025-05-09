@@ -1,20 +1,22 @@
 #pragma once
 
 // Standard includes
-#include <istream>
 #include <map>
 #include <optional>
+#include <ostream>
 #include <string>
 #include <string_view>
-#include <utility>
-#include <vector>
 
 // Own includes
+#include "bell/Result.h"
 #include "bell/http/Common.h"
 
 namespace bell::http {
 class Writer {
  public:
+  // Default constructor, initializes to invalid state
+  Writer() = default;
+
   /**
    * @brief http::Writer constructor, initializes the writer with the given stream. No data is written to the stream until writeHeaders() is called.
    *
@@ -24,11 +26,19 @@ class Writer {
   Writer(Direction writerDirection, std::ostream* ostream);
 
   /**
+   * @brief Ownership taking constructor. No data is written to the stream until writeHeaders() is called.
+   *
+   * @param readerDirection Type of the writer, either Request or Response
+   * @param ostream Pointer to the output stream, which must be valid until the writer is destroyed
+   */
+  Writer(Direction writerDirection, std::shared_ptr<std::ostream> ostreamPtr);
+
+  /**
    * @brief Raw headers write method
    *
    * Will send all the configured headers to the stream, along with either the request or response line. Call the writeRequest / writeResponse methods for easier use.
    */
-  void writeHeaders();
+  bell::Result<> writeHeaders();
 
   /**
    * @brief Writes an HTTP request line and headers to the stream.
@@ -41,9 +51,9 @@ class Writer {
    * @param headers Optional additional headers for the request.
    * @param expectedContentLength The expected content length for request body.
    */
-  void writeRequest(Method method, const std::string& path,
-                    const Headers& headers = {},
-                    size_t expectedContentLength = 0);
+  bell::Result<> writeRequest(Method method, const std::string& path,
+                              const Headers& headers = {},
+                              size_t expectedContentLength = 0);
 
   /**
    * @brief Writes an HTTP response line and headers to the stream.
@@ -55,8 +65,8 @@ class Writer {
    * @param headers Optional additional headers for the response.
    * @param expectedContentLength The expected content length for response body.
    */
-  void writeResponse(int statusCode, const Headers& headers = {},
-                     size_t expectedContentLength = 0);
+  bell::Result<> writeResponse(int statusCode, const Headers& headers = {},
+                               size_t expectedContentLength = 0);
 
   /**
    * @brief Writes an HTTP response with a body to the stream.
@@ -68,8 +78,9 @@ class Writer {
    * @param headers Optional additional headers for the response.
    * @param body The body content to be included in the response.
    */
-  void writeResponseWithBody(int statusCode, const Headers& headers = {},
-                             const std::string& body = "");
+  bell::Result<> writeResponseWithBody(int statusCode,
+                                       const Headers& headers = {},
+                                       const std::string& body = "");
 
   /**
    * @brief Sets an individual HTTP header.
@@ -97,7 +108,7 @@ class Writer {
    *
    * @param contentLength The length of the content.
    */
-  void setContentLength(size_t contentLength);
+  bell::Result<> setContentLength(size_t contentLength);
 
   /**
    * @brief Sets the HTTP status code for a response.
@@ -106,7 +117,7 @@ class Writer {
    *
    * @param statusCode The HTTP status code to set (e.g., 200, 404).
    */
-  void setStatusCode(int statusCode);
+  bell::Result<> setStatusCode(int statusCode);
 
   /**
    * @brief Sets the HTTP request path.
@@ -115,7 +126,7 @@ class Writer {
    *
    * @param path The path for the HTTP request.
    */
-  void setPath(const std::string& path);
+  bell::Result<> setPath(const std::string& path);
 
   /**
    * @brief Sets the HTTP method for a request.
@@ -124,7 +135,7 @@ class Writer {
    *
    * @param method The HTTP method to set (e.g., GET, POST).
    */
-  void setMethod(Method method);
+  bell::Result<> setMethod(Method method);
 
   /**
    * @brief Writes a body to the stream using a string view.
@@ -133,7 +144,7 @@ class Writer {
    *
    * @param body The body content to write to the stream.
    */
-  void writeBodyStringView(std::string_view body);
+  bell::Result<> writeBodyStringView(std::string_view body);
 
   /**
    * @brief Writes raw bytes as a body to the stream.
@@ -143,7 +154,7 @@ class Writer {
    * @param bytes Pointer to the byte array.
    * @param bytesLen The number of bytes to write from the array.
    */
-  void writeBodyRaw(const char* bytes, size_t bytesLen);
+  bell::Result<> writeBodyRaw(const char* bytes, size_t bytesLen);
 
   /**
    * @brief Returns true if the headers have been written to the stream.
@@ -163,8 +174,9 @@ class Writer {
   std::ostream* getStream() const;
 
  private:
-  Direction writerDirection;
-  std::ostream* ostream;
+  Direction writerDirection = Direction::Invalid;
+  std::shared_ptr<std::ostream> sharedOstream;
+  std::ostream* ostream{};
 
   const char* defaultUserAgent = "bell/1.0";
 
@@ -184,15 +196,15 @@ class Writer {
   size_t contentLengthWritten = 0;
 
   // Request specific
-  std::optional<Method> method{};
-  std::optional<std::string> path{};
+  std::optional<Method> method;
+  std::optional<std::string> path;
 
   // Response specific
-  std::optional<int> statusCode{};
+  std::optional<int> statusCode;
 
-  std::string getStatusMessage();
+  std::optional<std::string> getStatusMessage();
   void enforceStandardHeaders();
-  void ensureValid(Direction expectedDirection);
+  bool isValid(Direction expectedDirection);
 };
 }  // namespace bell::http
 

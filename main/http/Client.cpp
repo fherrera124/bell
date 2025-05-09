@@ -1,9 +1,11 @@
 #include "bell/http/Client.h"
 
-// Standar includes
+// Standard includes
 #include <ios>
+#include <system_error>
 
 // Own includes
+#include "bell/http/Common.h"
 #include "bell/http/Reader.h"
 #include "bell/net/SocketStream.h"
 #include "bell/net/TCPSocket.h"
@@ -12,13 +14,13 @@
 
 using namespace bell;
 
-http::Connection::Connection(const std::string& url, int timeoutMs,
-                             bool secure) {
+bell::Result<> http::Connection::connect(const std::string& url, int timeoutMs,
+                                         bool secure) noexcept {
   // Try to parse the URL
   auto parsedUri = net::parseURI(url);
   if (!parsedUri.has_value() || !parsedUri->host.has_value() ||
       !parsedUri->path.has_value()) {
-    throw std::runtime_error("Invalid URL");
+    return make_error_code(http::Errc::InvalidURL);
   }
 
   // Store the parsed URL
@@ -29,26 +31,36 @@ http::Connection::Connection(const std::string& url, int timeoutMs,
 
   if (useTLS) {
     auto socket = std::make_shared<net::TLSSocket>();
-    socket->connect(parsedUri->host.value(), parsedUri->port.value_or(443),
-                    timeoutMs);
+    auto res = socket->connect(parsedUri->host.value(),
+                               parsedUri->port.value_or(443), timeoutMs);
+
+    if (!res) {
+      return res.getError();
+    }
 
     // Wrap the socket in socket stream
     socketStream = std::make_shared<net::SocketStream>(std::move(socket));
   } else {
     auto socket = std::make_shared<net::TCPSocket>();
-    socket->connect(parsedUri->host.value(), parsedUri->port.value_or(80),
-                    timeoutMs);
+    auto res = socket->connect(parsedUri->host.value(),
+                               parsedUri->port.value_or(80), timeoutMs);
+
+    if (!res) {
+      return res.getError();
+    }
 
     // Wrap the socket in a socket stream
     socketStream = std::make_shared<net::SocketStream>(std::move(socket));
   }
+
+  return {};
 }
 
-std::unique_ptr<http::Writer> http::Connection::sendRequest(
+bell::Result<http::Writer> http::Connection::sendRequest(
     Method method, const Headers& extraHeaders, size_t expectedContentLength) {
 
   if (requestSent) {
-    throw std::runtime_error("Request already sent");
+    return make_error_code(http::Errc::InvalidState);
   }
 
   if (!socketStream->isOpen()) {
@@ -56,10 +68,10 @@ std::unique_ptr<http::Writer> http::Connection::sendRequest(
   }
 
   // Create the writer
-  auto writer = std::make_unique<http::Writer>(http::Direction::Request,
-                                               socketStream.get());
+  http::Writer writer(http::Direction::Request, socketStream);
+
   // Set the host header
-  writer->setHeader("host", parsedUrl.host.value());
+  writer.setHeader("Host", parsedUrl.host.value());
 
   std::string requestPath = parsedUrl.path.value();
 
@@ -68,27 +80,25 @@ std::unique_ptr<http::Writer> http::Connection::sendRequest(
   }
 
   // Write the actual request
-  writer->writeRequest(method, requestPath, extraHeaders,
-                       expectedContentLength);
+  writer.writeRequest(method, requestPath, extraHeaders, expectedContentLength);
   requestSent = true;
 
   socketStream->flush();
   return writer;
 }
 
-std::unique_ptr<http::Reader> http::Connection::getResponse() {
+bell::Result<http::Reader> http::Connection::getResponse() {
   if (!requestSent) {
-    throw std::runtime_error("Request not sent yet");
+    return make_error_code(http::Errc::InvalidState);
   }
 
   if (!socketStream->isOpen()) {
-    throw std::runtime_error("Socket is not open");
+    return make_error_code(http::Errc::SocketNotOpen);
   }
 
-  auto reader = std::make_unique<http::Reader>(http::Direction::Response,
-                                               socketStream.get());
+  http::Reader reader = http::Reader(http::Direction::Response, socketStream);
   // Read the response headers
-  reader->readHeaders();
+  reader.readHeaders();
 
   return reader;
 }

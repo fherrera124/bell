@@ -88,12 +88,20 @@ net::TLSSocket::TLSSocket() {
   }
 }
 
+std::error_code net::TLSSocket::lastError() const {
+  return innerSocket.lastError();
+}
+
 Result<> net::TLSSocket::connect(const std::string& host, uint16_t port,
                                  int timeoutMs) {
   auto res = innerSocket.connect(host, port, timeoutMs);
   if (!res) {
+    BELL_LOG(error, LOG_TAG, "Failed to connect to {}: {}", host,
+             res.getError().message());
     return res;
   }
+
+  setBlocking(timeoutMs > 0);
 
   int ret = mbedtls_ssl_config_defaults(&sslConf, MBEDTLS_SSL_IS_CLIENT,
                                         MBEDTLS_SSL_TRANSPORT_STREAM,
@@ -118,6 +126,7 @@ Result<> net::TLSSocket::connect(const std::string& host, uint16_t port,
 
   while ((ret = mbedtls_ssl_handshake(&sslCtx)) != 0) {
     if (ret != MBEDTLS_ERR_SSL_WANT_READ && ret != MBEDTLS_ERR_SSL_WANT_WRITE) {
+      BELL_LOG(error, LOG_TAG, "Failed to perform TLS handshake");
       return Result<>::fromError(make_tls_error_code(ret));
     }
   }

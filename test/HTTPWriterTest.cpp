@@ -13,7 +13,7 @@ TEST_CASE("bell::http::Writer tests", "[bell::http::Writer]") {
     bell::http::Writer writer(bell::http::Direction::Request, &ss);
 
     // Should not allow a response-specific method
-    REQUIRE_THROWS(writer.setStatusCode(200));
+    REQUIRE(!writer.setStatusCode(200).isSuccess());
 
     // Write the request using the helper method
     writer.writeRequest(bell::http::Method::GET, "/index.html");
@@ -24,13 +24,13 @@ TEST_CASE("bell::http::Writer tests", "[bell::http::Writer]") {
     REQUIRE(ss.str() == expected);
 
     // Should not be able to write another request
-    REQUIRE_THROWS(writer.writeHeaders());
+    REQUIRE(!writer.writeHeaders().isSuccess());
 
     // Should not be able to change path after writing headers
-    REQUIRE_THROWS(writer.setPath("asdfasdf"));
+    REQUIRE(!writer.setPath("asdfasdf").isSuccess());
 
     // Will not allow writing a body with the unspecified content length
-    REQUIRE_THROWS(writer.writeBodyStringView("Hello, world!"));
+    REQUIRE(!writer.writeBodyStringView("Hello, world!").isSuccess());
   }
 
   SECTION("Writes a simple POST request") {
@@ -52,12 +52,44 @@ TEST_CASE("bell::http::Writer tests", "[bell::http::Writer]") {
     REQUIRE(ss.str() == expected);
   }
 
+  SECTION("Writes a POST request with a long header") {
+    std::stringstream ss;
+    bell::http::Writer writer(bell::http::Direction::Request, &ss);
+
+    std::string body = "Hello, world!";
+
+    // Write the request using the helper method
+    writer.writeRequest(
+        bell::http::Method::POST, "/post",
+        {{"content-type", "text/plain"},
+         {"client-token",
+          "qtmgeqnwjxxksgxzjnviiijcmfbvdvcgrrqakcuaeczenjenksrtevlpubwoaznhvjaq"
+          "kmfjidccvzhvolnusudvggbrcnvkoldzunkacxuznnuyljcnxchxjdnrqrtncytfbywc"
+          "zptqcpgrblmdwcebdlmlmpkdizshyqyhtbnuzwvpmffmmzrssqwtzjluqsxvhdvtmnut"
+          "hiehztmmalpqesbbosisugmgsznzwjqlzxlotvzprobunfdpvhnugmzqxwsbfkwfouk"
+          "d"}},
+        body.size());
+
+    writer.writeBodyStringView(body);
+
+    std::string expected =
+        "POST /post HTTP/1.1\r\nclient-token: "
+        "qtmgeqnwjxxksgxzjnviiijcmfbvdvcgrrqakcuaeczenjenksrtevlpubwoaznhvjaqkm"
+        "fjidccvzhvolnusudvggbrcnvkoldzunkacxuznnuyljcnxchxjdnrqrtncytfbywczptq"
+        "cpgrblmdwcebdlmlmpkdizshyqyhtbnuzwvpmffmmzrssqwtzjluqsxvhdvtmnuthiehzt"
+        "mmalpqesbbosisugmgsznzwjqlzxlotvzprobunfdpvhnugmzqxwsbfkwfoukd\r\ncont"
+        "ent-type: text/plain\r\nhost: "
+        "localhost\r\nuser-agent: bell/1.0\r\ncontent-length: 13\r\n\r\nHello, "
+        "world!";
+    REQUIRE(ss.str() == expected);
+  }
+
   SECTION("Writes a simple GET response") {
     std::stringstream ss;
     bell::http::Writer writer(bell::http::Direction::Response, &ss);
 
     // Should not allow a request-specific method
-    REQUIRE_THROWS(writer.setMethod(bell::http::Method::GET));
+    REQUIRE(!writer.setMethod(bell::http::Method::GET).isSuccess());
 
     // Write the request using the helper method
     writer.writeResponse(200);
@@ -66,13 +98,13 @@ TEST_CASE("bell::http::Writer tests", "[bell::http::Writer]") {
     REQUIRE(ss.str() == expected);
 
     // Should not be able to write another response
-    REQUIRE_THROWS(writer.writeHeaders());
+    REQUIRE(!writer.writeHeaders().isSuccess());
 
     // Should not be able to change the status code after writing headers
-    REQUIRE_THROWS(writer.setStatusCode(404));
+    REQUIRE(!writer.setStatusCode(404).isSuccess());
 
     // Will not allow writing a body with the unspecified content length
-    REQUIRE_THROWS(writer.writeBodyStringView("Hello, world!"));
+    REQUIRE(!writer.writeBodyStringView("Hello, world!").isSuccess());
   }
 
   SECTION("Writes a simple POST response") {
@@ -80,7 +112,7 @@ TEST_CASE("bell::http::Writer tests", "[bell::http::Writer]") {
     bell::http::Writer writer(bell::http::Direction::Response, &ss);
 
     // Should not allow a request-specific method
-    REQUIRE_THROWS(writer.setMethod(bell::http::Method::POST));
+    REQUIRE(!writer.setMethod(bell::http::Method::POST).isSuccess());
 
     // Write the request using the helper method
     writer.writeResponseWithBody(500, {}, "Hello, world!");
@@ -91,6 +123,6 @@ TEST_CASE("bell::http::Writer tests", "[bell::http::Writer]") {
     REQUIRE(ss.str() == expected);
 
     // Should not be able to write another response
-    REQUIRE_THROWS(writer.writeHeaders());
+    REQUIRE(!writer.writeHeaders().isSuccess());
   }
 }

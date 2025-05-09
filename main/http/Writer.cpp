@@ -1,6 +1,5 @@
 #include "bell/http/Writer.h"
 
-#include <algorithm>
 #include <ios>
 #include <unordered_map>
 
@@ -17,9 +16,15 @@ const std::unordered_map<int, std::string> statusCodes = {
 http::Writer::Writer(Direction writerDirection, std::ostream* ostream)
     : writerDirection(writerDirection), ostream(ostream) {}
 
-std::string http::Writer::getStatusMessage() {
+http::Writer::Writer(Direction writerDirection,
+                     std::shared_ptr<std::ostream> ostreamPtr)
+    : writerDirection(writerDirection),
+      sharedOstream(std::move(ostreamPtr)),
+      ostream(sharedOstream.get()) {}
+
+std::optional<std::string> http::Writer::getStatusMessage() {
   if (!statusCode) {
-    throw std::runtime_error("Status code not set");
+    return std::nullopt;
   }
 
   auto it = statusCodes.find(*statusCode);
@@ -29,9 +34,9 @@ std::string http::Writer::getStatusMessage() {
   return it->second;
 }
 
-void http::Writer::writeHeaders() {
+bell::Result<> http::Writer::writeHeaders() {
   if (headersWritten) {
-    throw std::runtime_error("Headers already written");
+    return std::errc::operation_not_permitted;
   }
 
   // Will fill in standard headers if they are not already set
@@ -41,14 +46,14 @@ void http::Writer::writeHeaders() {
     if (method && path) {
       *ostream << methodToString(*method) << " " << *path << " HTTP/1.1\r\n";
     } else {
-      throw std::runtime_error("Method and path must be set for requests");
+      return std::errc::invalid_argument;
     }
   } else {
     if (statusCode) {
-      *ostream << "HTTP/1.1 " << *statusCode << " " << getStatusMessage()
-               << "\r\n";
+      *ostream << "HTTP/1.1 " << *statusCode << " "
+               << getStatusMessage().value() << "\r\n";
     } else {
-      throw std::runtime_error("Status code must be set for responses");
+      return std::errc::invalid_argument;
     }
   }
 
@@ -61,9 +66,13 @@ void http::Writer::writeHeaders() {
   }
 
   *ostream << "\r\n";  // End of headers
-  ostream->flush();    // Flush the headers to the stream
+  if (!ostream->flush() || (ostream->fail() && !ostream->eof())) {
+    return std::errc::io_error;
+  }
 
   headersWritten = true;
+
+  return {};
 }
 
 void http::Writer::setHeader(const std::string& headerName,
@@ -94,42 +103,76 @@ void http::Writer::enforceStandardHeaders() {
   }
 }
 
-void http::Writer::setContentLength(size_t contentLength) {
-  ensureValid(writerDirection);
+bell::Result<> http::Writer::setContentLength(size_t contentLength) {
+  if (!isValid(writerDirection)) {
+    return std::errc::operation_not_supported;
+  }
 
   this->contentLength = contentLength;
+
+  return {};
 }
 
-void http::Writer::writeRequest(Method method, const std::string& path,
-                                const Headers& headers,
-                                size_t expectedContentLength) {
-  ensureValid(Direction::Request);
+bell::Result<> http::Writer::writeRequest(Method method,
+                                          const std::string& path,
+                                          const Headers& headers,
+                                          size_t expectedContentLength) {
+  if (!isValid(Direction::Request)) {
+    return std::errc::operation_not_supported;
+  }
 
   // Assign the request parameters
-  setMethod(method);
-  setPath(path);
-  setHeaders(headers);
-  setContentLength(expectedContentLength);
+  auto res = setMethod(method);
 
-  writeHeaders();
+  if (!res) {
+    return res;
+  }
+
+  res = setPath(path);
+  if (!res) {
+    return res;
+  }
+
+  setHeaders(headers);
+  res = setContentLength(expectedContentLength);
+  if (!res) {
+    return res;
+  }
+
+  return writeHeaders();
 }
 
-void http::Writer::writeResponse(int statusCode, const Headers& headers,
-                                 size_t expectedContentLength) {
-  ensureValid(Direction::Response);
-
+bell::Result<> http::Writer::writeResponse(int statusCode,
+                                           const Headers& headers,
+                                           size_t expectedContentLength) {
+  if (!isValid(Direction::Response)) {
+    return std::errc::operation_not_supported;
+  }
   // Assign the request parameters
-  setStatusCode(statusCode);
-  setHeaders(headers);
-  setContentLength(expectedContentLength);
+  auto res = setStatusCode(statusCode);
+  if (!res) {
+    return res;
+  }
 
-  writeHeaders();
+  setHeaders(headers);
+
+  res = setContentLength(expectedContentLength);
+  if (!res) {
+    return res;
+  }
+
+  return writeHeaders();
 }
 
-void http::Writer::writeResponseWithBody(int statusCode, const Headers& headers,
-                                         const std::string& body) {
-  writeResponse(statusCode, headers, body.size());
-  writeBodyStringView(body);
+bell::Result<> http::Writer::writeResponseWithBody(int statusCode,
+                                                   const Headers& headers,
+                                                   const std::string& body) {
+  auto res = writeResponse(statusCode, headers, body.size());
+  if (!res) {
+    return res;
+  }
+
+  return writeBodyStringView(body);
 }
 
 bool http::Writer::hasWrittenHeaders() const {
@@ -140,54 +183,70 @@ bool http::Writer::hasWrittenBody() const {
   return contentLengthWritten >= contentLength;
 }
 
-void http::Writer::ensureValid(Direction expectedDirection) {
+bool http::Writer::isValid(Direction expectedDirection) {
   if (headersWritten) {
-    throw std::runtime_error("HTTP headers have already been written");
+    return false;
   }
 
   if (writerDirection != expectedDirection) {
-    throw std::runtime_error("This method is not valid for this writer type");
+    return false;
   }
+
+  return true;
 }
 
-void http::Writer::setPath(const std::string& path) {
-  ensureValid(Direction::Request);
+bell::Result<> http::Writer::setPath(const std::string& path) {
+  if (!isValid(Direction::Request)) {
+    return std::errc::operation_not_supported;
+  }
 
   this->path = path;
+
+  return {};
 }
 
-void http::Writer::setMethod(Method method) {
-  ensureValid(Direction::Request);
+bell::Result<> http::Writer::setMethod(Method method) {
+  if (!isValid(Direction::Request)) {
+    return std::errc::operation_not_supported;
+  }
 
   this->method = method;
+  return {};
 }
 
-void http::Writer::setStatusCode(int statusCode) {
-  ensureValid(Direction::Response);
+bell::Result<> http::Writer::setStatusCode(int statusCode) {
+  if (!isValid(Direction::Response)) {
+    return std::errc::operation_not_supported;
+  }
 
   this->statusCode = statusCode;
+
+  return {};
 }
 
 std::ostream* http::Writer::getStream() const {
   return ostream;
 }
 
-void http::Writer::writeBodyRaw(const char* bytes, size_t bytesLen) {
+bell::Result<> http::Writer::writeBodyRaw(const char* bytes, size_t bytesLen) {
   if (!headersWritten) {
-    throw std::runtime_error("Headers must be written before writing body");
+    return std::errc::operation_not_permitted;
   }
 
   if (contentLengthWritten + bytesLen > contentLength) {
-    throw std::runtime_error(
-        "Body length exceeds previously declared content length");
+    return std::errc::io_error;
   }
 
   ostream->write(bytes, static_cast<std::streamsize>(bytesLen));
   contentLengthWritten += bytesLen;
 
-  ostream->flush();  // Flush the headers to the stream
+  if (!ostream->flush() || (ostream->fail() && !ostream->eof())) {
+    return std::errc::io_error;
+  }
+
+  return {};
 }
 
-void http::Writer::writeBodyStringView(std::string_view body) {
-  writeBodyRaw(body.data(), body.size());
+bell::Result<> http::Writer::writeBodyStringView(std::string_view body) {
+  return writeBodyRaw(body.data(), body.size());
 }

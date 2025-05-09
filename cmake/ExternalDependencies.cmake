@@ -1,9 +1,9 @@
-# Option for disabling message outputs from external dependencies
-function(message)
-    if(NOT MESSAGE_QUIET)
-        _message(${ARGN})
-    endif()
-endfunction()
+# # Option for disabling message outputs from external dependencies
+# function(message)
+#     if(NOT MESSAGE_QUIET)
+#         _message(${ARGN})
+#     endif()
+# endfunction()
 
 # Include libfmt
 set(FMT_INSTALL OFF) # Disable fmt install targets

@@ -30,7 +30,10 @@ class tls_errc_category : public std::error_category {
 namespace bell::net {
 
 // Define a custom error category for MbedTLS errors
-const ::internal::tls_errc_category& tls_errc_category();
+inline const internal::tls_errc_category& tls_errc_category() {
+  static internal::tls_errc_category c;
+  return c;
+}
 
 // Make a custom error code for MbedTLS errors
 inline ::std::error_code make_tls_error_code(int err) {
@@ -74,6 +77,13 @@ class TLSSocket : public Socket {
 
   TLSSocket();
   ~TLSSocket() override;
+
+  /**
+   * @brief Return the last error that occurred on the socket.
+   * 
+   * @return std::error_code error code
+   */
+  std::error_code lastError() const;
 
   /**
    * @brief Resolve the provided host and port, and attempt to create a socket connected there.

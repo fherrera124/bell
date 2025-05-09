@@ -6,6 +6,29 @@
 #include <vector>
 
 namespace bell::http {
+
+enum class Errc { Success = 0, InvalidURL, InvalidState, SocketNotOpen };
+
+namespace internal {
+struct http_error_category : public std::error_category {
+  const char* name() const noexcept override { return "BellHTTP"; }
+  std::string message(int ev) const noexcept override {
+    switch (static_cast<Errc>(ev)) {
+      case Errc::Success:
+        return "Success";
+      case Errc::InvalidURL:
+        return "Invalid URL";
+      case Errc::InvalidState:
+        return "Invalid state, either the request or response is not valid";
+      case Errc::SocketNotOpen:
+        return "Socket not open";
+      default:
+        return "Unknown error";
+    }
+  }
+};
+}  // namespace internal
+
 // Type definition for HTTP headers
 using Header = std::pair<std::string, std::string>;
 
@@ -13,7 +36,7 @@ using Header = std::pair<std::string, std::string>;
 using Headers = std::vector<Header>;
 
 // Used to differentiate between HTTP Requests and Responses, passed as a parameter for the Reader and Writer constructors
-enum class Direction { Request, Response };
+enum class Direction { Request, Response, Invalid };
 
 // HTTP Method enumeration
 enum class Method { GET, POST, PUT, DELETE, HEAD, OPTIONS, PATCH, INVALID };
@@ -29,6 +52,11 @@ Method parseMethod(std::string_view method);
 /// @brief Returns a string representation of the HTTP method
 std::string_view methodToString(Method method);
 }  // namespace bell::http
+
+// Plug in the error code category for std::error_code
+inline std::error_code make_error_code(const bell::http::Errc& e) {
+  return {static_cast<int>(e), bell::http::internal::http_error_category()};
+};
 
 // Alias for the HTTPCommon class
 namespace bell {

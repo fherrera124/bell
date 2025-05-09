@@ -21,7 +21,7 @@ class Server : bell::utils::Task {
       const std::unique_ptr<Writer>& responseWriter,
       const std::unordered_map<std::string, std::string>& routeParams)>;
 
-  void listen(int port = 8080);
+  bell::Result<> listen(int port = 8080);
 
   void registerHandler(Method method, const std::string& path,
                        const RequestHandler& handler);

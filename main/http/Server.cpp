@@ -10,9 +10,6 @@
 
 #include <sys/select.h>
 #include <unistd.h>
-#include <iostream>
-#include <regex>
-#include <stdexcept>
 
 using namespace bell;
 
@@ -25,7 +22,7 @@ http::Server::Server(int maxConnections)
   };
 }
 
-void http::Server::listen(int port) {
+bell::Result<> http::Server::listen(int port) {
   // Stop the task if it's already running
   stopTask();
 
@@ -34,13 +31,22 @@ void http::Server::listen(int port) {
   }
 
   // Try to bind to the specified port
-  listenSocket.bind("", port).unwrap();
+  auto listenRes = listenSocket.bind("", port);
+  if (!listenRes) {
+    return listenRes.getError();
+  }
 
   // Set the socket to non-blocking mode
-  listenSocket.setBlocking(false);
+  auto res = listenSocket.setBlocking(false);
+  if (!res) {
+    return res.getError();
+  }
 
   // Start listening for incoming connections
-  listenSocket.listen(maxConnections).unwrap();
+  res = listenSocket.listen(maxConnections);
+  if (!res) {
+    return res.getError();
+  }
 
   // Prepare master fd set for select
   FD_ZERO(&masterFdSet);
@@ -48,7 +54,9 @@ void http::Server::listen(int port) {
   maxFd = listenSocket.getFd();
 
   startTask();  // Will begin the task loop
-  BELL_LOG(info, LOG_TAG, "Server listening on port {}", port);
+  BELL_LOG(info, LOG_TAG, "Server listening on port {}", listenRes.getValue());
+
+  return {};
 }
 
 void http::Server::registerCustom404(const RequestHandler& handler) {
@@ -102,43 +110,45 @@ void http::Server::closeConnection(int fd) {
 }
 
 void http::Server::readFromClient(const Connection& connection) {
-  try {
-    // Wrap the socket in a stream, try to parse the request
-    net::SocketStream socketStream(connection.socket);
+  // Wrap the socket in a stream, try to parse the request
+  net::SocketStream socketStream(connection.socket);
 
-    auto reader = std::make_unique<http::Reader>(Direction::Request,
-                                                 &socketStream, &readBuffer);
-    reader->readHeaders();
+  auto reader = std::make_unique<http::Reader>(Direction::Request,
+                                               &socketStream, &readBuffer);
+  auto readerRes = reader->readHeaders();
 
-    auto writer =
-        std::make_unique<http::Writer>(Direction::Response, &socketStream);
-    writer->setHeader("Connection", "close");
-
-    // Find the handler for the request
-    auto handler = router.find(reader->getMethod(), reader->getPath());
-
-    if (!handler) {
-      notFoundHandler(reader, writer, {});
-    } else {
-      try {
-        handler->first(reader, writer, handler->second);
-      } catch (const std::exception& e) {
-        BELL_LOG(error, LOG_TAG, "Error occured in the request handler: {}",
-                 e.what());
-        writer->writeResponseWithBody(500, {}, "Internal server error");
-      }
-    }
-
-    if (!writer->hasWrittenHeaders() || !writer->hasWrittenBody()) {
-      BELL_LOG(error, LOG_TAG, "Handler did not write response");
-    }
-
+  if (!readerRes) {
+    BELL_LOG(error, LOG_TAG, "Error reading headers: {}",
+             readerRes.getError().message());
     closeConnection(connection.socket->getFd());
-  } catch (const std::exception& e) {
-    BELL_LOG(error, LOG_TAG, "Error occured while processing request: {}",
-             e.what());
-    closeConnection(connection.socket->getFd());
+    return;
   }
+
+  auto writer =
+      std::make_unique<http::Writer>(Direction::Response, &socketStream);
+  writer->setHeader("Connection", "close");
+
+  // Find the handler for the request
+  auto handler =
+      router.find(reader->getMethod().unwrap(), reader->getPath().unwrap());
+
+  if (!handler) {
+    notFoundHandler(reader, writer, {});
+  } else {
+    try {
+      handler->first(reader, writer, handler->second);
+    } catch (const std::exception& e) {
+      BELL_LOG(error, LOG_TAG, "Error occured in the request handler: {}",
+               e.what());
+      writer->writeResponseWithBody(500, {}, "Internal server error");
+    }
+  }
+
+  if (!writer->hasWrittenHeaders() || !writer->hasWrittenBody()) {
+    BELL_LOG(error, LOG_TAG, "Handler did not write response");
+  }
+
+  closeConnection(connection.socket->getFd());
 }
 
 void http::Server::taskLoop() {

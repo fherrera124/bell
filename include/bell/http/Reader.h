@@ -13,11 +13,15 @@
 #include <picohttpparser.h>
 
 // Own includes
+#include "bell/Result.h"
 #include "bell/http/Common.h"
 
 namespace bell::http {
 class Reader {
  public:
+  // Default constructor, initializes to invalid state
+  Reader() = default;
+
   /**
    * @brief HTTPReader constructor, initializes the reader with the given stream. No data is read from the stream until readHeaders() is called.
    *
@@ -29,9 +33,14 @@ class Reader {
          std::vector<char>* externalBuffer = nullptr);
 
   /**
+   * @brief Ownership-taking constructor, initializes the reader with the given stream. No data is read from the stream until readHeaders() is called.
+   */
+  Reader(Direction readerDirection, std::shared_ptr<std::istream> istreamPtr);
+
+  /**
    * @brief Read the headers from the stream. This method needs to be called before any other methods.
    */
-  void readHeaders();
+  bell::Result<> readHeaders();
 
   /**
    * @brief Return the value of the header with the given name
@@ -60,19 +69,19 @@ class Reader {
    * @brief Returns the status code of the response
    * @remark Only valid for response readers
    */
-  int getStatusCode() const;
+  bell::Result<int> getStatusCode() const;
 
   /**
    * @brief Returns the path of the request, e.g., /index.html
    * @remark Only valid for request readers
    */
-  std::string_view getPath() const;
+  bell::Result<std::string_view> getPath() const;
 
   /**
    * @brief Returns the HTTP method of the request
    * @remark Only valid for request readers
    */
-  Method getMethod() const;
+  bell::Result<Method> getMethod() const;
 
   /**
    * @brief Returns the body of the response as a string_view
@@ -80,7 +89,7 @@ class Reader {
    *
    * @return std::string_view
    */
-  std::string_view getBodyStringView();
+  bell::Result<std::string_view> getBodyStringView();
 
   /**
    * @brief Returns the body of the response as a vector of bytes
@@ -88,7 +97,7 @@ class Reader {
    *
    * @return std::vector<std::byte> Vector of bytes representing the body
    */
-  std::vector<std::byte> getBodyBytes();
+  bell::Result<std::vector<std::byte>> getBodyBytes();
 
   /**
    * @brief Returns a pointer to the body of the response. The length of the body can be obtained using getBodyBytesLength()
@@ -96,21 +105,22 @@ class Reader {
    *
    * @return const char* Pointer to the body of the response
    */
-  const char* getBodyBytesPtr();
+  bell::Result<const char*> getBodyBytesPtr();
 
   /**
    * @brief Returns the amount of bytes stored in the body buffer, which can be obtained using getBodyBytesPtr().
    *
    * @return size_t Amount of bytes stored in the body buffer, or 0 if the body has not been read yet
    */
-  size_t getBodyBytesLength();
+  bell::Result<size_t> getBodyBytesLength();
 
   /**
    * @brief Returns the query parameters of the request, parsed as key-value pairs
    *
    * @return std::unordered_map<std::string, std::string>
    */
-  std::unordered_map<std::string, std::string> getQueryParams() const;
+  bell::Result<std::unordered_map<std::string, std::string>> getQueryParams()
+      const;
 
   /**
    * @brief Returns the stream used by the reader
@@ -121,10 +131,12 @@ class Reader {
 
  private:
   static const int maxRequestLen = 4 * 1024;
-  Direction readerDirection;
-  std::istream* istream;
+  Direction readerDirection = Direction::Invalid;
+  std::shared_ptr<std::istream> sharedIstream;
+  std::istream* istream{};
   std::vector<char> internalBuffer;
-  std::vector<char>* bufferPtr;
+  std::vector<char>* bufferPtr = &internalBuffer;
+  bool usingExternalBuffer = false;
 
   bool headersValid = false;
   size_t readContentLength = 0;
@@ -144,12 +156,12 @@ class Reader {
   std::optional<std::string_view> statusMessage;
 
   // Tries to parse the query parameters from path, stripping it if successful
-  void parseQueryParams();
+  bell::Result<> parseQueryParams();
 
-  // Ensure the response is of the expected type, throws an exception if it is not
-  void ensureValid(Direction expectedDirection) const;
+  // Returns whether the reader is valid for the given direction
+  bool isValid(Direction expectedDirection) const;
 
-  void readBody();
+  bell::Result<> readBody();
 };
 }  // namespace bell::http
 

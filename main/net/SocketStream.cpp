@@ -15,17 +15,15 @@ int SocketBuffer::sync() {
   size_t n = pptr() - pbase();
   while (n > 0) {
     auto bw = internalSocket->write(reinterpret_cast<uint8_t*>(pptr() - n), n);
-
     if (!bw) {
-      BELL_LOG(error, "SocketBuffer", "Error writing to socket: {}",
-               bw.errorMessage());
+      // Set failbit and preserve the socket error
+      BELL_LOG(error, "SocketBuffer", "Write failed: {}", bw.errorMessage());
       setp(pptr() - n, obuf.data() + bufLen);
       pbump(n);
-      return -1;
+      return -1;  // This will make the stream set failbit
     }
     n -= bw.getValue();
   }
-
   setp(obuf.data(), obuf.data() + bufLen);
   return 0;
 }
@@ -34,8 +32,12 @@ SocketBuffer::int_type SocketBuffer::underflow() {
   auto br =
       internalSocket->read(reinterpret_cast<uint8_t*>(ibuf.data()), bufLen);
   if (!br) {
+    BELL_LOG(error, "SocketBuffer", "Read error: {}", br.errorMessage());
     setg(nullptr, nullptr, nullptr);
-    return traits_type::eof();
+    return traits_type::eof();  // Stream sets failbit
+  }
+  if (br.getValue() == 0) {
+    return traits_type::eof();  // Stream sets eofbit (clean EOF)
   }
   setg(ibuf.data(), ibuf.data(), ibuf.data() + br.getValue());
   return traits_type::to_int_type(*ibuf.data());
@@ -78,28 +80,27 @@ std::streamsize SocketBuffer::xsgetn(char_type* _s, std::streamsize _n) {
   return _n;
 }
 
-std::streamsize SocketBuffer::xsputn(const char_type* _s, std::streamsize _n) {
-  if (pptr() + _n <= epptr()) {
-    traits_type::copy(pptr(), _s, _n);
-    pbump(_n);
-    return _n;
+std::streamsize SocketBuffer::xsputn(const char_type* s, std::streamsize n) {
+  if (pptr() + n <= epptr()) {
+    traits_type::copy(pptr(), s, n);
+    pbump(n);
+    return n;
   }
-  if (sync() < 0)
-    return 0;
-  std::streamsize remain = _n;
-  const char_type* end = _s + _n;
+  if (sync() < 0) {
+    return 0;  // Stream sets failbit
+  }
+  std::streamsize remain = n;
+  const char_type* end = s + n;
   while (remain > bufLen) {
     auto bw = internalSocket->write((uint8_t*)(end - remain), remain);
-
     if (!bw) {
-      return (_n - remain);
+      return 0;  // Stream sets failbit
     }
     remain -= bw.getValue();
   }
-
   if (remain > 0) {
     traits_type::copy(pptr(), end - remain, remain);
     pbump(remain);
   }
-  return _n;
+  return n;
 }

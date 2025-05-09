@@ -12,7 +12,7 @@ class SocketBuffer : public std::streambuf {
  private:
   std::shared_ptr<Socket> internalSocket = nullptr;
 
-  static const int bufLen = 1024;
+  static const int bufLen = 256;
   std::array<char, bufLen> ibuf{};
   std::array<char, bufLen> obuf{};
 
