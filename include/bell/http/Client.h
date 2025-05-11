@@ -12,6 +12,7 @@
 #include <vector>
 
 // Library includes
+#include "bell/http/Common.h"
 #include "bell/http/Writer.h"
 #include "fmt/format.h"
 
@@ -72,8 +73,9 @@ class Connection {
 };
 
 /**
- * @brief Makes a GET request to the given URL.
+ * @brief Makes a generic request to the given URL.
  *
+ * @param method HTTP method to use, e.g. "GET" or "POST"
  * @param url URL to make the request to
  * @param headers Headers to include in the request
  * @param timeoutMs Timeout in milliseconds
@@ -81,17 +83,17 @@ class Connection {
  *
  * @return std::unique_ptr<Connection> Pointer to the http::Connection. The response can be obtained by calling getResponse() on the returned object.
  */
-inline bell::Result<Reader> get(const std::string& url,
-                                const Headers& headers = {},
-                                int timeoutMs = defaultHTTPClientTimeout,
-                                int secure = true) {
+inline bell::Result<Reader> request(Method method, const std::string& url,
+                                    const Headers& headers = {},
+                                    int timeoutMs = defaultHTTPClientTimeout,
+                                    int secure = true) {
   Connection conn;
   auto res = conn.connect(url, timeoutMs, secure);
   if (!res) {
     return res.getError();
   }
 
-  auto writerRes = conn.sendRequest(Method::GET, headers, 0);
+  auto writerRes = conn.sendRequest(method, headers, 0);
   if (!writerRes) {
     return writerRes.getError();
   }
@@ -100,8 +102,9 @@ inline bell::Result<Reader> get(const std::string& url,
 }
 
 /**
- * @brief Makes a POST request to the given URL.
+ * @brief Makes a generic request to the given URL.
  *
+ * @param method HTTP method to use, e.g. "GET" or "POST"
  * @param url URL to make the request to
  * @param headers Headers to include in the request
  * @param body Body to include in the request, passed as a pointer to a byte array
@@ -111,18 +114,16 @@ inline bell::Result<Reader> get(const std::string& url,
  *
  * @return std::unique_ptr<Connection> Pointer to the http::Connection. The response can be obtained by calling getResponse() on the returned object.
  */
-inline bell::Result<Reader> postRawPtr(const std::string& url,
-                                       const Headers& headers = {},
-                                       const std::byte* body = nullptr,
-                                       size_t length = 0,
-                                       int timeoutMs = defaultHTTPClientTimeout,
-                                       bool secure = true) {
+inline bell::Result<Reader> requestWithBodyPtr(
+    Method method, const std::string& url, const Headers& headers = {},
+    const std::byte* body = nullptr, size_t length = 0,
+    int timeoutMs = defaultHTTPClientTimeout, bool secure = true) {
   Connection conn;
   auto res = conn.connect(url, timeoutMs, secure);
   if (!res) {
     return res.getError();
   }
-  auto writerRes = conn.sendRequest(Method::POST, headers, length);
+  auto writerRes = conn.sendRequest(method, headers, length);
   if (!writerRes) {
     return writerRes.getError();
   }
@@ -137,8 +138,9 @@ inline bell::Result<Reader> postRawPtr(const std::string& url,
 }
 
 /**
- * @brief Makes a GET request to the given URL.
+ * @brief Makes a generic request to the given URL.
  *
+ * @param method HTTP method to use, e.g. "GET" or "POST"
  * @param url URL to make the request to
  * @param headers Headers to include in the request
  * @param body Body to include in the request, passed as a vector of bytes
@@ -147,13 +149,14 @@ inline bell::Result<Reader> postRawPtr(const std::string& url,
  *
  * @return std::unique_ptr<Connection> Pointer to the http::Connection. The response can be obtained by calling getResponse() on the returned object.
  */
-inline bell::Result<Reader> post(const std::string& url,
-                                 const Headers& headers = {},
-                                 const std::vector<std::byte>& body = {},
-                                 int timeoutMs = defaultHTTPClientTimeout,
-                                 bool secure = true) {
-  return postRawPtr(url, headers, body.data(), body.size(), timeoutMs, secure);
+inline bell::Result<Reader> requestWithBody(
+    Method method, const std::string& url, const Headers& headers = {},
+    const std::vector<std::byte>& body = {},
+    int timeoutMs = defaultHTTPClientTimeout, bool secure = true) {
+  return requestWithBodyPtr(method, url, headers, body.data(), body.size(),
+                            timeoutMs, secure);
 }
+
 }  // namespace bell::http
 
 // Alias for the HTTPConnection class
