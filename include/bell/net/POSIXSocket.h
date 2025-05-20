@@ -5,6 +5,7 @@
 #include <sys/socket.h>
 #include <cstdint>
 
+#include "bell/net/IpAddress.h"
 #include "bell/net/Socket.h"
 
 namespace bell::net {
@@ -78,6 +79,11 @@ class POSIXSocket : public Socket {
    * @brief Returns the last error code from the socket, using SO_ERROR.
    */
   std::error_code lastError() const;
+
+  /**
+   * @brief Returns the peer address of the socket.
+   */
+  Result<IpAddress> getPeerName() const;
 
   // Socket interface overrides
   Result<> setReceiveTimeout(int timeoutMs) override;

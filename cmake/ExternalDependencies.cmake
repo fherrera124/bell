@@ -27,6 +27,9 @@ list(APPEND BELL_LIBS Threads::Threads)
 if(NOT BELL_DISABLE_TAOJSON)
     add_subdirectory(external/taojson)
     list(APPEND BELL_LIBS taocpp-json)
+
+    # Suppress the deprecated literal operator error. TODO: report this upstream?
+    target_compile_options(taocpp-json INTERFACE -Wno-deprecated-literal-operator)
 endif()
 
 # Include MQTT if not disabled

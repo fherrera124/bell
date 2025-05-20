@@ -281,6 +281,8 @@ class AvahiMDNSBrowser : public Browser {
                 .type = EventType::AddressResolved,
                 .service = service,
             };
+
+            onEvent(event);
           }
 
           break;

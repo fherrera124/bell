@@ -1,7 +1,7 @@
 #pragma once
 
 // Standard includes
-#include <poll.h>
+#include <sys/poll.h>
 #include <functional>
 #include <memory>
 #include <mutex>

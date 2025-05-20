@@ -180,8 +180,8 @@ class BonjourBrowser : public Browser {
     if (err) {
       DiscoveryEvent event{
           .type = EventType::BrowseFailure,
-          .error = err,
           .service = service,
+          .error = err,
       };
       onEvent(event);
     } else {

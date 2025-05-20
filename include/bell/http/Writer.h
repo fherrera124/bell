@@ -2,6 +2,7 @@
 
 // Standard includes
 #include <map>
+#include <memory>
 #include <optional>
 #include <ostream>
 #include <string>

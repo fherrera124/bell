@@ -183,6 +183,21 @@ bell::Result<> POSIXSocket::setOptionImpl(int level, int optionName,
   return {};
 }
 
+bell::Result<IpAddress> POSIXSocket::getPeerName() const {
+  if (!isValid()) {
+    return Result<IpAddress>::fromError(std::errc::invalid_argument);
+  }
+
+  struct sockaddr addr {};
+  socklen_t addrLen = sizeof(addr);
+
+  if (getpeername(getFd(), &addr, &addrLen) == -1) {
+    return Result<IpAddress>::fromLastErrno();
+  }
+
+  return IpAddress(&addr);
+}
+
 bell::Result<> POSIXSocket::getOptionImpl(int level, int optionName,
                                           void* optionValue,
                                           socklen_t optionLen) {

@@ -15,7 +15,7 @@ class Semaphore {
    * @param timeout Timeout in milliseconds. A value of 0 means no timeout.
    * @return true if the semaphore was taken, false if the timeout expired.
    */
-  inline bool take(int timeout = 0) {
+  bool take(int timeout = 0) {
     std::unique_lock<std::mutex> lock(semMutex);
 
     if (timeout == 0) {
@@ -34,9 +34,17 @@ class Semaphore {
   }
 
   /**
+   * @brief Resets the semaphore count to zero.
+   */
+  void reset() {
+    std::lock_guard<std::mutex> lock(semMutex);
+    semCount = 0;
+  }
+
+  /**
    * @brief Gives a semaphore, incrementing the count. If there are any threads waiting on the semaphore, one will be unblocked.
    */
-  inline void give() {
+  void give() {
     std::lock_guard<std::mutex> lock(semMutex);
     ++semCount;
     semCondition.notify_one();

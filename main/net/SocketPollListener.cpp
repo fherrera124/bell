@@ -3,7 +3,6 @@
 // Standar includes
 #include <sys/poll.h>
 #include <cstring>
-#include <iostream>
 
 #include "bell/utils/Utils.h"
 #include "fmt/format.h"
@@ -30,6 +29,8 @@ void SocketPollListener::registerSocket(const std::shared_ptr<Socket>& socket,
 }
 
 void SocketPollListener::updateFdList() {
+  std::scoped_lock lock(pollMutex);
+
   fds.clear();
 
   for (const auto& handler : handlers) {
@@ -69,7 +70,7 @@ void SocketPollListener::updateFdList() {
 void SocketPollListener::unregisterSocket(const std::shared_ptr<Socket>& socket,
                                           Event polledEvent) {
   std::scoped_lock lock(pollMutex);
-  if (socket->isValid() && handlers.find(socket->getFd()) != handlers.end()) {
+  if (socket->isValid() && handlers.contains(socket->getFd())) {
     if (polledEvent == Event::All) {
       // Remove all events for the socket
       handlers.erase(socket->getFd());
@@ -92,7 +93,8 @@ void SocketPollListener::poll(int timeoutMs) {
 
     // Erase all FDS with expired weakptr
     for (auto it = handlers.begin(); it != handlers.end();) {
-      if (it->second.socketPtr.expired()) {
+      if (it->second.socketPtr.expired() ||
+          !it->second.socketPtr.lock()->isValid()) {
         rebuildFdList = true;
         it = handlers.erase(it);
       } else {
@@ -104,7 +106,8 @@ void SocketPollListener::poll(int timeoutMs) {
       updateFdList();
     }
 
-    fdsCopy = fds;
+    fdsCopy.reserve(fds.size());
+    std::copy(fds.begin(), fds.end(), std::back_inserter(fdsCopy));
   }
 
   if (fdsCopy.empty()) {
