@@ -72,7 +72,7 @@ class BrowseExecutor : public bell::Task {
       std::string regService = regType.substr(0, regType.find_first_of('.'));
       std::string regProto = regType.substr(regType.find_first_of('.') + 1);
 
-      auto res = mdns_query_ptr(regService.c_str(), regProto.c_str(), 3000,
+      auto res = mdns_query_ptr(regService.c_str(), regProto.c_str(), 5000,
                                 maxResultsPerQuery, &result);
       if (res != ESP_OK) {
         BELL_LOG(error, LOG_TAG, "Failed to query mDNS service: {}", res);
@@ -197,6 +197,16 @@ class EspressifMdnsBrowser : public Browser {
           // TODO: Implement IPv6 support
         }
         a = a->next;
+      }
+
+      if (!service.ipv4) {
+        // Ugly fix for espressif mdns sometimes missing an address when two instances of the same service are registered
+        for (auto& it : recordsCache) {
+          if (it.hostname == service.hostname && it.ipv4.has_value()) {
+            service.ipv4 = it.ipv4;
+            break;
+          }
+        }
       }
 
       bool freshRecord = false;
