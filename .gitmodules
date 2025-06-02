@@ -10,3 +10,6 @@
 [submodule "external/mbedtls"]
 	path = external/mbedtls
 	url = https://github.com/Mbed-TLS/mbedtls.git
+[submodule "external/span"]
+	path = external/span
+	url = https://github.com/tcbrindle/span.git

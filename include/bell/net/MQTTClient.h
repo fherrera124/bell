@@ -3,6 +3,7 @@
 #ifndef BELL_DISABLE_MQTT
 
 // Standard includes
+#include <array>
 #include <cstdint>
 #include <functional>
 #include <map>

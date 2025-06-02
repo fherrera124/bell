@@ -1,4 +1,4 @@
-# # Option for disabling message outputs from external dependencies
+# Option for disabling message outputs from external dependencies
 # function(message)
 #     if(NOT MESSAGE_QUIET)
 #         _message(${ARGN})
@@ -23,13 +23,17 @@ list(APPEND BELL_LIBS iqmath)
 find_package(Threads REQUIRED)
 list(APPEND BELL_LIBS Threads::Threads)
 
+# Include span polyfill
+add_subdirectory(external/span)
+list(APPEND BELL_LIBS span)
+
 # Include tao-json if not disabled
 if(NOT BELL_DISABLE_TAOJSON)
     add_subdirectory(external/taojson)
     list(APPEND BELL_LIBS taocpp-json)
 
-    # Suppress the deprecated literal operator error. TODO: report this upstream?
-    target_compile_options(taocpp-json INTERFACE -Wno-deprecated-literal-operator)
+    # # Suppress the deprecated literal operator error. TODO: report this upstream?
+    # target_compile_options(taocpp-json INTERFACE -Wno-deprecated-literal-operator)
 endif()
 
 # Include MQTT if not disabled

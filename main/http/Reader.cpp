@@ -138,6 +138,10 @@ bell::Result<> http::Reader::readHeaders() {
   return {};
 }
 
+std::istream* http::Reader::getStream() const {
+  return istream;
+}
+
 size_t http::Reader::getContentLength() const {
   return contentLength.value();
 }
