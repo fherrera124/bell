@@ -53,6 +53,7 @@ if(NOT BELL_DISABLE_MBEDTLS)
 
         # add mbedtls as a subdirectory
         add_subdirectory(external/mbedtls)
+        target_compile_options(mbedtls PRIVATE -O2)
         list(APPEND BELL_LIBS mbedtls)
     endif()
 endif()
@@ -82,6 +83,12 @@ if(NOT BELL_DISABLE_CODECS AND BELL_CODEC_OPUS)
     target_compile_options(opus PRIVATE -O2 -Wno-unused-parameter -Wno-parentheses-equality -Wno-cast-align -Wno-unused-but-set-variable -Wno-nonnull -Wno-stringop-overread)
 
     list(APPEND BELL_LIBS opus)
+endif()
+
+# Audio codec - AAC-LC
+if(NOT BELL_DISABLE_CODECS AND BELL_CODEC_AAC)
+    add_subdirectory(external/fdk-aac)
+    list(APPEND BELL_LIBS fdk-aac)
 endif()
 
 # Audio backends

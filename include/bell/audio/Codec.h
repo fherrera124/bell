@@ -22,8 +22,8 @@ class Codec {
     // Audio format to use, defaults to 16-bit PCM, 2 channels, 44100 Hz
     bell::audio::Format audioFormat{};
 
-    // Optional preferred frame length in milliseconds
-    std::optional<uint16_t> frameLength{};
+    // Optional preferred amount of samples per frame
+    std::optional<uint16_t> samplesPerFrame{};
   };
 
   /// Result code for encode/decode
