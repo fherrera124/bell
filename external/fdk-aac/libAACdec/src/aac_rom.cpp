@@ -1583,6 +1583,102 @@ const SCHAR *aQuantTable[] = {
     aValTab24,                   /* 30            6        */
     aValTab24};                  /* 31            6        */
 
+/* arrays for HCR_TABLE_INFO structures */
+/* maximum length of codeword in each codebook */
+/* codebook:                     0,1, 2,3, 4, 5, 6, 7, 8, 9,
+ * 10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31 */
+const UCHAR aMaxCwLen[MAX_CB] = {0,  11, 9,  20, 16, 13, 11, 14, 12, 17, 14,
+                                 49, 0,  0,  0,  0,  14, 17, 21, 21, 25, 25,
+                                 29, 29, 29, 29, 33, 33, 33, 37, 37, 41};
+
+/*                                                           11  13  15  17  19
+ * 21  23  25  27  39  31 */
+/*                            CB:  0 1 2 3 4 5 6 7 8 9 10  12  14  16  18  20
+ * 22  24  26  28  30       */
+const UCHAR aDimCb[MAX_CB] = {
+    2, 4, 4, 4, 4, 2, 2, 2, 2, 2, 2, 2, 1, 2, 2, 2, 2,
+    2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2}; /* codebook dimension -
+                                                          zero cb got a
+                                                          dimension of 2 */
+
+/*                                                           11  13  15  17  19
+ * 21  23  25  27  39  31 */
+/*                            CB:  0 1 2 3 4 5 6 7 8 9 10  12  14  16  18  20
+ * 22  24  26  28  30       */
+const UCHAR aDimCbShift[MAX_CB] = {
+    1, 2, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1}; /* codebook dimension */
+
+/*               1 -> decode sign bits */
+/*               0 -> decode no sign bits                11  13  15  17  19  21
+ * 23  25  27  39  31 */
+/*                        CB:  0 1 2 3 4 5 6 7 8 9 10  12  14  16  18  20  22
+ * 24  26  28  30       */
+const UCHAR aSignCb[MAX_CB] = {0, 0, 0, 1, 1, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0,
+                               1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
+
+/* arrays for HCR_CB_PAIRS structures */
+const UCHAR aMinOfCbPair[MAX_CB_PAIRS] = {0,  1,  3,  5,  7,  9,  16, 17,
+                                          18, 19, 20, 21, 22, 23, 24, 25,
+                                          26, 27, 28, 29, 30, 31, 11};
+const UCHAR aMaxOfCbPair[MAX_CB_PAIRS] = {0,  2,  4,  6,  8,  10, 16, 17,
+                                          18, 19, 20, 21, 22, 23, 24, 25,
+                                          26, 27, 28, 29, 30, 31, 11};
+
+/* priorities of codebooks */
+const UCHAR aCbPriority[MAX_CB] = {0,  1,  1,  2,  2,  3,  3,  4,  4,  5,  5,
+                                   22, 0,  0,  0,  0,  6,  7,  8,  9,  10, 11,
+                                   12, 13, 14, 15, 16, 17, 18, 19, 20, 21};
+
+const SCHAR aCodebook2StartInt[] = {STOP_THIS_STATE,      /* cb  0 */
+                                    BODY_ONLY,            /* cb  1 */
+                                    BODY_ONLY,            /* cb  2 */
+                                    BODY_SIGN__BODY,      /* cb  3 */
+                                    BODY_SIGN__BODY,      /* cb  4 */
+                                    BODY_ONLY,            /* cb  5 */
+                                    BODY_ONLY,            /* cb  6 */
+                                    BODY_SIGN__BODY,      /* cb  7 */
+                                    BODY_SIGN__BODY,      /* cb  8 */
+                                    BODY_SIGN__BODY,      /* cb  9 */
+                                    BODY_SIGN__BODY,      /* cb 10 */
+                                    BODY_SIGN_ESC__BODY,  /* cb 11 */
+                                    STOP_THIS_STATE,      /* cb 12 */
+                                    STOP_THIS_STATE,      /* cb 13 */
+                                    STOP_THIS_STATE,      /* cb 14 */
+                                    STOP_THIS_STATE,      /* cb 15 */
+                                    BODY_SIGN_ESC__BODY,  /* cb 16 */
+                                    BODY_SIGN_ESC__BODY,  /* cb 17 */
+                                    BODY_SIGN_ESC__BODY,  /* cb 18 */
+                                    BODY_SIGN_ESC__BODY,  /* cb 19 */
+                                    BODY_SIGN_ESC__BODY,  /* cb 20 */
+                                    BODY_SIGN_ESC__BODY,  /* cb 21 */
+                                    BODY_SIGN_ESC__BODY,  /* cb 22 */
+                                    BODY_SIGN_ESC__BODY,  /* cb 23 */
+                                    BODY_SIGN_ESC__BODY,  /* cb 24 */
+                                    BODY_SIGN_ESC__BODY,  /* cb 25 */
+                                    BODY_SIGN_ESC__BODY,  /* cb 26 */
+                                    BODY_SIGN_ESC__BODY,  /* cb 27 */
+                                    BODY_SIGN_ESC__BODY,  /* cb 28 */
+                                    BODY_SIGN_ESC__BODY,  /* cb 29 */
+                                    BODY_SIGN_ESC__BODY,  /* cb 30 */
+                                    BODY_SIGN_ESC__BODY}; /* cb 31 */
+
+const STATEFUNC aStateConstant2State[] = {
+    NULL,                                /*  0 = STOP_THIS_STATE           */
+    Hcr_State_BODY_ONLY,                 /*  1 = BODY_ONLY                 */
+    Hcr_State_BODY_SIGN__BODY,           /*  2 = BODY_SIGN__BODY           */
+    Hcr_State_BODY_SIGN__SIGN,           /*  3 = BODY_SIGN__SIGN           */
+    Hcr_State_BODY_SIGN_ESC__BODY,       /*  4 = BODY_SIGN_ESC__BODY       */
+    Hcr_State_BODY_SIGN_ESC__SIGN,       /*  5 = BODY_SIGN_ESC__SIGN       */
+    Hcr_State_BODY_SIGN_ESC__ESC_PREFIX, /*  6 = BODY_SIGN_ESC__ESC_PREFIX */
+    Hcr_State_BODY_SIGN_ESC__ESC_WORD};  /*  7 = BODY_SIGN_ESC__ESC_WORD   */
+
+/*                                     CB:  0 1 2 3 4 5 6 7 8  9 10      12
+ * 14    16    18    20      22      24      26      28       30         */
+const USHORT aLargestAbsoluteValue[MAX_CB] = {
+    0,    1,   1,   2,   2,   4,   4,   7,   7,    12,  12,
+    8191, 0,   0,   0,   0,   15,  31,  47,  63,   95,  127,
+    159,  191, 223, 255, 319, 383, 511, 767, 1023, 2047}; /* lav */
 /*                                     CB:                           11     13
  * 15    17    19     21      23      25      27      39       31     */
 

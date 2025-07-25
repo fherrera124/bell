@@ -1,7 +1,7 @@
 /* -----------------------------------------------------------------------------
 Software License for The Fraunhofer FDK AAC Codec Library for Android
 
-© Copyright  1995 - 2018 Fraunhofer-Gesellschaft zur Förderung der angewandten
+© Copyright  1995 - 2019 Fraunhofer-Gesellschaft zur Förderung der angewandten
 Forschung e.V. All rights reserved.
 
  1.    INTRODUCTION
@@ -105,7 +105,10 @@ amm-info@iis.fraunhofer.de
 
 #include "common_fix.h"
 #include "FDK_audio.h"
+#include "aacdec_hcr_types.h"
+#include "aacdec_hcrs.h"
 
+#define PCM_AAC LONG
 #define PCM_DEC FIXP_DBL
 #define MAXVAL_PCM_DEC MAXVAL_DBL
 #define MINVAL_PCM_DEC MINVAL_DBL
@@ -163,7 +166,7 @@ typedef struct {
 extern const CodeBookDescription AACcodeBookDescriptionTable[13];
 extern const CodeBookDescription AACcodeBookDescriptionSCL;
 
-#define  MAX_CB                        32     /* last used CB is cb #31 when VCB11 is used */
+extern const STATEFUNC aStateConstant2State[];
 
 extern const SCHAR aCodebook2StartInt[];
 

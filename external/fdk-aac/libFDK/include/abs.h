@@ -109,6 +109,9 @@ amm-info@iis.fraunhofer.de
 #elif defined(__x86__)
 #include "x86/abs_x86.h"
 
+#elif defined(ESP_PLATFORM)  /* cppp replaced: elif */
+#include "xtensa/abs_xtensa.h"
+
 #endif /* all cores */
 
 /*************************************************************************

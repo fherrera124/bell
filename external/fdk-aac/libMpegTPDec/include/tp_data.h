@@ -1,7 +1,7 @@
 /* -----------------------------------------------------------------------------
 Software License for The Fraunhofer FDK AAC Codec Library for Android
 
-© Copyright  1995 - 2018 Fraunhofer-Gesellschaft zur Förderung der angewandten
+© Copyright  1995 - 2020 Fraunhofer-Gesellschaft zur Förderung der angewandten
 Forschung e.V. All rights reserved.
 
  1.    INTRODUCTION
@@ -368,9 +368,18 @@ typedef INT (*cbCtrlCFGChange_t)(void *, const CCtrlCFGChange *);
 typedef INT (*cbSsc_t)(void *, HANDLE_FDK_BITSTREAM,
                        const AUDIO_OBJECT_TYPE coreCodec,
                        const INT samplingRate, const INT frameSize,
-                       const INT stereoConfigIndex,
+                       const INT numChannels, const INT stereoConfigIndex,
                        const INT coreSbrFrameLengthIndex, const INT configBytes,
                        const UCHAR configMode, UCHAR *configChanged);
+
+typedef INT (*cbSbr_t)(void *self, HANDLE_FDK_BITSTREAM hBs,
+                       const INT sampleRateIn, const INT sampleRateOut,
+                       const INT samplesPerFrame,
+                       const AUDIO_OBJECT_TYPE coreCodec,
+                       const MP4_ELEMENT_ID elementID, const INT elementIndex,
+                       const UCHAR harmonicSbr, const UCHAR stereoConfigIndex,
+                       const UCHAR configMode, UCHAR *configChanged,
+                       const INT downscaleFactor);
 
 typedef INT (*cbUsac_t)(void *self, HANDLE_FDK_BITSTREAM hBs);
 
@@ -392,6 +401,8 @@ typedef struct {
                                 callback. */
   cbSsc_t cbSsc;             /*!< Function pointer for SSC parser callback. */
   void *cbSscData;           /*!< User data pointer for SSC parser callback. */
+  cbSbr_t cbSbr;   /*!< Function pointer for SBR header parser callback. */
+  void *cbSbrData; /*!< User data pointer for SBR header parser callback. */
   cbUsac_t cbUsac;
   void *cbUsacData;
   cbUniDrc_t cbUniDrc; /*!< Function pointer for uniDrcConfig and

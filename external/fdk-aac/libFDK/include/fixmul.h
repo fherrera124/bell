@@ -118,6 +118,9 @@ amm-info@iis.fraunhofer.de
 #elif defined(__powerpc__)
 #include "ppc/fixmul_ppc.h"
 
+#elif defined(ESP_PLATFORM)
+#include "xtensa/fixmul_xtensa.h"
+
 #endif /* all cores */
 
 /*************************************************************************

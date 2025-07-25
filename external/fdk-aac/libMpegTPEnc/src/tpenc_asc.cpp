@@ -1,7 +1,7 @@
 /* -----------------------------------------------------------------------------
 Software License for The Fraunhofer FDK AAC Codec Library for Android
 
-© Copyright  1995 - 2018 Fraunhofer-Gesellschaft zur Förderung der angewandten
+© Copyright  1995 - 2020 Fraunhofer-Gesellschaft zur Förderung der angewandten
 Forschung e.V. All rights reserved.
 
  1.    INTRODUCTION
@@ -769,6 +769,25 @@ static int transportEnc_writeELDSpecificConfig(HANDLE_FDK_BITSTREAM hBs,
     FDKwriteBits(hBs, (config->samplingRate == config->extSamplingRate) ? 0 : 1,
                  1); /* Samplerate Flag */
     FDKwriteBits(hBs, (config->flags & CC_SBRCRC) ? 1 : 0, 1); /* SBR CRC flag*/
+
+    if (cb->cbSbr != NULL) {
+      const PCE_CONFIGURATION *pPce;
+      int e, sbrElementIndex = 0;
+
+      pPce = getPceEntry(config->channelMode);
+
+      for (e = 0; e < pPce->num_front_channel_elements +
+                          pPce->num_side_channel_elements +
+                          pPce->num_back_channel_elements +
+                          pPce->num_lfe_channel_elements;
+           e++) {
+        if ((pPce->pEl_type[e] == ID_SCE) || (pPce->pEl_type[e] == ID_CPE)) {
+          cb->cbSbr(cb->cbSbrData, hBs, 0, 0, 0, config->aot, pPce->pEl_type[e],
+                    sbrElementIndex, 0, 0, 0, NULL, 1);
+          sbrElementIndex++;
+        }
+      }
+    }
   }
 
   if ((config->flags & CC_SAC) && (cb->cbSsc != NULL)) {
@@ -776,7 +795,7 @@ static int transportEnc_writeELDSpecificConfig(HANDLE_FDK_BITSTREAM hBs,
 
     const INT eldExtLen =
         (cb->cbSsc(cb->cbSscData, NULL, config->aot, config->extSamplingRate, 0,
-                   0, 0, 0, 0, NULL) +
+                   0, 0, 0, 0, 0, NULL) +
          7) >>
         3;
     INT cnt = eldExtLen;
@@ -799,7 +818,7 @@ static int transportEnc_writeELDSpecificConfig(HANDLE_FDK_BITSTREAM hBs,
     }
 
     cb->cbSsc(cb->cbSscData, hBs, config->aot, config->extSamplingRate, 0, 0, 0,
-              0, 0, NULL);
+              0, 0, 0, NULL);
   }
 
   if (config->downscaleSamplingRate != 0 &&

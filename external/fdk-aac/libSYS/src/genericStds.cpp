@@ -189,6 +189,25 @@ char *FDKstrncpy(char *dest, const char *src, UINT n) {
  * DYNAMIC MEMORY management (heap)
  *************************************************************************/
 
+#ifdef ESP_PLATFORM
+#include "esp_heap_caps.h"
+
+void *FDKcalloc(const UINT n, const UINT size) {
+  /*
+   * On ESP_PLATFORM, attempt to allocate from PSRAM (external SPIRAM).
+   * The MALLOC_CAP_SPIRAM flag targets external RAM. MALLOC_CAP_8BIT
+   * ensures the memory is byte-addressable.
+   */
+  return heap_caps_calloc(n, size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+}
+
+void *FDKmalloc(const UINT size) {
+  /* On ESP_PLATFORM, attempt to allocate from PSRAM (external SPIRAM). */
+  return heap_caps_malloc(size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+}
+
+#else /* Standard implementation for other platforms */
+
 void *FDKcalloc(const UINT n, const UINT size) {
   void *ptr;
 
@@ -205,10 +224,20 @@ void *FDKmalloc(const UINT size) {
   return ptr;
 }
 
-void FDKfree(void *ptr) { free((INT *)ptr); }
+#endif /* ESP_PLATFORM */
+
+void FDKfree(void *ptr) {
+  /*
+   * Standard free() is used for all platforms. For ESP-IDF, free() is
+   * a wrapper around heap_caps_free() and can deallocate memory from any
+   * region, including PSRAM.
+   */
+  free((INT *)ptr);
+}
 
 void *FDKaalloc(const UINT size, const UINT alignment) {
   void *addr, *result = NULL;
+  /* This will call the platform-specific FDKcalloc (standard or PSRAM) */
   addr = FDKcalloc(1, size + alignment +
                           (UINT)sizeof(void *)); /* Malloc and clear memory. */
 
@@ -239,6 +268,7 @@ void FDKafree(void *ptr) {
  * FDKcalloc_L
  *--------------------------------------------------------------------------*/
 void *FDKcalloc_L(const UINT dim, const UINT size, MEMORY_SECTION s) {
+  /* This will call the platform-specific FDKcalloc (standard or PSRAM) */
   return FDKcalloc(dim, size);
 }
 
@@ -272,7 +302,7 @@ void FDKafree_L(void *ptr) {
 /*---------------------------------------------------------------------------------------
  * FUNCTION:    FDKmemcpy
  * DESCRIPTION: - copies memory from "src" to "dst" with length "size" bytes
- *              - compiled with FDK_DEBUG will give you warnings
+ * - compiled with FDK_DEBUG will give you warnings
  *---------------------------------------------------------------------------------------*/
 void FDKmemcpy(void *dst, const void *src, const UINT size) {
   /* -- check for overlapping memory areas -- */

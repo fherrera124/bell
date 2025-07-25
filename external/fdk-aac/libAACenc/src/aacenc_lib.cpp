@@ -1,7 +1,7 @@
 /* -----------------------------------------------------------------------------
 Software License for The Fraunhofer FDK AAC Codec Library for Android
 
-© Copyright  1995 - 2018 Fraunhofer-Gesellschaft zur Förderung der angewandten
+© Copyright  1995 - 2021 Fraunhofer-Gesellschaft zur Förderung der angewandten
 Forschung e.V. All rights reserved.
 
  1.    INTRODUCTION
@@ -110,9 +110,9 @@ amm-info@iis.fraunhofer.de
 /* Encoder library info */
 #define AACENCODER_LIB_VL0 4
 #define AACENCODER_LIB_VL1 0
-#define AACENCODER_LIB_VL2 0
+#define AACENCODER_LIB_VL2 1
 #define AACENCODER_LIB_TITLE "AAC Encoder"
-#ifdef __ANDROID__
+#ifdef SUPPRESS_BUILD_DATE_INFO
 #define AACENCODER_LIB_BUILD_DATE ""
 #define AACENCODER_LIB_BUILD_TIME ""
 #else
@@ -122,6 +122,8 @@ amm-info@iis.fraunhofer.de
 
 #include "pcm_utils.h"
 
+#include "sbr_encoder.h"
+#include "../src/sbrenc_ram.h"
 #include "channel_map.h"
 
 #include "psy_const.h"
@@ -130,6 +132,8 @@ amm-info@iis.fraunhofer.de
 #include "tpenc_lib.h"
 
 #include "metadata_main.h"
+#include "mps_main.h"
+#include "sacenc_lib.h"
 
 #define SBL(fl) \
   (fl /         \
@@ -195,9 +199,21 @@ typedef struct {
 
   UCHAR userMetaDataMode; /*!< Meta data library configuration. */
 
+  UCHAR userSbrEnabled; /*!< Enable SBR for ELD. */
+  UINT userSbrRatio;    /*!< SBR sampling rate ratio. Dual- or single-rate. */
+
   UINT userDownscaleFactor;
 
 } USER_PARAM;
+
+/**
+ *  SBR extenxion payload struct provides buffers to be filled in SBR encoder
+ * library.
+ */
+typedef struct {
+  UCHAR data[(1)][(8)][MAX_PAYLOAD_SIZE]; /*!< extension payload data buffer */
+  UINT dataSize[(1)][(8)]; /*!< extension payload data size in bits */
+} SBRENC_EXT_PAYLOAD;
 
 ////////////////////////////////////////////////////////////////////////////////////
 
@@ -215,11 +231,17 @@ struct AACENCODER {
   AACENC_CONFIG aacConfig;
   HANDLE_AAC_ENC hAacEnc;
 
+  /* SBR */
+  HANDLE_SBR_ENCODER hEnvEnc;      /* SBR encoder */
+  SBRENC_EXT_PAYLOAD *pSbrPayload; /* SBR extension payload */
+
   /* Meta Data */
   HANDLE_FDK_METADATA_ENCODER hMetadataEnc;
   INT metaDataAllowed; /* Signal whether chosen configuration allows metadata.
                           Necessary for delay compensation. Metadata mode is a
                           separate parameter. */
+
+  HANDLE_MPS_ENCODER hMpsEnc;
 
   /* Transport */
   HANDLE_TRANSPORTENC hTpEnc;
@@ -248,6 +270,8 @@ struct AACENCODER {
   /* Memory allocation info. */
   INT nMaxAacElements;
   INT nMaxAacChannels;
+  INT nMaxSbrElements;
+  INT nMaxSbrChannels;
 
   UINT encoder_modis;
 
@@ -269,6 +293,92 @@ typedef struct {
 
 } ELD_SBR_CONFIGURATOR;
 
+/**
+ * \brief  This table defines ELD/SBR default configurations.
+ */
+static const ELD_SBR_CONFIGURATOR eldSbrAutoConfigTab[] = {
+    {1, 48000, 0, 2, MODE_1},      {1, 48000, 64000, 0, MODE_1},
+
+    {1, 44100, 0, 2, MODE_1},      {1, 44100, 64000, 0, MODE_1},
+
+    {1, 32000, 0, 2, MODE_1},      {1, 32000, 28000, 1, MODE_1},
+    {1, 32000, 56000, 0, MODE_1},
+
+    {1, 24000, 0, 1, MODE_1},      {1, 24000, 40000, 0, MODE_1},
+
+    {1, 16000, 0, 1, MODE_1},      {1, 16000, 28000, 0, MODE_1},
+
+    {1, 15999, 0, 0, MODE_1},
+
+    {2, 48000, 0, 2, MODE_2},      {2, 48000, 44000, 2, MODE_2},
+    {2, 48000, 128000, 0, MODE_2},
+
+    {2, 44100, 0, 2, MODE_2},      {2, 44100, 44000, 2, MODE_2},
+    {2, 44100, 128000, 0, MODE_2},
+
+    {2, 32000, 0, 2, MODE_2},      {2, 32000, 32000, 2, MODE_2},
+    {2, 32000, 68000, 1, MODE_2},  {2, 32000, 96000, 0, MODE_2},
+
+    {2, 24000, 0, 1, MODE_2},      {2, 24000, 48000, 1, MODE_2},
+    {2, 24000, 80000, 0, MODE_2},
+
+    {2, 16000, 0, 1, MODE_2},      {2, 16000, 32000, 1, MODE_2},
+    {2, 16000, 64000, 0, MODE_2},
+
+    {2, 15999, 0, 0, MODE_2}
+
+};
+
+/*
+ * \brief  Configure SBR for ELD configuration.
+ *
+ * This function finds default SBR configuration for ELD based on number of
+ * channels, sampling rate and bitrate.
+ *
+ * \param nChannels             Number of audio channels.
+ * \param samplingRate          Audio signal sampling rate.
+ * \param bitrate               Encoder bitrate.
+ *
+ * \return - pointer to eld sbr configuration.
+ *         - NULL, on failure.
+ */
+static const ELD_SBR_CONFIGURATOR *eldSbrConfigurator(const ULONG nChannels,
+                                                      const ULONG samplingRate,
+                                                      const ULONG bitrate) {
+  int i;
+  const ELD_SBR_CONFIGURATOR *pSetup = NULL;
+
+  for (i = 0;
+       i < (int)(sizeof(eldSbrAutoConfigTab) / sizeof(ELD_SBR_CONFIGURATOR));
+       i++) {
+    if ((nChannels == eldSbrAutoConfigTab[i].nChannels) &&
+        (samplingRate <= eldSbrAutoConfigTab[i].samplingRate) &&
+        (bitrate >= eldSbrAutoConfigTab[i].bitrateRange)) {
+      pSetup = &eldSbrAutoConfigTab[i];
+    }
+  }
+
+  return pSetup;
+}
+
+static inline INT isSbrActive(const HANDLE_AACENC_CONFIG hAacConfig) {
+  INT sbrUsed = 0;
+
+  /* Note: Even if implicit signalling was selected, The AOT itself here is not
+   * AOT_AAC_LC */
+  if ((hAacConfig->audioObjectType == AOT_SBR) ||
+      (hAacConfig->audioObjectType == AOT_PS) ||
+      (hAacConfig->audioObjectType == AOT_MP2_SBR)) {
+    sbrUsed = 1;
+  }
+  if (hAacConfig->audioObjectType == AOT_ER_AAC_ELD &&
+      (hAacConfig->syntaxFlags & AC_SBR_PRESENT)) {
+    sbrUsed = 1;
+  }
+
+  return (sbrUsed);
+}
+
 static inline INT isPsActive(const AUDIO_OBJECT_TYPE audioObjectType) {
   INT psUsed = 0;
 
@@ -287,6 +397,71 @@ static CHANNEL_MODE GetCoreChannelMode(
     mappedChannelMode = MODE_1;
   }
   return mappedChannelMode;
+}
+
+static SBR_PS_SIGNALING getSbrSignalingMode(
+    const AUDIO_OBJECT_TYPE audioObjectType, const TRANSPORT_TYPE transportType,
+    const UCHAR transportSignaling, const UINT sbrRatio)
+
+{
+  SBR_PS_SIGNALING sbrSignaling;
+
+  if (transportType == TT_UNKNOWN || sbrRatio == 0) {
+    sbrSignaling = SIG_UNKNOWN; /* Needed parameters have not been set */
+    return sbrSignaling;
+  } else {
+    sbrSignaling =
+        SIG_EXPLICIT_HIERARCHICAL; /* default: explicit hierarchical signaling
+                                    */
+  }
+
+  if ((audioObjectType == AOT_AAC_LC) || (audioObjectType == AOT_SBR) ||
+      (audioObjectType == AOT_PS) || (audioObjectType == AOT_MP2_AAC_LC) ||
+      (audioObjectType == AOT_MP2_SBR)) {
+    switch (transportType) {
+      case TT_MP4_ADIF:
+      case TT_MP4_ADTS:
+        sbrSignaling = SIG_IMPLICIT; /* For MPEG-2 transport types, only
+                                        implicit signaling is possible */
+        break;
+
+      case TT_MP4_RAW:
+      case TT_MP4_LATM_MCP1:
+      case TT_MP4_LATM_MCP0:
+      case TT_MP4_LOAS:
+      default:
+        if (transportSignaling == 0xFF) {
+          /* Defaults */
+          sbrSignaling = SIG_EXPLICIT_HIERARCHICAL;
+        } else {
+          /* User set parameters */
+          /* Attention: Backward compatible explicit signaling does only work
+           * with AMV1 for LATM/LOAS */
+          sbrSignaling = (SBR_PS_SIGNALING)transportSignaling;
+        }
+        break;
+    }
+  }
+
+  return sbrSignaling;
+}
+
+static inline INT getAssociatedChElement(SBR_ELEMENT_INFO *elInfoSbr,
+                                         CHANNEL_MAPPING *channelMapping) {
+  ELEMENT_INFO *elInfo = channelMapping->elInfo;
+  INT nElements = channelMapping->nElements;
+  INT associatedChElement = -1;
+  int i;
+
+  for (i = 0; i < nElements; i++) {
+    if (elInfoSbr->elType == elInfo[i].elType &&
+        elInfoSbr->instanceTag == elInfo[i].instanceTag) {
+      associatedChElement = i;
+      break;
+    }
+  }
+
+  return associatedChElement;
 }
 
 /****************************************************************************
@@ -515,14 +690,46 @@ AAC_ENCODER_ERROR aacEncDefaultConfig(HANDLE_AACENC_CONFIG hAacConfig,
 
   config->userAncDataRate = 0;
 
+  /* SBR rate is set to 0 here, which means it should be set automatically
+     in FDKaacEnc_AdjustEncSettings() if the user did not set a rate
+     expilicitely. */
+  config->userSbrRatio = 0;
+
+  /* SBR enable set to -1 means to inquire ELD audio configurator for reasonable
+   * configuration. */
+  config->userSbrEnabled = (UCHAR)-1;
+
   return AAC_ENC_OK;
+}
+
+static void aacEncDistributeSbrBits(CHANNEL_MAPPING *channelMapping,
+                                    SBR_ELEMENT_INFO *sbrElInfo, INT bitRate) {
+  INT codebits = bitRate;
+  int el;
+
+  /* Copy Element info */
+  for (el = 0; el < channelMapping->nElements; el++) {
+    sbrElInfo[el].ChannelIndex[0] = channelMapping->elInfo[el].ChannelIndex[0];
+    sbrElInfo[el].ChannelIndex[1] = channelMapping->elInfo[el].ChannelIndex[1];
+    sbrElInfo[el].elType = channelMapping->elInfo[el].elType;
+    sbrElInfo[el].bitRate =
+        fMultIfloor(channelMapping->elInfo[el].relativeBits, bitRate);
+    sbrElInfo[el].instanceTag = channelMapping->elInfo[el].instanceTag;
+    sbrElInfo[el].nChannelsInEl = channelMapping->elInfo[el].nChannelsInEl;
+    sbrElInfo[el].fParametricStereo = 0;
+    sbrElInfo[el].fDualMono = 0;
+
+    codebits -= sbrElInfo[el].bitRate;
+  }
+  sbrElInfo[0].bitRate += codebits;
 }
 
 static INT aacEncoder_LimitBitrate(const HANDLE_TRANSPORTENC hTpEnc,
                                    const INT samplingRate,
                                    const INT frameLength, const INT nChannels,
                                    const CHANNEL_MODE channelMode, INT bitRate,
-                                   const INT nSubFrames,
+                                   const INT nSubFrames, const INT sbrActive,
+                                   const INT sbrDownSampleRate,
                                    const UINT syntaxFlags,
                                    const AUDIO_OBJECT_TYPE aot) {
   INT coreSamplingRate;
@@ -530,12 +737,91 @@ static INT aacEncoder_LimitBitrate(const HANDLE_TRANSPORTENC hTpEnc,
 
   FDKaacEnc_InitChannelMapping(channelMode, CH_ORDER_MPEG, &cm);
 
-  coreSamplingRate = samplingRate;
+  if (sbrActive) {
+    coreSamplingRate =
+        samplingRate >>
+        (sbrEncoder_IsSingleRatePossible(aot) ? (sbrDownSampleRate - 1) : 1);
+  } else {
+    coreSamplingRate = samplingRate;
+  }
 
   /* Limit bit rate in respect to the core coder */
   bitRate = FDKaacEnc_LimitBitrate(hTpEnc, aot, coreSamplingRate, frameLength,
                                    nChannels, cm.nChannelsEff, bitRate, -1,
                                    NULL, AACENC_BR_MODE_INVALID, nSubFrames);
+
+  /* Limit bit rate in respect to available SBR modes if active */
+  if (sbrActive) {
+    int numIterations = 0;
+    INT initialBitrate, adjustedBitrate;
+    adjustedBitrate = bitRate;
+
+    /* Find total bitrate which provides valid configuration for each SBR
+     * element. */
+    do {
+      int e;
+      SBR_ELEMENT_INFO sbrElInfo[((8))];
+      FDK_ASSERT(cm.nElements <= ((8)));
+
+      initialBitrate = adjustedBitrate;
+
+      /* Get bit rate for each SBR element */
+      aacEncDistributeSbrBits(&cm, sbrElInfo, initialBitrate);
+
+      for (e = 0; e < cm.nElements; e++) {
+        INT sbrElementBitRateIn, sbrBitRateOut;
+
+        if (cm.elInfo[e].elType != ID_SCE && cm.elInfo[e].elType != ID_CPE) {
+          continue;
+        }
+        sbrElementBitRateIn = sbrElInfo[e].bitRate;
+
+        sbrBitRateOut = sbrEncoder_LimitBitRate(sbrElementBitRateIn,
+                                                cm.elInfo[e].nChannelsInEl,
+                                                coreSamplingRate, aot);
+
+        if (sbrBitRateOut == 0) {
+          return 0;
+        }
+
+        /* If bitrates don't match, distribution and limiting needs to be
+           determined again. Abort element loop and restart with adapted
+           bitrate. */
+        if (sbrElementBitRateIn != sbrBitRateOut) {
+          if (sbrElementBitRateIn < sbrBitRateOut) {
+            adjustedBitrate = fMax(initialBitrate,
+                                   (INT)fDivNorm((FIXP_DBL)(sbrBitRateOut + 8),
+                                                 cm.elInfo[e].relativeBits));
+            break;
+          }
+
+          if (sbrElementBitRateIn > sbrBitRateOut) {
+            adjustedBitrate = fMin(initialBitrate,
+                                   (INT)fDivNorm((FIXP_DBL)(sbrBitRateOut - 8),
+                                                 cm.elInfo[e].relativeBits));
+            break;
+          }
+
+        } /* sbrElementBitRateIn != sbrBitRateOut */
+
+      } /* elements */
+
+      numIterations++; /* restrict iteration to worst case of num elements */
+
+    } while ((initialBitrate != adjustedBitrate) &&
+             (numIterations <= cm.nElements));
+
+    /* Unequal bitrates mean that no reasonable bitrate configuration found. */
+    bitRate = (initialBitrate == adjustedBitrate) ? adjustedBitrate : 0;
+  }
+
+  /* Limit bit rate in respect to available MPS modes if active */
+  if ((aot == AOT_ER_AAC_ELD) && (syntaxFlags & AC_LD_MPS) &&
+      (channelMode == MODE_1)) {
+    bitRate = FDK_MpegsEnc_GetClosestBitRate(
+        aot, MODE_212, samplingRate, (sbrActive) ? sbrDownSampleRate : 0,
+        bitRate);
+  }
 
   return bitRate;
 }
@@ -546,13 +832,25 @@ static INT aacEncoder_LimitBitrate(const HANDLE_TRANSPORTENC hTpEnc,
  * \hAacConfig Internal encoder config
  * \return     Bitrate
  */
-static INT FDKaacEnc_GetCBRBitrate(const HANDLE_AACENC_CONFIG hAacConfig) {
+static INT FDKaacEnc_GetCBRBitrate(const HANDLE_AACENC_CONFIG hAacConfig,
+                                   const INT userSbrRatio) {
   INT bitrate = FDKaacEnc_GetChannelModeConfiguration(hAacConfig->channelMode)
                     ->nChannelsEff *
                 hAacConfig->sampleRate;
 
   if (isPsActive(hAacConfig->audioObjectType)) {
     bitrate = 1 * bitrate; /* 0.5 bit per sample */
+  } else if (isSbrActive(hAacConfig)) {
+    if ((userSbrRatio == 2) ||
+        ((userSbrRatio == 0) &&
+         (hAacConfig->audioObjectType != AOT_ER_AAC_ELD))) {
+      bitrate = (bitrate + (bitrate >> 2)) >> 1; /* 0.625 bits per sample */
+    }
+    if ((userSbrRatio == 1) ||
+        ((userSbrRatio == 0) &&
+         (hAacConfig->audioObjectType == AOT_ER_AAC_ELD))) {
+      bitrate = (bitrate + (bitrate >> 3)); /* 1.125 bits per sample */
+    }
   } else {
     bitrate = bitrate + (bitrate >> 1); /* 1.5 bits per sample */
   }
@@ -605,6 +903,10 @@ static AACENC_ERROR FDKaacEnc_AdjustEncSettings(HANDLE_AACENCODER hAacEncoder,
       config->userDownscaleFactor > 1) {
     return AACENC_INVALID_CONFIG; /* downscaling only allowed for AOT_ER_AAC_ELD
                                    */
+  }
+  if (config->userDownscaleFactor > 1 && config->userSbrEnabled == 1) {
+    return AACENC_INVALID_CONFIG; /* downscaling only allowed for AOT_ER_AAC_ELD
+                                     w/o SBR */
   }
   if (config->userDownscaleFactor > 1 && config->userChannelMode == 128) {
     return AACENC_INVALID_CONFIG; /* disallow downscaling for AAC-ELDv2 */
@@ -659,6 +961,8 @@ static AACENC_ERROR FDKaacEnc_AdjustEncSettings(HANDLE_AACENCODER hAacEncoder,
       hAacConfig->syntaxFlags |= ((config->userErTools & 0x2) ? AC_ER_HCR : 0);
       hAacConfig->syntaxFlags |= ((config->userErTools & 0x4) ? AC_ER_RVLC : 0);
       hAacConfig->syntaxFlags |=
+          ((config->userSbrEnabled == 1) ? AC_SBR_PRESENT : 0);
+      hAacConfig->syntaxFlags |=
           ((config->userChannelMode == MODE_212) ? AC_LD_MPS : 0);
       config->userTpType =
           (config->userTpType != TT_UNKNOWN) ? config->userTpType : TT_MP4_LOAS;
@@ -688,6 +992,25 @@ static AACENC_ERROR FDKaacEnc_AdjustEncSettings(HANDLE_AACENCODER hAacEncoder,
       break;
   }
 
+  /* Initialize SBR parameters */
+  if ((config->userSbrRatio == 0) && (isSbrActive(hAacConfig))) {
+    /* Automatic SBR ratio configuration
+     * - downsampled SBR for ELD
+     * - otherwise always dualrate SBR
+     */
+    if (hAacConfig->audioObjectType == AOT_ER_AAC_ELD) {
+      hAacConfig->sbrRatio = ((hAacConfig->syntaxFlags & AC_LD_MPS) &&
+                              (hAacConfig->sampleRate >= 27713))
+                                 ? 2
+                                 : 1;
+    } else {
+      hAacConfig->sbrRatio = 2;
+    }
+  } else {
+    /* SBR ratio has been set by the user, so use it. */
+    hAacConfig->sbrRatio = isSbrActive(hAacConfig) ? config->userSbrRatio : 0;
+  }
+
   /* Set default bitrate */
   hAacConfig->bitRate = config->userBitrate;
 
@@ -696,7 +1019,7 @@ static AACENC_ERROR FDKaacEnc_AdjustEncSettings(HANDLE_AACENCODER hAacEncoder,
       /* Set default bitrate if no external bitrate declared. */
       if (config->userBitrate == (UINT)-1) {
         hAacConfig->bitRate =
-            FDKaacEnc_GetCBRBitrate(hAacConfig);
+            FDKaacEnc_GetCBRBitrate(hAacConfig, config->userSbrRatio);
       }
       hAacConfig->averageBits = -1;
       break;
@@ -705,6 +1028,13 @@ static AACENC_ERROR FDKaacEnc_AdjustEncSettings(HANDLE_AACENCODER hAacEncoder,
     case AACENC_BR_MODE_VBR_3:
     case AACENC_BR_MODE_VBR_4:
     case AACENC_BR_MODE_VBR_5:
+      /* Adjust bitrate mode in case given peak bitrate is lower than expected
+       * VBR bitrate. */
+      if ((INT)config->userPeakBitrate != -1) {
+        hAacConfig->bitrateMode = FDKaacEnc_AdjustVBRBitrateMode(
+            hAacConfig->bitrateMode, config->userPeakBitrate,
+            hAacConfig->channelMode);
+      }
       /* Get bitrate in VBR configuration */
       /* In VBR mode; SBR-modul depends on bitrate, core encoder on bitrateMode.
        */
@@ -769,8 +1099,33 @@ static AACENC_ERROR FDKaacEnc_AdjustEncSettings(HANDLE_AACENCODER hAacEncoder,
     }
   }
 
+  if ((hAacConfig->audioObjectType == AOT_ER_AAC_ELD) &&
+      !(hAacConfig->syntaxFlags & AC_ELD_DOWNSCALE) &&
+      (config->userSbrEnabled == (UCHAR)-1) && (config->userSbrRatio == 0) &&
+      ((hAacConfig->syntaxFlags & AC_LD_MPS) == 0)) {
+    const ELD_SBR_CONFIGURATOR *pConfig = NULL;
+
+    if (NULL !=
+        (pConfig = eldSbrConfigurator(
+             FDKaacEnc_GetChannelModeConfiguration(hAacConfig->channelMode)
+                 ->nChannels,
+             hAacConfig->sampleRate, hAacConfig->bitRate))) {
+      hAacConfig->syntaxFlags |= (pConfig->sbrMode == 0) ? 0 : AC_SBR_PRESENT;
+      hAacConfig->syntaxFlags |= (pConfig->chMode == MODE_212) ? AC_LD_MPS : 0;
+      hAacConfig->channelMode =
+          GetCoreChannelMode(pConfig->chMode, hAacConfig->audioObjectType);
+      hAacConfig->nChannels =
+          FDKaacEnc_GetChannelModeConfiguration(hAacConfig->channelMode)
+              ->nChannels;
+      hAacConfig->sbrRatio =
+          (pConfig->sbrMode == 0) ? 0 : (pConfig->sbrMode == 1) ? 1 : 2;
+    }
+  }
+
   {
-    UCHAR tpSignaling = SIG_UNKNOWN;
+    UCHAR tpSignaling =
+        getSbrSignalingMode(hAacConfig->audioObjectType, config->userTpType,
+                            config->userTpSignaling, hAacConfig->sbrRatio);
 
     if ((hAacConfig->audioObjectType == AOT_AAC_LC ||
          hAacConfig->audioObjectType == AOT_SBR ||
@@ -780,6 +1135,15 @@ static AACENC_ERROR FDKaacEnc_AdjustEncSettings(HANDLE_AACENCODER hAacEncoder,
          config->userTpType == TT_MP4_LOAS) &&
         (tpSignaling == 1) && (config->userTpAmxv == 0)) {
       /* For backward compatible explicit signaling, AMV1 has to be active */
+      return AACENC_INVALID_CONFIG;
+    }
+
+    if ((hAacConfig->audioObjectType == AOT_AAC_LC ||
+         hAacConfig->audioObjectType == AOT_SBR ||
+         hAacConfig->audioObjectType == AOT_PS) &&
+        (tpSignaling == 0) && (hAacConfig->sbrRatio == 1)) {
+      /* Downsampled SBR has to be signaled explicitely (for transmission of SBR
+       * sampling fequency) */
       return AACENC_INVALID_CONFIG;
     }
   }
@@ -796,6 +1160,7 @@ static AACENC_ERROR FDKaacEnc_AdjustEncSettings(HANDLE_AACENCODER hAacEncoder,
                     NULL, hAacConfig->sampleRate, hAacConfig->framelength,
                     hAacConfig->nChannels, hAacConfig->channelMode,
                     hAacConfig->bitRate, hAacConfig->nSubFrames,
+                    isSbrActive(hAacConfig), hAacConfig->sbrRatio,
                     hAacConfig->syntaxFlags, hAacConfig->audioObjectType))) {
         return AACENC_INVALID_CONFIG;
       }
@@ -827,6 +1192,13 @@ static AACENC_ERROR FDKaacEnc_AdjustEncSettings(HANDLE_AACENCODER hAacEncoder,
     }
   }
 
+  if ((hAacConfig->nChannels > hAacEncoder->nMaxAacChannels) ||
+      ((FDKaacEnc_GetChannelModeConfiguration(hAacConfig->channelMode)
+            ->nChannelsEff > hAacEncoder->nMaxSbrChannels) &&
+       isSbrActive(hAacConfig))) {
+    return AACENC_INVALID_CONFIG; /* not enough channels allocated */
+  }
+
   /* Meta data restriction. */
   switch (hAacConfig->audioObjectType) {
     /* Allow metadata support */
@@ -851,11 +1223,39 @@ static AACENC_ERROR FDKaacEnc_AdjustEncSettings(HANDLE_AACENCODER hAacEncoder,
   return err;
 }
 
+static INT aacenc_SbrCallback(void *self, HANDLE_FDK_BITSTREAM hBs,
+                              const INT sampleRateIn, const INT sampleRateOut,
+                              const INT samplesPerFrame,
+                              const AUDIO_OBJECT_TYPE coreCodec,
+                              const MP4_ELEMENT_ID elementID,
+                              const INT elementIndex, const UCHAR harmonicSbr,
+                              const UCHAR stereoConfigIndex,
+                              const UCHAR configMode, UCHAR *configChanged,
+                              const INT downscaleFactor) {
+  HANDLE_AACENCODER hAacEncoder = (HANDLE_AACENCODER)self;
+
+  sbrEncoder_GetHeader(hAacEncoder->hEnvEnc, hBs, elementIndex, 0);
+
+  return 0;
+}
+
+INT aacenc_SscCallback(void *self, HANDLE_FDK_BITSTREAM hBs,
+                       const AUDIO_OBJECT_TYPE coreCodec,
+                       const INT samplingRate, const INT frameSize,
+                       const INT numChannels, const INT stereoConfigIndex,
+                       const INT coreSbrFrameLengthIndex, const INT configBytes,
+                       const UCHAR configMode, UCHAR *configChanged) {
+  HANDLE_AACENCODER hAacEncoder = (HANDLE_AACENCODER)self;
+
+  return (FDK_MpegsEnc_WriteSpatialSpecificConfig(hAacEncoder->hMpsEnc, hBs));
+}
+
 static AACENC_ERROR aacEncInit(HANDLE_AACENCODER hAacEncoder, ULONG InitFlags,
                                USER_PARAM *config) {
   AACENC_ERROR err = AACENC_OK;
 
   INT aacBufferOffset = 0;
+  HANDLE_SBR_ENCODER *hSbrEncoder = &hAacEncoder->hEnvEnc;
   HANDLE_AACENC_CONFIG hAacConfig = &hAacEncoder->aacConfig;
 
   hAacEncoder->nZerosAppended = 0; /* count appended zeros */
@@ -870,6 +1270,11 @@ static AACENC_ERROR aacEncInit(HANDLE_AACENCODER hAacEncoder, ULONG InitFlags,
       return err;
     }
     frameLength = hAacConfig->framelength; /* adapt temporal framelength */
+
+    /* Seamless channel reconfiguration in sbr not fully implemented */
+    if ((prevChMode != hAacConfig->channelMode) && isSbrActive(hAacConfig)) {
+      InitFlags |= AACENC_INIT_STATES;
+    }
   }
 
   /* Clear input buffer */
@@ -895,6 +1300,88 @@ static AACENC_ERROR aacEncInit(HANDLE_AACENCODER hAacEncoder, ULONG InitFlags,
     hAacConfig->ancDataBitRate = 0;
   }
 
+  if ((NULL != hAacEncoder->hEnvEnc) && isSbrActive(hAacConfig) &&
+      ((InitFlags & AACENC_INIT_CONFIG) || (InitFlags & AACENC_INIT_STATES))) {
+    INT sbrError;
+    UINT initFlag = 0;
+    SBR_ELEMENT_INFO sbrElInfo[(8)];
+    CHANNEL_MAPPING channelMapping;
+    CHANNEL_MODE channelMode = isPsActive(hAacConfig->audioObjectType)
+                                   ? config->userChannelMode
+                                   : hAacConfig->channelMode;
+    INT numChannels = isPsActive(hAacConfig->audioObjectType)
+                          ? config->nChannels
+                          : hAacConfig->nChannels;
+
+    if (FDKaacEnc_InitChannelMapping(channelMode, hAacConfig->channelOrder,
+                                     &channelMapping) != AAC_ENC_OK) {
+      return AACENC_INIT_ERROR;
+    }
+
+    /* Check return value and if the SBR encoder can handle enough elements */
+    if (channelMapping.nElements > (8)) {
+      return AACENC_INIT_ERROR;
+    }
+
+    aacEncDistributeSbrBits(&channelMapping, sbrElInfo, hAacConfig->bitRate);
+
+    initFlag += (InitFlags & AACENC_INIT_STATES) ? 1 : 0;
+
+    /* Let the SBR encoder take a look at the configuration and change if
+     * required. */
+    sbrError = sbrEncoder_Init(
+        *hSbrEncoder, sbrElInfo, channelMapping.nElements,
+        hAacEncoder->inputBuffer, hAacEncoder->inputBufferSizePerChannel,
+        &hAacConfig->bandWidth, &aacBufferOffset, &numChannels,
+        hAacConfig->syntaxFlags, &hAacConfig->sampleRate, &hAacConfig->sbrRatio,
+        &frameLength, hAacConfig->audioObjectType, &hAacEncoder->nDelay,
+        (hAacConfig->audioObjectType == AOT_ER_AAC_ELD) ? 1 : TRANS_FAC,
+        (config->userTpHeaderPeriod != 0xFF)
+            ? config->userTpHeaderPeriod
+            : DEFAULT_HEADER_PERIOD_REPETITION_RATE,
+        initFlag);
+
+    /* Suppress AOT reconfiguration and check error status. */
+    if ((sbrError) || (numChannels != hAacConfig->nChannels)) {
+      return AACENC_INIT_SBR_ERROR;
+    }
+
+    if (numChannels == 1) {
+      hAacConfig->channelMode = MODE_1;
+    }
+
+    /* Never use PNS if SBR is active */
+    if (hAacConfig->usePns) {
+      hAacConfig->usePns = 0;
+    }
+
+    /* estimated bitrate consumed by SBR or PS */
+    hAacConfig->ancDataBitRate = sbrEncoder_GetEstimateBitrate(*hSbrEncoder);
+
+  } /* sbr initialization */
+
+  if ((hAacEncoder->hMpsEnc != NULL) && (hAacConfig->syntaxFlags & AC_LD_MPS)) {
+    int coreCoderDelay = DELAY_AACELD(hAacConfig->framelength);
+
+    if (isSbrActive(hAacConfig)) {
+      coreCoderDelay = hAacConfig->sbrRatio * coreCoderDelay +
+                       sbrEncoder_GetInputDataDelay(*hSbrEncoder);
+    }
+
+    if (MPS_ENCODER_OK !=
+        FDK_MpegsEnc_Init(hAacEncoder->hMpsEnc, hAacConfig->audioObjectType,
+                          config->userSamplerate, hAacConfig->bitRate,
+                          isSbrActive(hAacConfig) ? hAacConfig->sbrRatio : 0,
+                          frameLength, /* for dual rate sbr this value is
+                                          already multiplied by 2 */
+                          hAacEncoder->inputBufferSizePerChannel,
+                          coreCoderDelay)) {
+      return AACENC_INIT_MPS_ERROR;
+    }
+  }
+  hAacEncoder->nDelay =
+      fMax(FDK_MpegsEnc_GetDelay(hAacEncoder->hMpsEnc), hAacEncoder->nDelay);
+
   /*
    * Initialize Transport - Module.
    */
@@ -903,7 +1390,8 @@ static AACENC_ERROR aacEncInit(HANDLE_AACENCODER hAacEncoder, ULONG InitFlags,
 
     FDKaacEnc_MapConfig(
         &hAacEncoder->coderConfig, config,
-	SIG_UNKNOWN,
+        getSbrSignalingMode(hAacConfig->audioObjectType, config->userTpType,
+                            config->userTpSignaling, hAacConfig->sbrRatio),
         hAacConfig);
 
     /* create flags for transport encoder */
@@ -942,6 +1430,11 @@ static AACENC_ERROR aacEncInit(HANDLE_AACENCODER hAacEncoder, ULONG InitFlags,
       ((InitFlags & AACENC_INIT_CONFIG) || (InitFlags & AACENC_INIT_STATES))) {
     INT inputDataDelay = DELAY_AAC(hAacConfig->framelength);
 
+    if (isSbrActive(hAacConfig) && hSbrEncoder != NULL) {
+      inputDataDelay = hAacConfig->sbrRatio * inputDataDelay +
+                       sbrEncoder_GetInputDataDelay(*hSbrEncoder);
+    }
+
     if (FDK_MetadataEnc_Init(hAacEncoder->hMetadataEnc,
                              ((InitFlags & AACENC_INIT_STATES) ? 1 : 0),
                              config->userMetaDataMode, inputDataDelay,
@@ -954,7 +1447,17 @@ static AACENC_ERROR aacEncInit(HANDLE_AACENCODER hAacEncoder, ULONG InitFlags,
     hAacEncoder->nDelay += FDK_MetadataEnc_GetDelay(hAacEncoder->hMetadataEnc);
   }
 
-  {
+  /* Get custom delay, i.e. the codec delay w/o the decoder's SBR- or MPS delay
+   */
+  if ((hAacEncoder->hMpsEnc != NULL) && (hAacConfig->syntaxFlags & AC_LD_MPS)) {
+    hAacEncoder->nDelayCore =
+        hAacEncoder->nDelay -
+        fMax(0, FDK_MpegsEnc_GetDecDelay(hAacEncoder->hMpsEnc));
+  } else if (isSbrActive(hAacConfig) && hSbrEncoder != NULL) {
+    hAacEncoder->nDelayCore =
+        hAacEncoder->nDelay -
+        fMax(0, sbrEncoder_GetSbrDecDelay(hAacEncoder->hEnvEnc));
+  } else {
     hAacEncoder->nDelayCore = hAacEncoder->nDelay;
   }
 
@@ -1019,10 +1522,17 @@ AACENC_ERROR aacEncOpen(HANDLE_AACENCODER *phAacEncoder, const UINT encModules,
   /* Determine max channel configuration. */
   if (maxChannels == 0) {
     hAacEncoder->nMaxAacChannels = (8);
+    hAacEncoder->nMaxSbrChannels = (8);
   } else {
     hAacEncoder->nMaxAacChannels = (maxChannels & 0x00FF);
+    if ((hAacEncoder->encoder_modis & ENC_MODE_FLAG_SBR)) {
+      hAacEncoder->nMaxSbrChannels = (maxChannels & 0xFF00)
+                                         ? (maxChannels >> 8)
+                                         : hAacEncoder->nMaxAacChannels;
+    }
 
-    if ((hAacEncoder->nMaxAacChannels > (8))) {
+    if ((hAacEncoder->nMaxAacChannels > (8)) ||
+        (hAacEncoder->nMaxSbrChannels > (8))) {
       err = AACENC_INVALID_CONFIG;
       goto bail;
     }
@@ -1030,6 +1540,7 @@ AACENC_ERROR aacEncOpen(HANDLE_AACENCODER *phAacEncoder, const UINT encModules,
 
   /* Max number of elements could be tuned any more. */
   hAacEncoder->nMaxAacElements = fixMin(((8)), hAacEncoder->nMaxAacChannels);
+  hAacEncoder->nMaxSbrElements = fixMin((8), hAacEncoder->nMaxSbrChannels);
 
   /* In case of memory overlay, allocate memory out of libraries */
 
@@ -1046,6 +1557,23 @@ AACENC_ERROR aacEncOpen(HANDLE_AACENCODER *phAacEncoder, const UINT encModules,
     err = AACENC_MEMORY_ERROR;
     goto bail;
   }
+
+  /* Open SBR Encoder */
+  if (hAacEncoder->encoder_modis & ENC_MODE_FLAG_SBR) {
+    if (sbrEncoder_Open(
+            &hAacEncoder->hEnvEnc, hAacEncoder->nMaxSbrElements,
+            hAacEncoder->nMaxSbrChannels,
+            (hAacEncoder->encoder_modis & ENC_MODE_FLAG_PS) ? 1 : 0)) {
+      err = AACENC_MEMORY_ERROR;
+      goto bail;
+    }
+
+    if (NULL == (hAacEncoder->pSbrPayload = (SBRENC_EXT_PAYLOAD *)FDKcalloc(
+                     1, sizeof(SBRENC_EXT_PAYLOAD)))) {
+      err = AACENC_MEMORY_ERROR;
+      goto bail;
+    }
+  } /* (encoder_modis&ENC_MODE_FLAG_SBR) */
 
   /* Open Aac Encoder */
   if (FDKaacEnc_Open(&hAacEncoder->hAacEnc, hAacEncoder->nMaxAacElements,
@@ -1074,6 +1602,14 @@ AACENC_ERROR aacEncOpen(HANDLE_AACENCODER *phAacEncoder, const UINT encModules,
     }
   } /* (encoder_modis&ENC_MODE_FLAG_META) */
 
+  /* Open MPEG Surround Encoder */
+  if (hAacEncoder->encoder_modis & ENC_MODE_FLAG_SAC) {
+    if (MPS_ENCODER_OK != FDK_MpegsEnc_Open(&hAacEncoder->hMpsEnc)) {
+      err = AACENC_MEMORY_ERROR;
+      goto bail;
+    }
+  } /* (hAacEncoder->encoder_modis&ENC_MODE_FLAG_SAC) */
+
   /* Open Transport Encoder */
   if (transportEnc_Open(&hAacEncoder->hTpEnc) != 0) {
     err = AACENC_MEMORY_ERROR;
@@ -1091,6 +1627,16 @@ AACENC_ERROR aacEncOpen(HANDLE_AACENCODER *phAacEncoder, const UINT encModules,
     hAacEncoder->CAPF_tpEnc = FDKlibInfo_getCapabilities(*pLibInfo, FDK_TPENC);
 
     C_ALLOC_SCRATCH_END(_pLibInfo, LIB_INFO, FDK_MODULE_LAST)
+  }
+  if (transportEnc_RegisterSbrCallback(hAacEncoder->hTpEnc, aacenc_SbrCallback,
+                                       hAacEncoder) != 0) {
+    err = AACENC_INIT_TP_ERROR;
+    goto bail;
+  }
+  if (transportEnc_RegisterSscCallback(hAacEncoder->hTpEnc, aacenc_SscCallback,
+                                       hAacEncoder) != 0) {
+    err = AACENC_INIT_TP_ERROR;
+    goto bail;
   }
 
   /* Initialize encoder instance with default parameters. */
@@ -1134,6 +1680,13 @@ AACENC_ERROR aacEncClose(HANDLE_AACENCODER *phAacEncoder) {
       hAacEncoder->outBuffer = NULL;
     }
 
+    if (hAacEncoder->hEnvEnc) {
+      sbrEncoder_Close(&hAacEncoder->hEnvEnc);
+    }
+    if (hAacEncoder->pSbrPayload != NULL) {
+      FDKfree(hAacEncoder->pSbrPayload);
+      hAacEncoder->pSbrPayload = NULL;
+    }
     if (hAacEncoder->hAacEnc) {
       FDKaacEnc_Close(&hAacEncoder->hAacEnc);
     }
@@ -1142,6 +1695,9 @@ AACENC_ERROR aacEncClose(HANDLE_AACENCODER *phAacEncoder) {
 
     if (hAacEncoder->hMetadataEnc) {
       FDK_MetadataEnc_Close(&hAacEncoder->hMetadataEnc);
+    }
+    if (hAacEncoder->hMpsEnc) {
+      FDK_MpegsEnc_Close(&hAacEncoder->hMpsEnc);
     }
 
     Free_AacEncoder(phAacEncoder);
@@ -1228,8 +1784,12 @@ AACENC_ERROR aacEncEncode(const HANDLE_AACENCODER hAacEncoder,
                                                    hAacEncoder->nSamplesRead));
     INT_PCM *pIn =
         hAacEncoder->inputBuffer +
-        (hAacEncoder->inputBufferOffset + hAacEncoder->nSamplesRead) /
-            hAacEncoder->aacConfig.nChannels;
+        hAacEncoder->inputBufferOffset / hAacEncoder->aacConfig.nChannels +
+        hAacEncoder->nSamplesRead / hAacEncoder->extParam.nChannels;
+    newSamples -=
+        (newSamples %
+         hAacEncoder->extParam
+             .nChannels); /* process multiple samples of input channels */
 
     /* Copy new input samples to internal buffer */
     if (inBufDesc->bufElSizes[idx] == (INT)sizeof(INT_PCM)) {
@@ -1267,12 +1827,13 @@ AACENC_ERROR aacEncEncode(const HANDLE_AACENCODER hAacEncoder,
 
         /* clear out until end-of-buffer */
         if (nZeros) {
+          INT_PCM *pIn =
+              hAacEncoder->inputBuffer +
+              hAacEncoder->inputBufferOffset /
+                  hAacEncoder->aacConfig.nChannels +
+              hAacEncoder->nSamplesRead / hAacEncoder->extParam.nChannels;
           for (i = 0; i < (int)hAacEncoder->extParam.nChannels; i++) {
-            FDKmemclear(hAacEncoder->inputBuffer +
-                            i * hAacEncoder->inputBufferSizePerChannel +
-                            (hAacEncoder->inputBufferOffset +
-                             hAacEncoder->nSamplesRead) /
-                                hAacEncoder->extParam.nChannels,
+            FDKmemclear(pIn + i * hAacEncoder->inputBufferSizePerChannel,
                         sizeof(INT_PCM) * nZeros);
           }
           hAacEncoder->nZerosAppended += nZeros;
@@ -1293,6 +1854,9 @@ AACENC_ERROR aacEncEncode(const HANDLE_AACENCODER hAacEncoder,
               sizeof(AACENC_EXT_PAYLOAD) * MAX_TOTAL_EXT_PAYLOADS);
   for (i = 0; i < MAX_TOTAL_EXT_PAYLOADS; i++) {
     hAacEncoder->extPayload[i].associatedChElement = -1;
+  }
+  if (hAacEncoder->pSbrPayload != NULL) {
+    FDKmemclear(hAacEncoder->pSbrPayload, sizeof(*hAacEncoder->pSbrPayload));
   }
 
   /*
@@ -1337,6 +1901,73 @@ AACENC_ERROR aacEncEncode(const HANDLE_AACENCODER hAacEncoder,
     }
   }
 
+  /*
+   * Encode MPS data.
+   */
+  if ((hAacEncoder->hMpsEnc != NULL) &&
+      (hAacEncoder->aacConfig.syntaxFlags & AC_LD_MPS)) {
+    AACENC_EXT_PAYLOAD mpsExtensionPayload;
+    FDKmemclear(&mpsExtensionPayload, sizeof(AACENC_EXT_PAYLOAD));
+
+    if (MPS_ENCODER_OK !=
+        FDK_MpegsEnc_Process(
+            hAacEncoder->hMpsEnc,
+            hAacEncoder->inputBuffer + hAacEncoder->inputBufferOffset /
+                                           hAacEncoder->coderConfig.noChannels,
+            hAacEncoder->nSamplesRead, &mpsExtensionPayload)) {
+      err = AACENC_ENCODE_ERROR;
+      goto bail;
+    }
+
+    if ((mpsExtensionPayload.pData != NULL) &&
+        ((mpsExtensionPayload.dataSize != 0))) {
+      hAacEncoder->extPayload[nExtensions++] = mpsExtensionPayload;
+    }
+  }
+
+  if ((NULL != hAacEncoder->hEnvEnc) && (NULL != hAacEncoder->pSbrPayload) &&
+      isSbrActive(&hAacEncoder->aacConfig)) {
+    INT nPayload = 0;
+
+    /*
+     * Encode SBR data.
+     */
+    if (sbrEncoder_EncodeFrame(hAacEncoder->hEnvEnc, hAacEncoder->inputBuffer,
+                               hAacEncoder->inputBufferSizePerChannel,
+                               hAacEncoder->pSbrPayload->dataSize[nPayload],
+                               hAacEncoder->pSbrPayload->data[nPayload])) {
+      err = AACENC_ENCODE_ERROR;
+      goto bail;
+    } else {
+      /* Add SBR extension payload */
+      for (i = 0; i < (8); i++) {
+        if (hAacEncoder->pSbrPayload->dataSize[nPayload][i] > 0) {
+          hAacEncoder->extPayload[nExtensions].pData =
+              hAacEncoder->pSbrPayload->data[nPayload][i];
+          {
+            hAacEncoder->extPayload[nExtensions].dataSize =
+                hAacEncoder->pSbrPayload->dataSize[nPayload][i];
+            hAacEncoder->extPayload[nExtensions].associatedChElement =
+                getAssociatedChElement(
+                    &hAacEncoder->hEnvEnc->sbrElement[i]->elInfo,
+                    &hAacEncoder->hAacEnc->channelMapping);
+            if (hAacEncoder->extPayload[nExtensions].associatedChElement ==
+                -1) {
+              err = AACENC_ENCODE_ERROR;
+              goto bail;
+            }
+          }
+          hAacEncoder->extPayload[nExtensions].dataType =
+              EXT_SBR_DATA; /* Once SBR Encoder supports SBR CRC set
+                               EXT_SBR_DATA_CRC */
+          nExtensions++;    /* or EXT_SBR_DATA according to configuration. */
+          FDK_ASSERT(nExtensions <= MAX_TOTAL_EXT_PAYLOADS);
+        }
+      }
+      nPayload++;
+    }
+  } /* sbrEnabled */
+
   if ((inargs->numAncBytes > 0) &&
       (getBufDescIdx(inBufDesc, IN_ANCILLRY_DATA) != -1)) {
     INT idx = getBufDescIdx(inBufDesc, IN_ANCILLRY_DATA);
@@ -1367,6 +1998,14 @@ AACENC_ERROR aacEncEncode(const HANDLE_AACENCODER hAacEncoder,
 
   /* samples exhausted */
   hAacEncoder->nSamplesRead -= hAacEncoder->nSamplesToRead;
+
+  /*
+   * Delay balancing buffer handling
+   */
+  if (isSbrActive(&hAacEncoder->aacConfig)) {
+    sbrEncoder_UpdateBuffers(hAacEncoder->hEnvEnc, hAacEncoder->inputBuffer,
+                             hAacEncoder->inputBufferSizePerChannel);
+  }
 
   /*
    * Make bitstream public
@@ -1442,6 +2081,8 @@ AACENC_ERROR aacEncGetLibInfo(LIB_INFO *info) {
 
   FDK_toolsGetLibInfo(info);
   transportEnc_GetLibInfo(info);
+  sbrEncoder_GetLibInfo(info);
+  FDK_MpegsEnc_GetLibInfo(info);
 
   /* search for next free tab */
   for (i = 0; i < FDK_MODULE_LAST; i++) {
@@ -1461,7 +2102,7 @@ AACENC_ERROR aacEncGetLibInfo(LIB_INFO *info) {
   LIB_VERSION_STRING(&info[i]);
 
   /* Capability flags */
-  info[i].flags = 0 | CAPF_AAC_1024 | CAPF_AAC_LC | CAPF_AAC_512 |
+  info[i].flags = 0 | CAPF_AAC_1024 | CAPF_AAC_960 | CAPF_AAC_LC | CAPF_AAC_512 |
                   CAPF_AAC_480 | CAPF_AAC_DRC | CAPF_AAC_ELD_DOWNSCALE;
   /* End of flags */
 
@@ -1558,7 +2199,11 @@ AACENC_ERROR aacEncoder_SetParam(const HANDLE_AACENCODER hAacEncoder,
       break;
     case AACENC_CHANNELMODE:
       if (settings->userChannelMode != (CHANNEL_MODE)value) {
-        {
+        if (((CHANNEL_MODE)value == MODE_212) &&
+            (NULL != hAacEncoder->hMpsEnc)) {
+          settings->userChannelMode = (CHANNEL_MODE)value;
+          settings->nChannels = 2;
+        } else {
           const CHANNEL_MODE_CONFIG_TAB *pConfig =
               FDKaacEnc_GetChannelModeConfiguration((CHANNEL_MODE)value);
           if (pConfig == NULL) {
@@ -1613,6 +2258,7 @@ AACENC_ERROR aacEncoder_SetParam(const HANDLE_AACENCODER hAacEncoder,
       if (settings->userFramelength != value) {
         switch (value) {
           case 1024:
+          case 960:
           case 512:
           case 480:
           case 256:
@@ -1635,10 +2281,23 @@ AACENC_ERROR aacEncoder_SetParam(const HANDLE_AACENCODER hAacEncoder,
       }
       break;
     case AACENC_SBR_RATIO:
-      err = AACENC_INVALID_CONFIG;
+      if (settings->userSbrRatio != value) {
+        if (!((value == 0) || (value == 1) || (value == 2))) {
+          err = AACENC_INVALID_CONFIG;
+          break;
+        }
+        settings->userSbrRatio = value;
+        hAacEncoder->InitFlags |=
+            AACENC_INIT_CONFIG | AACENC_INIT_STATES | AACENC_INIT_TRANSPORT;
+      }
       break;
     case AACENC_SBR_MODE:
-      err = AACENC_INVALID_CONFIG;
+      if ((settings->userSbrEnabled != value) &&
+          (NULL != hAacEncoder->hEnvEnc)) {
+        settings->userSbrEnabled = value;
+        hAacEncoder->InitFlags |=
+            AACENC_INIT_CONFIG | AACENC_INIT_STATES | AACENC_INIT_TRANSPORT;
+      }
       break;
     case AACENC_TRANSMUX:
       if (settings->userTpType != (TRANSPORT_TYPE)value) {
@@ -1801,16 +2460,21 @@ UINT aacEncoder_GetParam(const HANDLE_AACENCODER hAacEncoder,
       value = (UINT)hAacEncoder->aacConfig.framelength;
       break;
     case AACENC_SBR_RATIO:
-      value = 0;
+      value = isSbrActive(&hAacEncoder->aacConfig)
+                  ? hAacEncoder->aacConfig.sbrRatio
+                  : 0;
       break;
     case AACENC_SBR_MODE:
-      value = 0;
+      value =
+          (UINT)(hAacEncoder->aacConfig.syntaxFlags & AC_SBR_PRESENT) ? 1 : 0;
       break;
     case AACENC_TRANSMUX:
       value = (UINT)settings->userTpType;
       break;
     case AACENC_SIGNALING_MODE:
-      value = SIG_UNKNOWN;
+      value = (UINT)getSbrSignalingMode(
+          hAacEncoder->aacConfig.audioObjectType, settings->userTpType,
+          settings->userTpSignaling, hAacEncoder->aacConfig.sbrRatio);
       break;
     case AACENC_PROTECTION:
       value = (UINT)settings->userTpProtection;
@@ -1857,6 +2521,11 @@ bail:
 AACENC_ERROR aacEncInfo(const HANDLE_AACENCODER hAacEncoder,
                         AACENC_InfoStruct *pInfo) {
   AACENC_ERROR err = AACENC_OK;
+
+  if ((hAacEncoder == NULL) || (pInfo == NULL)) {
+    err = AACENC_INVALID_HANDLE;
+    goto bail;
+  }
 
   FDKmemclear(pInfo, sizeof(AACENC_InfoStruct));
   pInfo->confSize = 64; /* pre-initialize */

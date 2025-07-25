@@ -1,7 +1,7 @@
 /* -----------------------------------------------------------------------------
 Software License for The Fraunhofer FDK AAC Codec Library for Android
 
-© Copyright  1995 - 2018 Fraunhofer-Gesellschaft zur Förderung der angewandten
+© Copyright  1995 - 2023 Fraunhofer-Gesellschaft zur Förderung der angewandten
 Forschung e.V. All rights reserved.
 
  1.    INTRODUCTION
@@ -109,6 +109,11 @@ amm-info@iis.fraunhofer.de
 #include "channel.h"
 #include "FDK_bitstream.h"
 
+#define AACDEC_DRC_GAIN_SCALING (11) /* Scaling of DRC gains */
+#define AACDEC_DRC_GAIN_INIT_VALUE \
+  (FL2FXCONST_DBL(                 \
+      1.0f / (1 << AACDEC_DRC_GAIN_SCALING))) /* Init value for DRC gains */
+
 #define AACDEC_DRC_DFLT_EXPIRY_FRAMES \
   (0) /* Default DRC data expiry time in AAC frames   */
 
@@ -125,17 +130,19 @@ typedef enum {
   TARGET_REF_LEVEL,
   DRC_BS_DELAY,
   DRC_DATA_EXPIRY_FRAME,
-  APPLY_NORMALIZATION,
   APPLY_HEAVY_COMPRESSION,
   DEFAULT_PRESENTATION_MODE,
   ENCODER_TARGET_LEVEL,
-  MAX_OUTPUT_CHANNELS,
-  UNIDRC_PRECEDENCE
+  MAX_OUTPUT_CHANNELS
 } AACDEC_DRC_PARAM;
 
 /**
  * \brief DRC module interface functions
  */
+void aacDecoder_drcDisable(HANDLE_AAC_DRC self);
+
+void aacDecoder_drcReset(HANDLE_AAC_DRC self);
+
 void aacDecoder_drcInit(HANDLE_AAC_DRC self);
 
 void aacDecoder_drcInitChannelData(CDrcChannelData *pDrcChannel);
@@ -152,8 +159,10 @@ int aacDecoder_drcProlog(
     UCHAR pceInstanceTag, UCHAR channelMapping[], int validChannels);
 
 /**
- * \brief Apply DRC.
+ * \brief Apply DRC. If SBR is present, DRC data is handed over to the SBR
+ * decoder.
  * \param self AAC decoder instance
+ * \param pSbrDec pointer to SBR decoder instance
  * \param pAacDecoderChannelInfo AAC decoder channel instance to be processed
  * \param pDrcDat DRC channel data
  * \param extGain Pointer to a FIXP_DBL where a externally applyable gain will
@@ -162,11 +171,13 @@ int aacDecoder_drcProlog(
  * DFRACT_BITS) to be applied on the gain value.
  * \param ch channel index
  * \param aacFrameSize AAC frame size
+ * \param bSbrPresent flag indicating that SBR is present, in which case DRC is
+ * handed over to the SBR instance pSbrDec
  */
-void aacDecoder_drcApply(HANDLE_AAC_DRC self,
+void aacDecoder_drcApply(HANDLE_AAC_DRC self, void *pSbrDec,
                          CAacDecoderChannelInfo *pAacDecoderChannelInfo,
                          CDrcChannelData *pDrcDat, FIXP_DBL *extGain, int ch,
-                         int aacFrameSize);
+                         int aacFrameSize, int bSbrPresent);
 
 int aacDecoder_drcEpilog(
     HANDLE_AAC_DRC self, HANDLE_FDK_BITSTREAM hBs,
@@ -184,5 +195,46 @@ int aacDecoder_drcEpilog(
  */
 void aacDecoder_drcGetInfo(HANDLE_AAC_DRC self, SCHAR *pPresMode,
                            SCHAR *pProgRefLevel);
+
+/**
+ * \brief  Apply DRC Level Normalization.
+ *
+ *         This function prepares/applies the gain values for the DRC Level
+ * Normalization and returns the exponent of the time data. The following two
+ * cases are handled:
+ *
+ *         - Limiter enabled:
+ *           The input data must be interleaved.
+ *           One gain per sample is written to the buffer pGainPerSample.
+ *           If necessary the time data is rescaled.
+ *
+ *         - Limiter disabled:
+ *           The input data can be interleaved or deinterleaved.
+ *           The gain values are applied to the time data.
+ *           If necessary the time data is rescaled.
+ *
+ * \param hDrcInfo                     [i/o] handle to drc data structure.
+ * \param samplesIn                    [i/o] pointer to time data.
+ * \param pGain                        [i  ] pointer to gain to be applied to
+ * the time data.
+ * \param pGainPerSample               [o  ] pointer to the gain per sample to
+ * be applied to the time data in the limiter.
+ * \param gain_scale                   [i  ] exponent to be applied to the time
+ * data.
+ * \param gain_delay                   [i  ] delay[samples] with which the gains
+ * in pGain shall be applied (gain_delay <= nSamples).
+ * \param nSamples                     [i  ] number of samples per frame.
+ * \param channels                     [i  ] number of channels.
+ * \param stride                       [i  ] channel stride of time data.
+ * \param limiterEnabled               [i  ] 1 if limiter is enabled, otherwise
+ * 0.
+ *
+ * \return exponent of time data
+ */
+INT applyDrcLevelNormalization(HANDLE_AAC_DRC hDrcInfo, PCM_DEC *samplesIn,
+                               FIXP_DBL *pGain, FIXP_DBL *pGainPerSample,
+                               const INT gain_scale, const UINT gain_delay,
+                               const UINT nSamples, const UINT channels,
+                               const UINT stride, const UINT limiterEnabled);
 
 #endif /* AACDEC_DRC_H */

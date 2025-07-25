@@ -1,7 +1,7 @@
 /* -----------------------------------------------------------------------------
 Software License for The Fraunhofer FDK AAC Codec Library for Android
 
-© Copyright  1995 - 2018 Fraunhofer-Gesellschaft zur Förderung der angewandten
+© Copyright  1995 - 2019 Fraunhofer-Gesellschaft zur Förderung der angewandten
 Forschung e.V. All rights reserved.
 
  1.    INTRODUCTION
@@ -107,9 +107,15 @@ amm-info@iis.fraunhofer.de
 #include "scale.h"
 #include "FDK_tools_rom.h"
 
+#include "usacdec_fac.h"
+#include "usacdec_lpd.h"
+#include "usacdec_lpc.h"
 #include "FDK_trigFcts.h"
 
 #include "ac_arith_coder.h"
+
+#include "aacdec_hcr.h"
+#include "rvlc.h"
 
 #if defined(__arm__)
 #include "arm/block_arm.cpp"
@@ -325,7 +331,12 @@ AAC_DECODER_ERROR CBlock_ReadSectionData(
   int group;
   UCHAR sect_cb;
   UCHAR *pCodeBook = pAacDecoderChannelInfo->pDynData->aCodeBook;
+  /* HCR input (long) */
+  SHORT *pNumLinesInSec =
+      pAacDecoderChannelInfo->pDynData->specificTo.aac.aNumLineInSec4Hcr;
   int numLinesInSecIdx = 0;
+  UCHAR *pHcrCodeBook =
+      pAacDecoderChannelInfo->pDynData->specificTo.aac.aCodeBooks4Hcr;
   const SHORT *BandOffsets = GetScaleFactorBandOffsets(
       &pAacDecoderChannelInfo->icsInfo, pSamplingRateInfo);
   pAacDecoderChannelInfo->pDynData->specificTo.aac.numberSection = 0;
@@ -365,8 +376,22 @@ AAC_DECODER_ERROR CBlock_ReadSectionData(
       top = band + sect_len;
 
       if (flags & AC_ER_HCR) {
-        /* HCR disabled */
-        return AAC_DEC_PARSE_ERROR;
+        /* HCR input (long) -- collecting sideinfo (for HCR-_long_ only) */
+        if (numLinesInSecIdx >= MAX_SFB_HCR) {
+          return AAC_DEC_PARSE_ERROR;
+        }
+        if (top > (int)GetNumberOfScaleFactorBands(
+                      &pAacDecoderChannelInfo->icsInfo, pSamplingRateInfo)) {
+          return AAC_DEC_PARSE_ERROR;
+        }
+        pNumLinesInSec[numLinesInSecIdx] = BandOffsets[top] - BandOffsets[band];
+        numLinesInSecIdx++;
+        if (sect_cb == BOOKSCL) {
+          return AAC_DEC_INVALID_CODE_BOOK;
+        } else {
+          *pHcrCodeBook++ = sect_cb;
+        }
+        pAacDecoderChannelInfo->pDynData->specificTo.aac.numberSection++;
       }
 
       /* Check spectral line limits */
@@ -693,12 +718,41 @@ AAC_DECODER_ERROR CBlock_ReadSpectralData(
     /* plain huffman decoding (short) finished */
   }
 
+  /* HCR - Huffman Codeword Reordering  short */
   else /* if ( flags & AC_ER_HCR ) */
 
   {
-    /* HCR - Huffman Codeword Reordering disabled */
-    return AAC_DEC_DECODE_FRAME_ERROR;
+    H_HCR_INFO hHcr = &pAacDecoderChannelInfo->pComData->overlay.aac.erHcrInfo;
+
+    int hcrStatus = 0;
+
+    /* advanced Huffman decoding starts here (HCR decoding :) */
+    if (pAacDecoderChannelInfo->pDynData->specificTo.aac
+            .lenOfReorderedSpectralData != 0) {
+      /* HCR initialization short */
+      hcrStatus = HcrInit(hHcr, pAacDecoderChannelInfo, pSamplingRateInfo, bs);
+
+      if (hcrStatus != 0) {
+        return AAC_DEC_DECODE_FRAME_ERROR;
+      }
+
+      /* HCR decoding short */
+      hcrStatus =
+          HcrDecoder(hHcr, pAacDecoderChannelInfo, pSamplingRateInfo, bs);
+
+      if (hcrStatus != 0) {
+#if HCR_ERROR_CONCEALMENT
+        HcrMuteErroneousLines(hHcr);
+#else
+        return AAC_DEC_DECODE_FRAME_ERROR;
+#endif /* HCR_ERROR_CONCEALMENT */
+      }
+
+      FDKpushFor(bs, pAacDecoderChannelInfo->pDynData->specificTo.aac
+                         .lenOfReorderedSpectralData);
+    }
   }
+  /* HCR - Huffman Codeword Reordering short finished */
 
   if (IsLongBlock(&pAacDecoderChannelInfo->icsInfo) &&
       !(flags & (AC_ELD | AC_SCALABLE))) {
@@ -961,9 +1015,9 @@ FIXP_DBL get_gain(const FIXP_DBL *x, const FIXP_DBL *y, int n) {
 
 void CBlock_FrequencyToTime(
     CAacDecoderStaticChannelInfo *pAacDecoderStaticChannelInfo,
-    CAacDecoderChannelInfo *pAacDecoderChannelInfo, FIXP_PCM outSamples[],
+    CAacDecoderChannelInfo *pAacDecoderChannelInfo, PCM_DEC outSamples[],
     const SHORT frameLen, const int frameOk, FIXP_DBL *pWorkBuffer1,
-    UINT elFlags, INT elCh) {
+    const INT aacOutDataHeadroom, UINT elFlags, INT elCh) {
   int fr, fl, tl, nSpec;
 
 #if defined(FDK_ASSERT_ENABLE)
@@ -1007,7 +1061,163 @@ void CBlock_FrequencyToTime(
       nSpec = 8;
       break;
   }
+
   {
+    int last_frame_lost = pAacDecoderStaticChannelInfo->last_lpc_lost;
+
+    if (pAacDecoderStaticChannelInfo->last_core_mode == LPD) {
+      INT fac_FB = 1;
+      if (elFlags & AC_EL_FULLBANDLPD) {
+        fac_FB = 2;
+      }
+
+      FIXP_DBL *synth;
+
+      /* Keep some free space at the beginning of the buffer. To be used for
+       * past data */
+      if (!(elFlags & AC_EL_LPDSTEREOIDX)) {
+        synth = pWorkBuffer1 + ((PIT_MAX_MAX - (1 * L_SUBFR)) * fac_FB);
+      } else {
+        synth = pWorkBuffer1 + PIT_MAX_MAX * fac_FB;
+      }
+
+      int fac_length =
+          (pAacDecoderChannelInfo->icsInfo.WindowSequence == BLOCK_SHORT)
+              ? (frameLen >> 4)
+              : (frameLen >> 3);
+
+      INT pitch[NB_SUBFR_SUPERFR + SYN_SFD];
+      FIXP_DBL pit_gain[NB_SUBFR_SUPERFR + SYN_SFD];
+
+      int nbDiv = (elFlags & AC_EL_FULLBANDLPD) ? 2 : 4;
+      int lFrame = (elFlags & AC_EL_FULLBANDLPD) ? frameLen / 2 : frameLen;
+      int nbSubfr =
+          lFrame / (nbDiv * L_SUBFR); /* number of subframes per division */
+      int LpdSfd = (nbDiv * nbSubfr) >> 1;
+      int SynSfd = LpdSfd - BPF_SFD;
+
+      FDKmemclear(
+          pitch,
+          sizeof(
+              pitch));  // added to prevent ferret errors in bass_pf_1sf_delay
+      FDKmemclear(pit_gain, sizeof(pit_gain));
+
+      /* FAC case */
+      if (pAacDecoderStaticChannelInfo->last_lpd_mode == 0 ||
+          pAacDecoderStaticChannelInfo->last_lpd_mode == 4) {
+        FIXP_DBL fac_buf[LFAC];
+        FIXP_LPC *A = pAacDecoderChannelInfo->data.usac.lp_coeff[0];
+
+        if (!frameOk || last_frame_lost ||
+            (pAacDecoderChannelInfo->data.usac.fac_data[0] == NULL)) {
+          FDKmemclear(fac_buf,
+                      pAacDecoderChannelInfo->granuleLength * sizeof(FIXP_DBL));
+          pAacDecoderChannelInfo->data.usac.fac_data[0] = fac_buf;
+          pAacDecoderChannelInfo->data.usac.fac_data_e[0] = 0;
+        }
+
+        INT A_exp; /* linear prediction coefficients exponent */
+        {
+          for (int i = 0; i < M_LP_FILTER_ORDER; i++) {
+            A[i] = FX_DBL2FX_LPC(fixp_cos(
+                fMult(pAacDecoderStaticChannelInfo->lpc4_lsf[i],
+                      FL2FXCONST_SGL((1 << LSPARG_SCALE) * M_PI / 6400.0)),
+                LSF_SCALE - LSPARG_SCALE));
+          }
+
+          E_LPC_f_lsp_a_conversion(A, A, &A_exp);
+        }
+
+#if defined(FDK_ASSERT_ENABLE)
+        nSamples =
+#endif
+            CLpd_FAC_Acelp2Mdct(
+                &pAacDecoderStaticChannelInfo->IMdct, synth,
+                SPEC_LONG(pAacDecoderChannelInfo->pSpectralCoefficient),
+                pAacDecoderChannelInfo->specScale, nSpec,
+                pAacDecoderChannelInfo->data.usac.fac_data[0],
+                pAacDecoderChannelInfo->data.usac.fac_data_e[0], fac_length,
+                frameLen, tl,
+                FDKgetWindowSlope(
+                    fr, GetWindowShape(&pAacDecoderChannelInfo->icsInfo)),
+                fr, A, A_exp, &pAacDecoderStaticChannelInfo->acelp,
+                (FIXP_DBL)0, /* FAC gain has already been applied. */
+                (last_frame_lost || !frameOk), 1,
+                pAacDecoderStaticChannelInfo->last_lpd_mode, 0,
+                pAacDecoderChannelInfo->currAliasingSymmetry);
+
+      } else {
+#if defined(FDK_ASSERT_ENABLE)
+        nSamples =
+#endif
+            imlt_block(
+                &pAacDecoderStaticChannelInfo->IMdct, synth,
+                SPEC_LONG(pAacDecoderChannelInfo->pSpectralCoefficient),
+                pAacDecoderChannelInfo->specScale, nSpec, frameLen, tl,
+                FDKgetWindowSlope(
+                    fl, GetWindowShape(&pAacDecoderChannelInfo->icsInfo)),
+                fl,
+                FDKgetWindowSlope(
+                    fr, GetWindowShape(&pAacDecoderChannelInfo->icsInfo)),
+                fr, (FIXP_DBL)0,
+                pAacDecoderChannelInfo->currAliasingSymmetry
+                    ? MLT_FLAG_CURR_ALIAS_SYMMETRY
+                    : 0);
+      }
+      FDK_ASSERT(nSamples == frameLen);
+
+      /* The "if" clause is entered both for fullbandLpd mono and
+       * non-fullbandLpd*. The "else"-> just for fullbandLpd stereo*/
+      if (!(elFlags & AC_EL_LPDSTEREOIDX)) {
+        FDKmemcpy(pitch, pAacDecoderStaticChannelInfo->old_T_pf,
+                  SynSfd * sizeof(INT));
+        FDKmemcpy(pit_gain, pAacDecoderStaticChannelInfo->old_gain_pf,
+                  SynSfd * sizeof(FIXP_DBL));
+
+        for (int i = SynSfd; i < LpdSfd + 3; i++) {
+          pitch[i] = L_SUBFR;
+          pit_gain[i] = (FIXP_DBL)0;
+        }
+
+        if (pAacDecoderStaticChannelInfo->last_lpd_mode == 0) {
+          pitch[SynSfd] = pitch[SynSfd - 1];
+          pit_gain[SynSfd] = pit_gain[SynSfd - 1];
+          if (IsLongBlock(&pAacDecoderChannelInfo->icsInfo)) {
+            pitch[SynSfd + 1] = pitch[SynSfd];
+            pit_gain[SynSfd + 1] = pit_gain[SynSfd];
+          }
+        }
+
+        /* Copy old data to the beginning of the buffer */
+        {
+          FDKmemcpy(
+              pWorkBuffer1, pAacDecoderStaticChannelInfo->old_synth,
+              ((PIT_MAX_MAX - (1 * L_SUBFR)) * fac_FB) * sizeof(FIXP_DBL));
+        }
+
+        FIXP_DBL *p2_synth = pWorkBuffer1 + (PIT_MAX_MAX * fac_FB);
+
+        /* recalculate pitch gain to allow postfilering on FAC area */
+        for (int i = 0; i < SynSfd + 2; i++) {
+          int T = pitch[i];
+          FIXP_DBL gain = pit_gain[i];
+
+          if (gain > (FIXP_DBL)0) {
+            gain = get_gain(&p2_synth[i * L_SUBFR * fac_FB],
+                            &p2_synth[(i * L_SUBFR * fac_FB) - fac_FB * T],
+                            L_SUBFR * fac_FB);
+            pit_gain[i] = gain;
+          }
+        }
+
+        bass_pf_1sf_delay(p2_synth, pitch, pit_gain, frameLen,
+                          (LpdSfd + 2) * L_SUBFR + BPF_SFD * L_SUBFR,
+                          frameLen - (LpdSfd + 4) * L_SUBFR, outSamples,
+                          aacOutDataHeadroom,
+                          pAacDecoderStaticChannelInfo->mem_bpf);
+      }
+
+    } else /* last_core_mode was not LPD */
     {
       FIXP_DBL *tmp =
           pAacDecoderChannelInfo->pComStaticData->pWorkBufferCore1->mdctOutTemp;
@@ -1027,17 +1237,23 @@ void CBlock_FrequencyToTime(
                          ? MLT_FLAG_CURR_ALIAS_SYMMETRY
                          : 0);
 
-      scaleValuesSaturate(outSamples, tmp, frameLen, MDCT_OUT_HEADROOM);
+      scaleValuesSaturate(outSamples, tmp, frameLen,
+                          MDCT_OUT_HEADROOM - aacOutDataHeadroom);
     }
   }
 
   FDK_ASSERT(nSamples == frameLen);
+
+  pAacDecoderStaticChannelInfo->last_core_mode =
+      (pAacDecoderChannelInfo->icsInfo.WindowSequence == BLOCK_SHORT) ? FD_SHORT
+                                                                      : FD_LONG;
+  pAacDecoderStaticChannelInfo->last_lpd_mode = 255;
 }
 
 #include "ldfiltbank.h"
 void CBlock_FrequencyToTimeLowDelay(
     CAacDecoderStaticChannelInfo *pAacDecoderStaticChannelInfo,
-    CAacDecoderChannelInfo *pAacDecoderChannelInfo, FIXP_PCM outSamples[],
+    CAacDecoderChannelInfo *pAacDecoderChannelInfo, PCM_DEC outSamples[],
     const short frameLen) {
   InvMdctTransformLowDelay_fdk(
       SPEC_LONG(pAacDecoderChannelInfo->pSpectralCoefficient),

@@ -435,6 +435,18 @@ int transportDec_RegisterSscCallback(HANDLE_TRANSPORTDEC hTp,
                                      const cbSsc_t cbSscParse, void *user_data);
 
 /**
+ * \brief                Register SBR header parser callback.
+ * \param hTp            Handle of transport decoder.
+ * \param cbUpdateConfig Pointer to a callback function to handle SBR header
+ * parsing.
+ * \param user_data      void pointer for user data passed to the callback as
+ * first parameter.
+ * \return               0 on success.
+ */
+int transportDec_RegisterSbrCallback(HANDLE_TRANSPORTDEC hTpDec,
+                                     const cbSbr_t cbSbr, void *user_data);
+
+/**
  * \brief                Register USAC SC parser callback.
  * \param hTp            Handle of transport decoder.
  * \param cbUpdateConfig Pointer to a callback function to handle USAC SC

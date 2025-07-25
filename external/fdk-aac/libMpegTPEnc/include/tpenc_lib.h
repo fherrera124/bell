@@ -148,6 +148,18 @@ typedef struct TRANSPORTENC *HANDLE_TRANSPORTENC;
 CHANNEL_MODE transportEnc_GetChannelMode(int noChannels);
 
 /**
+ * \brief                Register SBR heaqder writer callback.
+ * \param hTp            Handle of transport decoder.
+ * \param cbUpdateConfig Pointer to a callback function to handle SBR header
+ * writing.
+ * \param user_data      void pointer for user data passed to the callback as
+ * first parameter.
+ * \return               0 on success.
+ */
+int transportEnc_RegisterSbrCallback(HANDLE_TRANSPORTENC hTpEnc,
+                                     const cbSbr_t cbSbr, void *user_data);
+
+/**
  * \brief                Register USAC SC writer callback.
  * \param hTp            Handle of transport decoder.
  * \param cbUpdateConfig Pointer to a callback function to handle USAC
