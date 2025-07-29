@@ -67,12 +67,14 @@ void OpusCodec::setupEncode(const std::any& codecConfig) {
                                          opus_strerror(opusError)));
   }
 
-  if (config.frameLength.has_value()) {
-    auto opusDuration = getOpusFrameSize(config.frameLength.value());
+  if (config.samplesPerFrame.has_value()) {
+    int frameLength =
+        config.audioFormat.samplesToMs(config.samplesPerFrame.value());
+    auto opusDuration = getOpusFrameSize(frameLength);
 
     // Fallback on 20ms if unsupported
     if (opusDuration == OPUS_FRAMESIZE_20_MS) {
-      config.frameLength = 20;
+      config.samplesPerFrame = 960;
     }
 
     // Encoder settings
@@ -138,13 +140,12 @@ uint8_t* OpusCodec::encode(const uint8_t* pcmInput, size_t inputLength,
 uint8_t* OpusCodec::decode(const uint8_t* encodedInput, size_t inputLength,
                            size_t& outputLength, ResultCode& result) {
   assert(decoder != nullptr);
-  const int16_t samplesPerPacket = static_cast<int16_t>(
-      getAudioFormat().msToSamples(config.frameLength.value_or(20)));
 
-  auto pcmLen = opus_decode(
-      decoder, static_cast<const unsigned char*>(encodedInput),
-      static_cast<int32_t>(inputLength),
-      reinterpret_cast<opus_int16*>(tmpBuffer.data()), samplesPerPacket, false);
+  auto pcmLen =
+      opus_decode(decoder, static_cast<const unsigned char*>(encodedInput),
+                  static_cast<int32_t>(inputLength),
+                  reinterpret_cast<opus_int16*>(tmpBuffer.data()),
+                  config.samplesPerFrame.value_or(960), false);
 
   // Handle encoded result
   if (pcmLen < 0) {

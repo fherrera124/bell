@@ -4,7 +4,7 @@ option(BELL_DISABLE_SANITIZERS "Disable sanitizers" ON)
 
 # Audio codecs
 option(BELL_DISABLE_CODECS "Disable the entire audio codec wrapper" OFF)
-option(BELL_CODEC_AAC "Support opencore-aac codec" ON)
+option(BELL_CODEC_AAC "Support fdk-aac codec" ON)
 option(BELL_CODEC_MP3 "Support libhelix-mp3 codec" ON)
 option(BELL_CODEC_VORBIS "Support tremor Vorbis codec" ON)
 option(BELL_CODEC_OPUS "Support Opus codec" ON)
