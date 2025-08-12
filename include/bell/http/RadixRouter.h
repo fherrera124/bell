@@ -5,8 +5,6 @@
 #include <unordered_map>
 
 #include "bell/http/Common.h"
-#include "bell/http/Reader.h"
-#include "bell/http/Writer.h"
 #include "bell/io/MemoryStream.h"
 
 namespace bell::http {

@@ -1,4 +1,5 @@
 #include "bell/net/TCPSocket.h"
+#include <__system_error/errc.h>
 
 #include "bell/Logger.h"
 #include "bell/Result.h"
@@ -32,25 +33,23 @@ bell::Result<> TCPSocket::connect(const std::string& host, uint16_t port,
   // Close the socket if it is already open
   if (sockFd != INVALID_FD) {
     BELL_LOG(debug, LOG_TAG, "Socket already open");
-    return Result<>::fromError(std::errc::invalid_argument);
+    return make_unexpected_errc(std::errc::already_connected);
   }
 
   auto resolveRes = IpAddress::resolveDomain(host, SOCK_STREAM);
 
   if (!resolveRes) {
     BELL_LOG(error, LOG_TAG, "Could not resolve {}. Error {}", host.c_str(),
-             resolveRes.getError().message());
-    return Result<>::fromError(resolveRes.getError());
+             resolveRes.error());
+    return tl::make_unexpected(resolveRes.error());
   }
 
-  auto destinationAddress = resolveRes.getValue();
-  destinationAddress.setPort(port);
+  resolveRes->setPort(port);
 
-  auto res = createFd(destinationAddress.getFamily(), IPPROTO_IP);
+  auto res = createFd(resolveRes->getFamily(), IPPROTO_IP);
 
   if (!res) {
-    BELL_LOG(error, LOG_TAG, "Could not create socket. Error {}",
-             res.errorMessage());
+    BELL_LOG(error, LOG_TAG, "Could not create socket. Error {}", res.error());
     return res;
   }
 
@@ -58,24 +57,27 @@ bell::Result<> TCPSocket::connect(const std::string& host, uint16_t port,
 
   if (!isBlockingRes) {
     BELL_LOG(error, LOG_TAG, "Could not get socket flags. Error {}",
-             isBlockingRes.errorMessage());
-    return Result<>::fromError(isBlockingRes.getError());
+             isBlockingRes.error());
+    return tl::make_unexpected(isBlockingRes.error());
   }
 
   // Cache the isBlocking value
-  bool tmpIsBlocking = isBlockingRes.getValue();
+  bool tmpIsBlocking = *isBlockingRes;
 
   // Required for the connect call
-  setBlocking(false);
+  auto blockingRes = setBlocking(false);
+  if (!blockingRes) {
+    return blockingRes;
+  }
 
-  int err = ::connect(sockFd, destinationAddress.getSockAddrPtr(),
-                      destinationAddress.getSockAddrLen());
+  int err = ::connect(sockFd, resolveRes->getSockAddrPtr(),
+                      resolveRes->getSockAddrLen());
 
   if (err < 0 && errno != EINPROGRESS) {
     // Connection failed immediately
     close();
 
-    return Result<>::fromLastErrno();
+    return tl::make_unexpected(errorFromErrno());
   }
 
   if (timeoutMs > 0) {
@@ -91,16 +93,16 @@ bell::Result<> TCPSocket::connect(const std::string& host, uint16_t port,
         close();
 
         if (pollResult == 0) {
-          return Result<>::fromError(std::errc::timed_out);
+          return make_unexpected_errc(std::errc::timed_out);
         }
 
-        return Result<>::fromLastErrno();
+        return tl::make_unexpected(errorFromErrno());
       }
 
       // Check for connection success or error
       auto errCode = lastError();
       if (errCode) {
-        return Result<>::fromError(errCode);
+        return tl::make_unexpected(errCode);
       }
 
       // Success
@@ -108,7 +110,10 @@ bell::Result<> TCPSocket::connect(const std::string& host, uint16_t port,
     }
 
     // Restore isBlocking
-    setBlocking(tmpIsBlocking);
+    auto setBlockingRes = setBlocking(tmpIsBlocking);
+    if (!setBlockingRes) {
+      return setBlockingRes;
+    }
   }
 
   return {};
@@ -116,11 +121,11 @@ bell::Result<> TCPSocket::connect(const std::string& host, uint16_t port,
 
 bell::Result<> TCPSocket::listen(int backlog) {
   if (!isValid()) {
-    return Result<>::fromError(std::errc::invalid_argument);
+    return make_unexpected_errc(std::errc::bad_file_descriptor);
   }
 
   if (::listen(sockFd, backlog) != 0) {
-    return Result<>::fromLastErrno();
+    return tl::make_unexpected(errorFromErrno());
   }
 
   return {};
@@ -135,7 +140,7 @@ bell::Result<TCPSocket> TCPSocket::accept() {
       sockFd, reinterpret_cast<struct sockaddr*>(&clientAddr), &addrLen);
 
   if (clientFd < 0) {
-    return Result<TCPSocket>::fromLastErrno();
+    return tl::make_unexpected(errorFromErrno());
   }
 
   return TCPSocket(clientFd);

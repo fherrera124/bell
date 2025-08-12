@@ -27,6 +27,10 @@ list(APPEND BELL_LIBS Threads::Threads)
 add_subdirectory(external/span)
 list(APPEND BELL_LIBS span)
 
+# Include expected polyfill
+add_subdirectory(external/expected)
+list(APPEND BELL_LIBS expected)
+
 # Include tao-json if not disabled
 if(NOT BELL_DISABLE_TAOJSON)
     add_subdirectory(external/taojson)

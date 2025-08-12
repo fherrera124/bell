@@ -30,6 +30,11 @@ struct http_error_category : public std::error_category {
 };
 }  // namespace internal
 
+// Plug in the error code category for std::error_code
+inline std::error_code make_error_code(const bell::http::Errc& e) {
+  return {static_cast<int>(e), internal::http_error_category()};
+};
+
 // Type definition for HTTP headers
 using Header = std::pair<std::string, std::string>;
 
@@ -54,10 +59,10 @@ Method parseMethod(std::string_view method);
 std::string_view methodToString(Method method);
 }  // namespace bell::http
 
-// Plug in the error code category for std::error_code
-inline std::error_code make_error_code(const bell::http::Errc& e) {
-  return {static_cast<int>(e), bell::http::internal::http_error_category()};
-};
+namespace std {
+template <>
+struct is_error_code_enum<bell::http::Errc> : true_type {};
+}  // namespace std
 
 // Alias for the HTTPCommon class
 namespace bell {

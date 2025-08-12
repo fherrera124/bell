@@ -11,6 +11,7 @@
 #include "bell/Logger.h"
 #include "mbedtls/net_sockets.h"
 #include "mbedtls/ssl.h"
+#include "tl/expected.hpp"
 
 using namespace bell;
 
@@ -36,25 +37,24 @@ std::error_code mbedtlsToCommonErrc(int mbedtlsErr) {
 }
 
 // Maps the TCP socket result values to MbedTLS BIO result values
-Result<int> makeBioResult(Result<size_t> res, bool reading) {
+bell::Result<int> transformBioRes(bell::Result<size_t> res, bool reading) {
   if (res) {
-    return {static_cast<int>(res.getValue())};
+    return {static_cast<int>(*res)};
   }
 
-  auto err = res.getError();
-
-  if (err == std::errc::broken_pipe || err == std::errc::connection_reset) {
-    return net::make_tls_error_code(MBEDTLS_ERR_NET_CONN_RESET);
+  if (res.error() == std::errc::broken_pipe ||
+      res.error() == std::errc::connection_reset) {
+    return tl::make_unexpected(
+        net::make_tls_error_code(MBEDTLS_ERR_NET_CONN_RESET));
   }
 
-  if (err == std::errc::operation_would_block ||
-      err == std::errc::interrupted || err == std::errc::timed_out) {
-    return reading ? Result<int>(MBEDTLS_ERR_SSL_WANT_READ)
-                   : Result<int>(MBEDTLS_ERR_SSL_WANT_WRITE);
+  if (res.error() == std::errc::operation_would_block ||
+      res.error() == std::errc::interrupted ||
+      res.error() == std::errc::timed_out) {
+    return reading ? MBEDTLS_ERR_SSL_WANT_READ : MBEDTLS_ERR_SSL_WANT_WRITE;
   }
 
-  return reading ? Result<int>(MBEDTLS_ERR_NET_RECV_FAILED)
-                 : Result<int>(MBEDTLS_ERR_NET_SEND_FAILED);
+  return reading ? MBEDTLS_ERR_NET_RECV_FAILED : MBEDTLS_ERR_NET_SEND_FAILED;
 }
 }  // namespace
 
@@ -92,22 +92,24 @@ std::error_code net::TLSSocket::lastError() const {
   return innerSocket.lastError();
 }
 
-Result<> net::TLSSocket::connect(const std::string& host, uint16_t port,
-                                 int timeoutMs) {
+bell::Result<> net::TLSSocket::connect(const std::string& host, uint16_t port,
+                                       int timeoutMs) {
   auto res = innerSocket.connect(host, port, timeoutMs);
   if (!res) {
-    BELL_LOG(error, LOG_TAG, "Failed to connect to {}: {}", host,
-             res.getError().message());
+    BELL_LOG(error, LOG_TAG, "Failed to connect to {}: {}", host, res.error());
     return res;
   }
 
-  setBlocking(timeoutMs > 0);
+  auto setBlockingRes = setBlocking(timeoutMs > 0);
+  if (!setBlockingRes) {
+    return setBlockingRes;
+  }
 
   int ret = mbedtls_ssl_config_defaults(&sslConf, MBEDTLS_SSL_IS_CLIENT,
                                         MBEDTLS_SSL_TRANSPORT_STREAM,
                                         MBEDTLS_SSL_PRESET_DEFAULT);
   if (ret != 0) {
-    return Result<>::fromError(make_tls_error_code(ret));
+    return tl::make_unexpected(make_tls_error_code(ret));
   }
   // TODO: Bundle verification & TLS 1.3
   mbedtls_ssl_conf_authmode(&sslConf, MBEDTLS_SSL_VERIFY_NONE);
@@ -116,18 +118,18 @@ Result<> net::TLSSocket::connect(const std::string& host, uint16_t port,
   mbedtls_ssl_conf_rng(&sslConf, mbedtls_ctr_drbg_random, &ctrDrbgCtx);
   ret = mbedtls_ssl_setup(&sslCtx, &sslConf);
   if (ret != 0) {
-    return Result<>::fromError(make_tls_error_code(ret));
+    return tl::make_unexpected(make_tls_error_code(ret));
   }
 
   ret = mbedtls_ssl_set_hostname(&sslCtx, host.c_str());
   if (ret != 0) {
-    return Result<>::fromError(make_tls_error_code(ret));
+    return tl::make_unexpected(make_tls_error_code(ret));
   }
 
   while ((ret = mbedtls_ssl_handshake(&sslCtx)) != 0) {
     if (ret != MBEDTLS_ERR_SSL_WANT_READ && ret != MBEDTLS_ERR_SSL_WANT_WRITE) {
       BELL_LOG(error, LOG_TAG, "Failed to perform TLS handshake");
-      return Result<>::fromError(make_tls_error_code(ret));
+      return tl::make_unexpected(make_tls_error_code(ret));
     }
   }
 
@@ -139,12 +141,12 @@ void net::TLSSocket::setupBioCallbacks(bool blocking) {
                                     size_t len) {
     auto* socket = static_cast<TCPSocket*>(ctx);
 
-    auto res = makeBioResult(socket->write(buf, len), false);
+    auto res = transformBioRes(socket->write(buf, len), false);
     if (res) {
-      return res.getValue();
+      return *res;
     }
 
-    return res.getError().value();
+    return res.error().value();
   };
 
   mbedtls_ssl_recv_t* recvFunc = nullptr;
@@ -157,27 +159,27 @@ void net::TLSSocket::setupBioCallbacks(bool blocking) {
 
       auto timeoutRes = socket->setReceiveTimeout(timeoutMs);
       if (!timeoutRes) {
-        return timeoutRes.getError().value();
+        return timeoutRes.error().value();
       }
 
-      auto res = makeBioResult(socket->read(buf, len), true);
+      auto res = transformBioRes(socket->read(buf, len), true);
       if (res) {
-        return res.getValue();
+        return *res;
       }
 
-      return res.getError().value();
+      return res.error().value();
     };
   } else {
 
     recvFunc = [](void* ctx, unsigned char* buf, size_t len) {
       auto* socket = static_cast<TCPSocket*>(ctx);
 
-      auto res = makeBioResult(socket->read(buf, len), true);
+      auto res = transformBioRes(socket->read(buf, len), true);
       if (res) {
-        return res.getValue();
+        return *res;
       }
 
-      return res.getError().value();
+      return res.error().value();
     };
   }
 
@@ -185,28 +187,28 @@ void net::TLSSocket::setupBioCallbacks(bool blocking) {
                       recvTimeoutFunc);
 }
 
-Result<> net::TLSSocket::setReceiveTimeout(int timeoutMs) {
+bell::Result<> net::TLSSocket::setReceiveTimeout(int timeoutMs) {
   return innerSocket.setReceiveTimeout(timeoutMs);
 };
 
-Result<> net::TLSSocket::setSendTimeout(int timeoutMs) {
+bell::Result<> net::TLSSocket::setSendTimeout(int timeoutMs) {
   return innerSocket.setSendTimeout(timeoutMs);
 };
 
-Result<int> net::TLSSocket::getReceiveTimeout() {
+bell::Result<int> net::TLSSocket::getReceiveTimeout() {
   return innerSocket.getReceiveTimeout();
 };
 
-Result<int> net::TLSSocket::getSendTimeout() {
+bell::Result<int> net::TLSSocket::getSendTimeout() {
   return innerSocket.getSendTimeout();
 };
 
-Result<> net::TLSSocket::setBlocking(bool blocking) {
+bell::Result<> net::TLSSocket::setBlocking(bool blocking) {
   setupBioCallbacks(blocking);
   return innerSocket.setBlocking(blocking);
 }
 
-Result<bool> net::TLSSocket::getBlocking() const {
+bell::Result<bool> net::TLSSocket::getBlocking() const {
   return innerSocket.getBlocking();
 }
 
@@ -218,21 +220,21 @@ int net::TLSSocket::takeFd() {
   return innerSocket.takeFd();
 }
 
-Result<size_t> net::TLSSocket::read(uint8_t* buf, size_t len) {
+bell::Result<size_t> net::TLSSocket::read(uint8_t* buf, size_t len) {
   int res = mbedtls_ssl_read(&sslCtx, buf, len);
 
   if (res < 0) {
-    return Result<size_t>::fromError(mbedtlsToCommonErrc(res));
+    return tl::make_unexpected(mbedtlsToCommonErrc(res));
   }
 
   return static_cast<size_t>(res);
 }
 
-Result<size_t> net::TLSSocket::write(const uint8_t* buf, size_t len) {
+bell::Result<size_t> net::TLSSocket::write(const uint8_t* buf, size_t len) {
   int res = mbedtls_ssl_write(&sslCtx, buf, len);
 
   if (res < 0) {
-    return Result<size_t>::fromError(mbedtlsToCommonErrc(res));
+    return tl::make_unexpected(mbedtlsToCommonErrc(res));
   }
 
   return static_cast<size_t>(res);

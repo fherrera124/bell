@@ -1,7 +1,9 @@
 #include "bell/net/UDPSocket.h"
+#include <__system_error/error_code.h>
 
 #include "bell/Logger.h"
 #include "bell/net/IpAddress.h"
+#include "tl/expected.hpp"
 
 // Platform specific socket includes
 #ifdef _WIN32
@@ -25,10 +27,10 @@
 
 using namespace bell::net;
 
-bell::Result<size_t> UDPSocket::recvfrom(uint8_t* buf, size_t len,
-                                         const IpAddress& address) {
+tl::expected<size_t, std::error_code> UDPSocket::recvfrom(
+    uint8_t* buf, size_t len, const IpAddress& address) {
   if (!isValid()) {
-    return Result<size_t>::fromError(std::errc::invalid_argument);
+    return make_unexpected_errc<size_t>(std::errc::bad_file_descriptor);
   }
 
   socklen_t addressLen = address.getSockAddrLen();
@@ -41,7 +43,7 @@ bell::Result<size_t> UDPSocket::recvfrom(uint8_t* buf, size_t len,
       const_cast<sockaddr*>(address.getSockAddrPtrConst()),  // NOLINT
       &addressLen);
   if (res < 0) {
-    return Result<size_t>::fromLastErrno();
+    return tl::make_unexpected(errorFromErrno());
   }
 
   return static_cast<size_t>(res);
@@ -50,7 +52,7 @@ bell::Result<size_t> UDPSocket::recvfrom(uint8_t* buf, size_t len,
 bell::Result<size_t> UDPSocket::sendto(const uint8_t* buf, size_t len,
                                        const IpAddress& address) {
   if (!isValid()) {
-    return Result<size_t>::fromError(std::errc::invalid_argument);
+    return make_unexpected_errc<size_t>(std::errc::bad_file_descriptor);
   }
 
   // Using const_cast to remove the const qualifier from the address, as sendto expects a non-const
@@ -60,7 +62,7 @@ bell::Result<size_t> UDPSocket::sendto(const uint8_t* buf, size_t len,
                const_cast<sockaddr*>(address.getSockAddrPtrConst()),  // NOLINT
                address.getSockAddrLen());
   if (res < 0) {
-    return Result<size_t>::fromLastErrno();
+    return tl::make_unexpected(errorFromErrno());
   }
 
   return static_cast<size_t>(res);

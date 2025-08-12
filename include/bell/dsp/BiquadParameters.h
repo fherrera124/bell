@@ -7,7 +7,7 @@
 #include <vector>
 
 // Bell includes
-#include "bell/audio/Types.h"
+#include "bell/audio/Common.h"
 
 namespace bell::dsp {
 // Structure responsible for storage and calculation of biquad filter coefficients
@@ -37,7 +37,7 @@ class BiquadParameters {
    * @brief Construct and calculate coefficients for a given Biquad filter
    *
    * @remark Required parameters depend on the selected filter type
-   * 
+   *
    * @param type filter type
    * @param f optional filter frequency
    * @param q optional filter q-value
@@ -66,7 +66,7 @@ class BiquadParameters {
 
   /**
    * @brief Parse a string to a biquad filter type
-   * 
+   *
    * @param type String representation of the filter type
    * @return Type Parsed filter type
    */
@@ -74,22 +74,22 @@ class BiquadParameters {
 
   /**
    * @brief Calculates a vector of biquad parameters required to construct a higher-order linkwitz-riley filter
-   * 
+   *
    * @param type Either Lowpass or Highpass
    * @param frequency cutoff frequency
    * @param order filters order
-   * @return std::vector<BiquadParameters> 
+   * @return std::vector<BiquadParameters>
    */
   static std::vector<BiquadParameters> linkwitzRiley(Type type, float frequency,
                                                      int order);
 
   /**
    * @brief Calculates a vector of biquad parameters required to construct a higher-order butterworth filter
-   * 
+   *
    * @param type Either Lowpass or Highpass
    * @param frequency cutoff frequency
    * @param order filters order
-   * @return std::vector<BiquadParameters> 
+   * @return std::vector<BiquadParameters>
    */
   static std::vector<BiquadParameters> butterworth(Type type, float frequency,
                                                    int order);
