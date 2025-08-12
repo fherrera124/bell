@@ -7,7 +7,7 @@ class PortAudioBackend : public Backend {
   PortAudioBackend() = default;
   ~PortAudioBackend() override = default;
 
-  std::vector<Device> getOutputDevices() const override{};
+  std::vector<Device> getOutputDevices() const override {};
 
   std::vector<Device> getInputDevices() const override {}
 

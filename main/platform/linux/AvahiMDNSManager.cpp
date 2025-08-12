@@ -20,6 +20,7 @@
 
 // Library includes
 #include "fmt/format.h"
+#include "tl/expected.hpp"
 
 // Avahi includes
 #include <avahi-client/client.h>
@@ -159,7 +160,7 @@ class AvahiMDNSBrowser : public Browser {
       int avahiErr = avahi_client_errno(avahiClient);
       BELL_LOG(error, LOG_TAG, "Failed to create Avahi service browser, {}",
                avahi_strerror(avahiErr));
-      return translateAvahiError(avahiErr);
+      return tl::make_unexpected(translateAvahiError(avahiErr));
     }
 
     return {};
@@ -330,7 +331,7 @@ class AvahiMDNSBrowser : public Browser {
 
     if (resolveContext->resolveRef == nullptr) {
       int avahiErr = avahi_client_errno(avahiClient);
-      return translateAvahiError(avahiErr);
+      return tl::make_unexpected(translateAvahiError(avahiErr));
     }
 
     // Add the resolve context to the cached list
@@ -385,7 +386,7 @@ class AvahiMDNSBrowser : public Browser {
             DiscoveryEvent event{
                 .type = EventType::ResolveFailure,
                 .service = service,
-                .error = res.getError(),
+                .error = res.error(),
             };
             onEvent(event);
           }
@@ -437,7 +438,7 @@ class AvahiMDNSAdvertiser : public Advertiser {
         avahi_entry_group_new(avahiClient, avahiGroupCallback, nullptr);
 
     if (entryGroup == nullptr) {
-      return make_error_code(MdnsErrc::service_registration_failed);
+      return tl::make_unexpected(MdnsErrc::service_registration_failed);
     }
 
     // Construct the TXT data
@@ -467,7 +468,7 @@ class AvahiMDNSAdvertiser : public Advertiser {
     }
 
     if (ret < 0) {
-      return make_error_code(MdnsErrc::service_registration_failed);
+      return tl::make_unexpected(MdnsErrc::service_registration_failed);
     }
 
     return {};
@@ -547,7 +548,7 @@ class AvahiMDNSManager : public Manager, bell::Task {
                                onEvent, autoResolveService, resolveIPv6);
 
     if (!res) {
-      return res.getError();
+      return tl::make_unexpected(res.error());
     }
 
     return browser;
@@ -565,7 +566,7 @@ class AvahiMDNSManager : public Manager, bell::Task {
                               serviceHost, port, txtRecords, interfaceIndex);
 
     if (!res) {
-      return res.getError();
+      return tl::make_unexpected(res.error());
     }
 
     return advertiser;
