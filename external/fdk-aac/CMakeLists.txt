@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 
-project(fdk-aac) 
+project(fdk-aac)
 
 file(GLOB AACDEC_SRCS  "libAACdec/src/*.cpp")
 file(GLOB AACENC_SRCS  "libAACenc/src/*.cpp")
@@ -33,27 +33,27 @@ set(AAC_SRCS
 )
 
 set(AAC_INCLUDES
-					 
-							"libAACdec/include/"
-							"libFDK/include"
-							"libSBRdec/include/"
-							"libSBRenc/include/"
-							"libPCMutils/include/"
-							"libSYS/include/"
-							"libMpegTPDec/include/"
-							"libMpegTPEnc/include/"
-							"libAACenc/include/"
-							"libArithCoding/include/"
-							"libDRCdec/include"
-							"libSACdec/include/"
-							"libSACenc/include/"
-					)
+    "libAACdec/include/"
+    "libFDK/include"
+    "libSBRdec/include/"
+    "libSBRenc/include/"
+    "libPCMutils/include/"
+    "libSYS/include/"
+    "libMpegTPDec/include/"
+    "libMpegTPEnc/include/"
+    "libAACenc/include/"
+    "libArithCoding/include/"
+    "libDRCdec/include"
+    "libSACdec/include/"
+    "libSACenc/include/"
+)
+
 add_library(fdk-aac ${AAC_SRCS})
 
 ### Library target includes
 target_include_directories(fdk-aac
   PUBLIC
-	${AAC_INCLUDES})
+ ${AAC_INCLUDES})
 
 
-target_compile_options(fdk-aac PRIVATE -fno-exceptions -Wno-unused-label -fno-rtti -Wno-maybe-uninitialized -Wno-deprecated-enum-enum-conversion -Wno-array-bounds -Wno-misleading-indentation -DUSE_DEFAULT_STDLIB)
+target_compile_options(fdk-aac PRIVATE -fno-exceptions -Wno-unused-label -fno-rtti -Wno-maybe-uninitialized -Wno-deprecated-enum-enum-conversion -Wno-array-bounds -Wno-misleading-indentation -Wno-stringop-overflow -DUSE_DEFAULT_STDLIB)

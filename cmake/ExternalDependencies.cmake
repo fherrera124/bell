@@ -1,9 +1,9 @@
 # Option for disabling message outputs from external dependencies
-# function(message)
-#     if(NOT MESSAGE_QUIET)
-#         _message(${ARGN})
-#     endif()
-# endfunction()
+function(message)
+    if(NOT MESSAGE_QUIET)
+        _message(${ARGN})
+    endif()
+endfunction()
 
 # Include libfmt
 set(FMT_INSTALL OFF) # Disable fmt install targets
@@ -77,6 +77,7 @@ if(NOT BELL_DISABLE_CODECS AND BELL_CODEC_OPUS)
     set(OPUS_USE_ALLOCA ON)
     set(HAVE_LRINT ON)
     set(HAVE_LRINTF ON)
+    set(OPUS_BUILD_TESTING OFF)
 
     # Opus logs a lot of messages, so we disable them
     set(MESSAGE_QUIET ON)
