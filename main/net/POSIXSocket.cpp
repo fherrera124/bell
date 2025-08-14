@@ -1,9 +1,12 @@
 #include "bell/net/POSIXSocket.h"
 
 #include <fmt/format.h>
+#include <system_error>
+#include "bell/Logger.h"
 #include "bell/Result.h"
 #include "bell/net/IpAddress.h"
 #include "bell/utils/Utils.h"
+#include "tl/expected.hpp"
 
 // Platform specific socket includes
 #ifdef _WIN32
@@ -32,17 +35,16 @@ bell::Result<> POSIXSocket::setBlocking(bool blocking) {
 #ifdef _WIN32
     unsigned long mode = blocking ? 0 : 1;
     if (ioctlsocket(sockFd, FIONBIO, &mode) != 0) {
-      // throw std::runtime_error("Could not set socket flags");
-      return Result<>::fromLastErrno();
+      return errorFromErrno();
     }
 #else
     int flags = fcntl(sockFd, F_GETFL, 0);
-    if (flags == -1) {
-      throw std::runtime_error("Could not get socket flags");
+    if (flags < 0) {
+      return tl::make_unexpected(errorFromErrno());
     }
     flags = blocking ? (flags & ~O_NONBLOCK) : (flags | O_NONBLOCK);
     if (fcntl(sockFd, F_SETFL, flags) != 0) {
-      return Result<>::fromLastErrno();
+      return tl::make_unexpected(errorFromErrno());
     }
 #endif
   }
@@ -63,13 +65,14 @@ std::error_code POSIXSocket::lastError() const {
 
 bell::Result<size_t> POSIXSocket::read(uint8_t* buf, size_t len) {
   if (!isValid()) {
-    return Result<size_t>::fromError(std::errc::invalid_argument);
+    return tl::make_unexpected(
+        std::make_error_code(std::errc::invalid_argument));
   }
 
   // Perform the actual read operation
   ssize_t res = ::recv(sockFd, buf, len, 0);
   if (res < 0) {
-    return Result<size_t>::fromLastErrno();
+    return tl::make_unexpected(errorFromErrno());
   }
 
   return static_cast<size_t>(res);
@@ -77,22 +80,23 @@ bell::Result<size_t> POSIXSocket::read(uint8_t* buf, size_t len) {
 
 bell::Result<size_t> POSIXSocket::write(const uint8_t* buf, size_t len) {
   if (!isValid()) {
-    return Result<size_t>::fromError(std::errc::invalid_argument);
+    return tl::make_unexpected(
+        std::make_error_code(std::errc::invalid_argument));
   }
 
   // Perform the actual write operation
   ssize_t res = ::send(sockFd, buf, len, MSG_NOSIGNAL);
   if (res < 0) {
-    return Result<size_t>::fromLastErrno();
+    return tl::make_unexpected(errorFromErrno());
   }
 
-  return {static_cast<size_t>(res)};
+  return static_cast<size_t>(res);
 }
 
 bell::Result<> POSIXSocket::createFd(int domain, int protocol) {
   this->sockFd = socket(domain, getSockType(), protocol);
   if (sockFd < 0) {
-    return Result<>::fromLastErrno();
+    return tl::make_unexpected(errorFromErrno());
   }
 
   return {};
@@ -125,59 +129,58 @@ void POSIXSocket::close() {
 
 bell::Result<int> POSIXSocket::bind(const std::string& address, uint16_t port,
                                     bool reuseAddr) {
-  auto res = IpAddress::resolveDomain(address, getSockType());
+  auto resolveRes = IpAddress::resolveDomain(address, getSockType());
 
-  if (!res) {
-    return Result<int>::fromError(res.getError());
+  if (!resolveRes) {
+    return tl::make_unexpected(resolveRes.error());
   }
 
-  auto resolved = res.getValue();
-  resolved.setPort(port);
+  resolveRes->setPort(port);
 
-  auto fdRes = createFd(resolved.getFamily(), IPPROTO_IP);
+  auto fdRes = createFd(resolveRes->getFamily(), IPPROTO_IP);
 
   if (!fdRes) {
-    return Result<int>::fromError(fdRes.getError());
+    return tl::make_unexpected(fdRes.error());
   }
 
   if (reuseAddr) {
     auto optionRes = setOption(SOL_SOCKET, SO_REUSEADDR, 1);
 
     if (!optionRes) {
-      return Result<int>::fromError(optionRes.getError());
+      return tl::make_unexpected(optionRes.error());
     }
   }
 
-  if (::bind(sockFd, resolved.getSockAddrPtrConst(),
-             resolved.getSockAddrLen()) != 0) {
+  if (::bind(sockFd, resolveRes->getSockAddrPtrConst(),
+             resolveRes->getSockAddrLen()) != 0) {
     close();
-    return Result<int>::fromLastErrno();
+    return tl::make_unexpected(errorFromErrno());
   }
 
-  socklen_t servSockLen = resolved.getSockAddrLen();
+  socklen_t servSockLen = resolveRes->getSockAddrLen();
 
   // Retrieve assigned port
-  if (getsockname(sockFd, resolved.getSockAddrPtr(), &servSockLen) != 0) {
+  if (getsockname(sockFd, resolveRes->getSockAddrPtr(), &servSockLen) != 0) {
     close();
-    return Result<int>::fromLastErrno();
+    return tl::make_unexpected(errorFromErrno());
   }
 
-  if (resolved.getPort().has_value()) {
-    return resolved.getPort().value();
+  if (resolveRes->getPort().has_value()) {
+    return *resolveRes->getPort();
   }
 
-  return Result<int>::fromError(std::errc::invalid_argument);
+  return make_unexpected_errc<int>(std::errc::invalid_argument);
 }
 
 bell::Result<> POSIXSocket::setOptionImpl(int level, int optionName,
                                           const void* optionValue,
-                                          socklen_t optionLen) {
+                                          socklen_t optionLen) const {
   if (!isValid()) {
-    return Result<>::fromError(std::errc::invalid_argument);
+    return make_unexpected_errc(std::errc::bad_file_descriptor);
   }
 
   if (setsockopt(getFd(), level, optionName, optionValue, optionLen) == -1) {
-    return Result<>::fromLastErrno();
+    return tl::make_unexpected(errorFromErrno());
   }
 
   return {};
@@ -185,14 +188,14 @@ bell::Result<> POSIXSocket::setOptionImpl(int level, int optionName,
 
 bell::Result<IpAddress> POSIXSocket::getPeerName() const {
   if (!isValid()) {
-    return Result<IpAddress>::fromError(std::errc::invalid_argument);
+    return make_unexpected_errc<IpAddress>(std::errc::bad_file_descriptor);
   }
 
   struct sockaddr addr {};
   socklen_t addrLen = sizeof(addr);
 
   if (getpeername(getFd(), &addr, &addrLen) == -1) {
-    return Result<IpAddress>::fromLastErrno();
+    return tl::make_unexpected(errorFromErrno());
   }
 
   return IpAddress(&addr);
@@ -200,13 +203,13 @@ bell::Result<IpAddress> POSIXSocket::getPeerName() const {
 
 bell::Result<> POSIXSocket::getOptionImpl(int level, int optionName,
                                           void* optionValue,
-                                          socklen_t optionLen) {
+                                          socklen_t optionLen) const {
   if (!isValid()) {
-    return Result<>::fromError(std::errc::invalid_argument);
+    return make_unexpected_errc(std::errc::bad_file_descriptor);
   }
 
   if (getsockopt(getFd(), level, optionName, optionValue, &optionLen) == -1) {
-    return Result<>::fromLastErrno();
+    return tl::make_unexpected(errorFromErrno());
   }
 
   return {};
@@ -224,34 +227,29 @@ bell::Result<> POSIXSocket::setSendTimeout(int timeoutMs) {
 
 bell::Result<int> POSIXSocket::getReceiveTimeout() {
   struct timeval timeVal {};
-  auto res = getOptionImpl(SOL_SOCKET, SO_RCVTIMEO, &timeVal, sizeof(timeVal));
 
-  if (!res) {
-    return Result<int>::fromError(res.getError());
-  }
-
-  return static_cast<int>(utils::timevalToMilliseconds(timeVal));
+  return getOptionImpl(SOL_SOCKET, SO_RCVTIMEO, &timeVal, sizeof(timeVal))
+      .transform([&timeVal]() {
+        return static_cast<int>(utils::timevalToMilliseconds(timeVal));
+      });
 }
 
 bell::Result<int> POSIXSocket::getSendTimeout() {
   struct timeval timeVal {};
-  auto res = getOptionImpl(SOL_SOCKET, SO_SNDTIMEO, &timeVal, sizeof(timeVal));
-
-  if (!res) {
-    return Result<int>::fromError(res.getError());
-  }
-
-  return static_cast<int>(utils::timevalToMilliseconds(timeVal));
+  return getOptionImpl(SOL_SOCKET, SO_SNDTIMEO, &timeVal, sizeof(timeVal))
+      .transform([&timeVal]() {
+        return static_cast<int>(utils::timevalToMilliseconds(timeVal));
+      });
 }
 
 bell::Result<bool> POSIXSocket::getBlocking() const {
   if (!isValid()) {
-    return Result<bool>::fromError(std::errc::invalid_argument);
+    return make_unexpected_errc<bool>(std::errc::bad_file_descriptor);
   }
 
   int flags = fcntl(sockFd, F_GETFL, 0);
   if (flags == -1) {
-    return Result<bool>::fromLastErrno();
+    return tl::make_unexpected(errorFromErrno());
   }
 
   return !(flags & O_NONBLOCK);

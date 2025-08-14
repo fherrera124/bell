@@ -3,9 +3,9 @@
 // Standard includes
 #include <functional>
 #include <unordered_map>
-#include <vector>
 
 // Bell includes
+#include "bell/Result.h"
 #include "bell/net/IpAddress.h"
 
 namespace bell::mdns {
@@ -74,12 +74,12 @@ class Browser {
   /**
    * @brief Query a resolve of the provided service record.
    */
-  virtual Result<> resolveService(const ServiceRecord& service) = 0;
+  virtual bell::Result<> resolveService(const ServiceRecord& service) = 0;
 
   /**
    * @brief Query a resolve of the provided service's address.
    */
-  virtual Result<> resolveAddress(const ServiceRecord& service) = 0;
+  virtual bell::Result<> resolveAddress(const ServiceRecord& service) = 0;
 
   /**
    * @brief Stop the discovery process. Automatically called on destruction.

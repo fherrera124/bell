@@ -10,7 +10,7 @@
 #include <vector>
 
 // bell includes
-#include "bell/audio/Types.h"
+#include "bell/audio/Common.h"
 
 namespace bell::dsp {
 // Holds the audio samples that are passed between the transforms in the pipeline.
@@ -37,7 +37,7 @@ struct DataSlots {
 
   /**
    * @brief Makes sure that the given channel exists in the slots.
-   * 
+   *
    * @param channel channel index
    */
   inline void ensureChannel(int channel) const {

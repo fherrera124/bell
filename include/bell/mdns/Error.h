@@ -47,7 +47,7 @@ inline const mdns_errc_category& mdns_category() {
 }
 
 // Create an error code with the mdns_category type
-inline std::error_code make_error_code(MdnsErrc e) {
+inline std::error_code make_error_code(const MdnsErrc& e) {
   return {static_cast<int>(e), mdns_category()};
 }
 }  // namespace bell::mdns

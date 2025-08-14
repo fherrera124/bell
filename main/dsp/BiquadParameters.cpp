@@ -2,7 +2,6 @@
 
 // Standard includes
 #include <cmath>
-#include <iostream>
 #include <optional>
 #include <stdexcept>
 #include <unordered_map>

@@ -1,7 +1,10 @@
 #include "bell/http/Reader.h"
+
+#include "bell/Result.h"
 #include "bell/http/Common.h"
 #include "bell/io/MemoryStream.h"
 #include "bell/net/URIParser.h"
+#include "tl/expected.hpp"
 
 using namespace bell;
 
@@ -32,7 +35,7 @@ http::Reader::Reader(Direction readerDirection,
 
 bell::Result<> http::Reader::readHeaders() {
   if (headersValid) {
-    return std::errc::operation_not_permitted;
+    return make_unexpected_errc(std::errc::operation_not_permitted);
   }
 
   int minorVersion = 0;
@@ -62,7 +65,7 @@ bell::Result<> http::Reader::readHeaders() {
   // Consume the stream byte by byte, so we dont read into the body
   while (lastPhrResult <= 0 && istream->get(lastChar)) {
     if (bufferPtr->size() > maxRequestLen) {
-      return std::errc::io_error;
+      return make_unexpected_errc(std::errc::io_error);
     }
 
     bufferPtr->push_back(lastChar);
@@ -93,7 +96,7 @@ bell::Result<> http::Reader::readHeaders() {
 
       // Throw on phr error, or if the parser is not done yet and we're at the end
       if (lastPhrResult == -1 || (isLastLine && lastPhrResult <= 0)) {
-        return std::errc::io_error;
+        return make_unexpected_errc(std::errc::io_error);
       }
 
       lastLineStart = bufferPtr->size();
@@ -101,7 +104,7 @@ bell::Result<> http::Reader::readHeaders() {
   }
 
   if (lastPhrResult <= 0) {
-    return std::errc::io_error;
+    return make_unexpected_errc(std::errc::io_error);
   }
 
   headersValid = true;  // Mark headers as read
@@ -119,19 +122,19 @@ bell::Result<> http::Reader::readHeaders() {
     statusMessage = std::string(statusMessagePtr, statusMessageLen);
 
     if (statusCode < 100 || statusCode >= 600) {
-      return std::errc::protocol_not_supported;
+      return make_unexpected_errc(std::errc::protocol_not_supported);
     }
   } else {
     path = std::string_view(pathPtr, pathLen);
     method = parseMethod({methodPtr, methodLen});
 
     if (minorVersion == 1 && getHeader("Host").empty()) {
-      return std::errc::protocol_not_supported;
+      return make_unexpected_errc(std::errc::protocol_not_supported);
     }
 
     auto res = parseQueryParams();
     if (!res) {
-      return res.getError();
+      return res;
     }
   }
 
@@ -149,7 +152,8 @@ size_t http::Reader::getContentLength() const {
 bell::Result<std::unordered_map<std::string, std::string>>
 http::Reader::getQueryParams() const {
   if (!isValid(Direction::Request)) {
-    return std::errc::operation_not_permitted;
+    return tl::make_unexpected(
+        std::make_error_code(std::errc::operation_not_permitted));
   }
 
   return queryParams;
@@ -187,7 +191,7 @@ bell::Result<std::string_view> http::Reader::getBodyStringView() {
   if (readContentLength == 0) {
     auto res = readBody();
     if (!res) {
-      return res.getError();
+      return tl::make_unexpected(res.error());
     }
   }
 
@@ -208,7 +212,7 @@ bell::Result<std::vector<std::byte>> http::Reader::getBodyBytes() {
   if (readContentLength == 0) {
     auto res = readBody();
     if (!res) {
-      return res.getError();
+      return tl::make_unexpected(res.error());
     }
   }
 
@@ -227,7 +231,7 @@ bell::Result<const char*> http::Reader::getBodyBytesPtr() {
   if (readContentLength == 0) {
     auto res = readBody();
     if (!res) {
-      return res.getError();
+      return tl::make_unexpected(res.error());
     }
   }
 
@@ -236,11 +240,11 @@ bell::Result<const char*> http::Reader::getBodyBytesPtr() {
 
 bell::Result<> http::Reader::parseQueryParams() {
   if (!isValid(Direction::Request)) {
-    return std::errc::operation_not_permitted;
+    return make_unexpected_errc(std::errc::operation_not_permitted);
   }
 
   if (!path.has_value()) {
-    return std::errc::operation_not_permitted;
+    return make_unexpected_errc(std::errc::operation_not_permitted);
   }
 
   auto queryStart = path->find('?');
@@ -270,7 +274,7 @@ bell::Result<size_t> http::Reader::getBodyBytesLength() {
   if (readContentLength == 0) {
     auto res = readBody();
     if (!res) {
-      return res.getError();
+      return tl::make_unexpected(res.error());
     }
   }
 
@@ -283,7 +287,7 @@ bell::Result<> http::Reader::readBody() {
   }
 
   if (!isValid(readerDirection)) {
-    return std::errc::operation_not_permitted;
+    return make_unexpected_errc(std::errc::operation_not_permitted);
   }
 
   if (contentLength == 0 || readContentLength == contentLength) {
@@ -300,7 +304,7 @@ bell::Result<> http::Reader::readBody() {
       static_cast<std::streamsize>(contentLength.value() - readContentLength));
 
   if (istream->fail() && !istream->eof()) {
-    return std::errc::io_error;
+    return make_unexpected_errc(std::errc::io_error);
   }
 
   // Update the read content length
@@ -323,11 +327,12 @@ bool http::Reader::isValid(Direction expectedDirection) const {
 
 bell::Result<int> http::Reader::getStatusCode() const {
   if (!isValid(Direction::Response)) {
-    return std::errc::operation_not_permitted;
+    return tl::make_unexpected(
+        std::make_error_code(std::errc::operation_not_permitted));
   }
 
   if (!statusCode.has_value()) {
-    return std::errc::operation_not_permitted;
+    return tl::make_unexpected(std::make_error_code(std::errc::no_message));
   }
 
   return statusCode.value();
@@ -335,11 +340,11 @@ bell::Result<int> http::Reader::getStatusCode() const {
 
 bell::Result<http::Method> http::Reader::getMethod() const {
   if (!isValid(Direction::Request)) {
-    return std::errc::operation_not_permitted;
+    return tl::make_unexpected(
+        std::make_error_code(std::errc::operation_not_permitted));
   }
-
   if (!method.has_value()) {
-    return std::errc::operation_not_permitted;
+    return tl::make_unexpected(std::make_error_code(std::errc::no_message));
   }
 
   return method.value();
@@ -347,11 +352,11 @@ bell::Result<http::Method> http::Reader::getMethod() const {
 
 bell::Result<std::string_view> http::Reader::getPath() const {
   if (!isValid(Direction::Request)) {
-    return std::errc::operation_not_permitted;
+    return tl::make_unexpected(
+        std::make_error_code(std::errc::operation_not_permitted));
   }
-
   if (!path.has_value()) {
-    return std::errc::operation_not_permitted;
+    return tl::make_unexpected(std::make_error_code(std::errc::no_message));
   }
 
   return path.value();

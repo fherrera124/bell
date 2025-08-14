@@ -2,6 +2,7 @@
 
 #include <unistd.h>
 #include <atomic>
+#include <iostream>
 #include <thread>
 
 #include "bell/Logger.h"
@@ -25,8 +26,7 @@ void runEchoServer(std::shared_ptr<bell::net::TCPSocket> serverSocket) {
       [&serverSocket, &pollListener, &clientSockets](auto& /*sock*/) {
         BELL_LOG(info, "Echo server", "Accepting new connection");
 
-        auto sock = std::make_shared<bell::TCPSocket>(
-            serverSocket->accept().takeValue());
+        auto sock = std::make_shared<bell::TCPSocket>(*serverSocket->accept());
         // Handle ::accept
         clientSockets.push_back(sock);
 
@@ -35,14 +35,12 @@ void runEchoServer(std::shared_ptr<bell::net::TCPSocket> serverSocket) {
               // Handle client socket read
               std::string buffer;
               buffer.resize(1024);
-              size_t bytesRead =
-                  sock.read(reinterpret_cast<uint8_t*>(buffer.data()),
-                            buffer.size())
-                      .unwrap();
+              size_t bytesRead = *sock.read(
+                  reinterpret_cast<uint8_t*>(buffer.data()), buffer.size());
               if (bytesRead > 0) {
                 BELL_LOG(info, "Echo server", "Received {} bytes", bytesRead);
-                sock.write(reinterpret_cast<const uint8_t*>(buffer.data()),
-                           bytesRead);
+                (void)sock.write(
+                    reinterpret_cast<const uint8_t*>(buffer.data()), bytesRead);
               }
             });
       });
@@ -60,13 +58,13 @@ TEST_CASE("bell::io::Socket and derieved classes tests", "[bell::io::Socket]") {
   auto echoServerSocket = std::make_shared<bell::net::TCPSocket>();
 
   // Bind the socket to the echo server port
-  REQUIRE(echoServerSocket->bind("127.0.0.1", echoServerPort).isSuccess());
+  REQUIRE(echoServerSocket->bind("127.0.0.1", echoServerPort).has_value());
 
   // Bind should have opened the socket
   REQUIRE(echoServerSocket->isValid());
 
   // Listen on the socket, with a backlog of 5
-  REQUIRE(echoServerSocket->listen(5).isSuccess());
+  REQUIRE(echoServerSocket->listen(5));
 
   // Start the echo server runner
   std::thread echoServerRunner(runEchoServer, echoServerSocket);
@@ -78,41 +76,38 @@ TEST_CASE("bell::io::Socket and derieved classes tests", "[bell::io::Socket]") {
   auto clientSocket = std::make_unique<bell::net::TCPSocket>();
 
   SECTION("Connect to echo server") {
-    REQUIRE(
-        clientSocket->connect("127.0.0.1", echoServerPort, 2000).isSuccess());
+    REQUIRE(clientSocket->connect("127.0.0.1", echoServerPort, 2000).has_value());
     REQUIRE(clientSocket->isValid());
   }
 
   SECTION("Write to and read from echo server") {
-    REQUIRE(
-        clientSocket->connect("127.0.0.1", echoServerPort, 2000).isSuccess());
+    REQUIRE(clientSocket->connect("127.0.0.1", echoServerPort, 2000));
     std::string message = "Hello, Echo Server!";
     auto bytesWritten = clientSocket->write(
         reinterpret_cast<const uint8_t*>(message.data()), message.size());
 
-    REQUIRE(bytesWritten.isSuccess());
-    REQUIRE(bytesWritten.getValue() == message.size());
+    REQUIRE(bytesWritten.has_value());
+    REQUIRE(bytesWritten == message.size());
 
     std::string readBuffer(1024, '\0');
     auto bytesRead = clientSocket->read(
         reinterpret_cast<uint8_t*>(readBuffer.data()), readBuffer.size());
 
-    REQUIRE(bytesRead.isSuccess());
-    REQUIRE(bytesRead.getValue() == message.size());
-    REQUIRE(readBuffer.substr(0, bytesRead.getValue()) == message);
+    REQUIRE(bytesRead);
+    REQUIRE(bytesRead == message.size());
+    REQUIRE(readBuffer.substr(0, *bytesRead) == message);
   }
 
   SECTION("Connect timeout handling") {
     // Test if the client handles connection timeouts correctly
-    clientSocket->setBlocking(false);
-    REQUIRE_THROWS(clientSocket->connect("10.255.255.1", echoServerPort,
-                                         500)
-                       .unwrap());  // Impossible address for demo
+    REQUIRE(clientSocket->setBlocking(false));
+    REQUIRE_FALSE(clientSocket->connect("10.255.255.1", echoServerPort,
+                                        500));  // Impossible address for demo
   }
 
   SECTION("Other basic operations") {
     // Example of closing the socket
-    REQUIRE_NOTHROW(clientSocket->connect("127.0.0.1", echoServerPort, 2000));
+    REQUIRE(clientSocket->connect("127.0.0.1", echoServerPort, 2000));
     REQUIRE(clientSocket->isValid());
     clientSocket->close();
     REQUIRE_FALSE(clientSocket->isValid());

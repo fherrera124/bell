@@ -12,12 +12,13 @@
 #include <vector>
 
 // Library includes
-#include "bell/http/Common.h"
-#include "bell/http/Writer.h"
 #include "fmt/format.h"
 
 // Own includes
+#include "bell/Result.h"
+#include "bell/http/Common.h"
 #include "bell/http/Reader.h"
+#include "bell/http/Writer.h"
 #include "bell/net/SocketStream.h"
 #include "bell/net/URIParser.h"
 
@@ -32,7 +33,7 @@ class Connection {
 
   /**
    * @brief Connects to the given URL using the specified timeout and security settings.
-   * 
+   *
    * @param url URL to connect to
    * @param timeoutMs Timeout in milliseconds, or 0 for no timeout
    * @param secure Whether to use HTTPS (true, port 443) or HTTP (false, port 80)
@@ -90,12 +91,12 @@ inline bell::Result<Reader> request(Method method, const std::string& url,
   Connection conn;
   auto res = conn.connect(url, timeoutMs, secure);
   if (!res) {
-    return res.getError();
+    return tl::unexpected(res.error());
   }
 
   auto writerRes = conn.sendRequest(method, headers, 0);
   if (!writerRes) {
-    return writerRes.getError();
+    return tl::unexpected(writerRes.error());
   }
 
   return conn.getResponse();
@@ -121,17 +122,16 @@ inline bell::Result<Reader> requestWithBodyPtr(
   Connection conn;
   auto res = conn.connect(url, timeoutMs, secure);
   if (!res) {
-    return res.getError();
+    return tl::unexpected(res.error());
   }
   auto writerRes = conn.sendRequest(method, headers, length);
   if (!writerRes) {
-    return writerRes.getError();
+    return tl::unexpected(writerRes.error());
   }
 
-  auto writer = writerRes.takeValue();
-  res = writer.writeBodyRaw(reinterpret_cast<const char*>(body), length);
+  res = writerRes->writeBodyRaw(reinterpret_cast<const char*>(body), length);
   if (!res) {
-    return res.getError();
+    return tl::unexpected(res.error());
   }
 
   return conn.getResponse();

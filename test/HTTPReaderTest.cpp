@@ -19,19 +19,19 @@ TEST_CASE("bell::http::Reader tests", "[bell::http::Reader]") {
         "Hello-world");
 
     bell::http::Reader reader(bell::http::Direction::Response, &mockResponse);
-    REQUIRE(reader.readHeaders().isSuccess());
+    REQUIRE(reader.readHeaders());
 
     // Should properly parse the response
-    REQUIRE(reader.getStatusCode().getValue() == 200);
+    REQUIRE(reader.getStatusCode() == 200);
     REQUIRE(reader.getContentLength() == 11);
     REQUIRE(reader.getHeader("Content-Type") == "text/html");
 
     REQUIRE(!reader.readHeaders()
-                 .isSuccess());  // Should throw if headers are read again
+                 );  // Should throw if headers are read again
 
     // Should throw on request-specific methods
-    REQUIRE(!reader.getMethod().isSuccess());
-    REQUIRE(!reader.getPath().isSuccess());
+    REQUIRE(!reader.getMethod());
+    REQUIRE(!reader.getPath());
 
     // Make sure the reader did not consume any of the body
     std::string content;
@@ -47,7 +47,7 @@ TEST_CASE("bell::http::Reader tests", "[bell::http::Reader]") {
         "\r\n"
         "Hello-world");
     bell::http::Reader reader(bell::http::Direction::Response, &mockResponse);
-    REQUIRE(!reader.readHeaders().isSuccess());
+    REQUIRE(!reader.readHeaders());
   }
 
   SECTION("Parses various status codes") {
@@ -58,8 +58,8 @@ TEST_CASE("bell::http::Reader tests", "[bell::http::Reader]") {
         "\r\n"
         "Not Found Page");
     bell::http::Reader reader(bell::http::Direction::Response, &mockResponse);
-    REQUIRE(reader.readHeaders().isSuccess());
-    REQUIRE(reader.getStatusCode().getValue() == 404);
+    REQUIRE(reader.readHeaders());
+    REQUIRE(reader.getStatusCode() == 404);
   }
 
   SECTION("Parses multiple headers and case insensitivity") {
@@ -71,8 +71,8 @@ TEST_CASE("bell::http::Reader tests", "[bell::http::Reader]") {
         "\r\n"
         "Hello-world");
     bell::http::Reader reader(bell::http::Direction::Response, &mockResponse);
-    REQUIRE(reader.readHeaders().isSuccess());
-    REQUIRE(reader.getStatusCode().getValue() == 200);
+    REQUIRE(reader.readHeaders());
+    REQUIRE(reader.getStatusCode() == 200);
     REQUIRE(reader.getContentLength() == 11);
     REQUIRE(reader.getHeader("content-type") ==
             "text/html");  // Case insensitive
@@ -89,11 +89,11 @@ TEST_CASE("bell::http::Reader tests", "[bell::http::Reader]") {
         "\r\n");
     bell::http::Reader reader(bell::http::Direction::Request, &mockRequest);
     REQUIRE_NOTHROW(reader.readHeaders());
-    REQUIRE(reader.getMethod().getValue() == bell::http::Method::GET);
-    REQUIRE(reader.getPath().getValue() == "/index.html");
+    REQUIRE(reader.getMethod() == bell::http::Method::GET);
+    REQUIRE(reader.getPath() == "/index.html");
     REQUIRE(reader.getHeader("Host") == "example.com");
     REQUIRE(reader.getHeader("User-Agent") == "TestAgent");
-    REQUIRE(!reader.getStatusCode().isSuccess());
+    REQUIRE(!reader.getStatusCode());
   }
 
   SECTION("Parses query parameters from HTTP requests") {
@@ -105,14 +105,15 @@ TEST_CASE("bell::http::Reader tests", "[bell::http::Reader]") {
     REQUIRE_NOTHROW(reader.readHeaders());
 
     // Verify method and path are parsed correctly
-    REQUIRE(reader.getMethod().getValue() == bell::http::Method::GET);
-    REQUIRE(reader.getPath().getValue() == "/search");
+    REQUIRE(reader.getMethod() == bell::http::Method::GET);
+    REQUIRE(reader.getPath() == "/search");
 
     // Now, check the query parameters
-    auto queryParams = reader.getQueryParams().getValue();
-    REQUIRE(queryParams.size() == 2);
-    REQUIRE(queryParams["query"] == "test");
-    REQUIRE(queryParams["lang"] == "en");
+    auto queryParams = reader.getQueryParams();
+    REQUIRE(queryParams);
+    REQUIRE(queryParams->size() == 2);
+    REQUIRE(queryParams->at("query") == "test");
+    REQUIRE(queryParams->at("lang") == "en");
   }
 
   SECTION("Handles missing Host header in HTTP/1.1 requests") {
@@ -122,7 +123,7 @@ TEST_CASE("bell::http::Reader tests", "[bell::http::Reader]") {
         "\r\n");
     bell::http::Reader reader(bell::http::Direction::Request, &mockRequest);
     REQUIRE(!reader.readHeaders()
-                 .isSuccess());  // Missing Host should cause error in HTTP/1.1
+                 );  // Missing Host should cause error in HTTP/1.1
   }
 
   SECTION("Throws on malformed request lines") {
@@ -131,7 +132,7 @@ TEST_CASE("bell::http::Reader tests", "[bell::http::Reader]") {
         "Host: example.com\r\n"
         "\r\n");
     bell::http::Reader reader(bell::http::Direction::Request, &mockRequest);
-    REQUIRE(!reader.readHeaders().isSuccess());
+    REQUIRE(!reader.readHeaders());
   }
 
   SECTION("Parses various HTTP methods") {
@@ -143,9 +144,9 @@ TEST_CASE("bell::http::Reader tests", "[bell::http::Reader]") {
         "\r\n"
         "{\"key\":\"value\"}");
     bell::http::Reader reader(bell::http::Direction::Request, &mockRequest);
-    REQUIRE(reader.readHeaders().isSuccess());
-    REQUIRE(reader.getMethod().getValue() == bell::http::Method::POST);
-    REQUIRE(reader.getPath().getValue() == "/submit");
+    REQUIRE(reader.readHeaders());
+    REQUIRE(reader.getMethod() == bell::http::Method::POST);
+    REQUIRE(reader.getPath() == "/submit");
     REQUIRE(reader.getHeader("Content-Type") == "application/json");
   }
 
@@ -157,8 +158,8 @@ TEST_CASE("bell::http::Reader tests", "[bell::http::Reader]") {
         "Content-Length: 0\r\n"
         "\r\n");
     bell::http::Reader reader(bell::http::Direction::Request, &mockRequest);
-    REQUIRE(reader.readHeaders().isSuccess());
-    REQUIRE(reader.getMethod().getValue() == bell::http::Method::PUT);
+    REQUIRE(reader.readHeaders());
+    REQUIRE(reader.getMethod() == bell::http::Method::PUT);
     REQUIRE(reader.getHeader("Authorization") == "Bearer token");
   }
 }

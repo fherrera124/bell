@@ -12,6 +12,12 @@
 #include <fmt/color.h>
 #include <fmt/core.h>
 
+namespace std {
+inline auto format_as(std::error_code err) {
+  return err.message();
+}
+}  // namespace std
+
 namespace bell {
 
 // List of available levels for the BELL_LOG macro

@@ -3,6 +3,7 @@
 // Standard includes
 #include <cstdint>
 
+// Own includes
 #include "bell/Result.h"
 
 namespace bell::net {
@@ -33,42 +34,42 @@ class Socket {
    *
    * @param blocking True to set the socket to blocking mode, false for non-blocking.
    */
-  virtual Result<> setBlocking(bool blocking) = 0;
+  virtual bell::Result<> setBlocking(bool blocking) = 0;
 
   /**
    * @brief Get the blocking mode of the socket.
    *
    * @return true if the socket is in blocking mode, false otherwise.
    */
-  virtual Result<bool> getBlocking() const = 0;
+  virtual bell::Result<bool> getBlocking() const = 0;
 
   /**
    * @brief Set the read timeout for socket operations.
    *
    * @param timeoutMs Timeout in milliseconds. A value of 0 indicates a non-blocking operation.
    */
-  virtual Result<> setReceiveTimeout(int timeoutMs) = 0;
+  virtual bell::Result<> setReceiveTimeout(int timeoutMs) = 0;
 
   /**
    * @brief Sets the send timeout for socket operations
    *
    * @param timeoutMs Timeout in milliseconds. A value of 0 indicates a non-blocking operation.
    */
-  virtual Result<> setSendTimeout(int timeoutMs) = 0;
+  virtual bell::Result<> setSendTimeout(int timeoutMs) = 0;
 
   /**
    * @brief Get the read timeout for socket operations.
    *
    * @return The read timeout in milliseconds. A value of 0 indicates a non-blocking operation.
    */
-  virtual Result<int> getReceiveTimeout() = 0;
+  virtual bell::Result<int> getReceiveTimeout() = 0;
 
   /**
    * @brief Get the send timeout for socket operations.
    *
    * @return The send timeout in milliseconds. A value of 0 indicates a non-blocking operation.
    */
-  virtual Result<int> getSendTimeout() = 0;
+  virtual bell::Result<int> getSendTimeout() = 0;
 
   /**
    * @brief Write data to the socket.
@@ -81,7 +82,7 @@ class Socket {
    * @param len The number of bytes to write from the buffer.
    * @return The number of bytes successfully written.
    */
-  virtual Result<size_t> write(const uint8_t* buf, size_t len) = 0;
+  virtual bell::Result<size_t> write(const uint8_t* buf, size_t len) = 0;
 
   /**
    * @brief Read data from the socket.
@@ -96,7 +97,7 @@ class Socket {
    * that the connection was closed, while a value less than len could indicate that
    * no more data is currently available.
    */
-  virtual Result<size_t> read(uint8_t* buf, size_t len) = 0;
+  virtual bell::Result<size_t> read(uint8_t* buf, size_t len) = 0;
 
   /**
    * @brief Check if the socket is open
