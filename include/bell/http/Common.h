@@ -6,6 +6,9 @@
 #include <utility>
 #include <vector>
 
+// Library includes
+#include "fmt/format.h"
+
 namespace bell::http {
 
 enum class Errc { Success = 0, InvalidURL, InvalidState, SocketNotOpen };
@@ -54,6 +57,20 @@ enum class Method { GET, POST, PUT, DELETE, HEAD, OPTIONS, PATCH, INVALID };
  * @return HTTPMethod The parsed HTTP method, or HTTPMethod::INVALID if the method is not recognized
  */
 Method parseMethod(std::string_view method);
+
+inline Header rangeHeader(std::optional<size_t> start,
+                          std::optional<size_t> end = std::nullopt) {
+  if (start.has_value() && end.has_value()) {
+    return {"Range", fmt::format("bytes={}-{}", start.value(), end.value())};
+  }
+  if (start.has_value()) {
+    return {"Range", fmt::format("bytes={}-", start.value())};
+  }
+  if (end.has_value()) {
+    return {"Range", fmt::format("bytes=-{}", end.value())};
+  }
+  return {"Range", "bytes=0-"};  // Default range if no start or end is provided
+}
 
 /// @brief Returns a string representation of the HTTP method
 std::string_view methodToString(Method method);

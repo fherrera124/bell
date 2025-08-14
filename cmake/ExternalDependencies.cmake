@@ -1,7 +1,10 @@
 # Option for disabling message outputs from external dependencies
 function(message)
-    if(NOT MESSAGE_QUIET)
-        _message(${ARGN})
+    if(NOT "${ARGV}" STREQUAL "")
+        # Check for the MESSAGE_QUIET flag
+        if(NOT MESSAGE_QUIET)
+            _message(${ARGV})
+        endif()
     endif()
 endfunction()
 

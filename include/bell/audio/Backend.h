@@ -126,9 +126,9 @@ class Backend {
    * @return A std::error_code if opening the stream fails.
    */
   virtual bell::Result<std::unique_ptr<Stream>> openStream(
-      const Device& device,
-      StreamType streamType, const AudioFormat& format, uint32_t bufferFrames,
-      AudioCallback callback, const std::any& backendSpecificOptions = {}) = 0;
+      const Device& device, StreamType streamType, const AudioFormat& format,
+      uint32_t bufferFrames, AudioCallback callback,
+      const std::any& backendSpecificOptions = {}) = 0;
 };
 
 Backend* getDefaultAudioBackend();
