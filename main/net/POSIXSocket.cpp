@@ -60,7 +60,7 @@ std::error_code POSIXSocket::lastError() const {
     return {sockErr, std::system_category()};
   }
 
-  return {0, std::system_category()};
+  return std::error_code();
 }
 
 bell::Result<size_t> POSIXSocket::read(uint8_t* buf, size_t len) {
