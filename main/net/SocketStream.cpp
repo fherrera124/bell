@@ -17,12 +17,12 @@ int SocketBuffer::sync() {
     auto bw = internalSocket->write(reinterpret_cast<uint8_t*>(pptr() - n), n);
     if (!bw) {
       // Set failbit and preserve the socket error
-      BELL_LOG(error, "SocketBuffer", "Write failed: {}", bw.errorMessage());
+      BELL_LOG(error, "SocketBuffer", "Write failed: {}", bw.error());
       setp(pptr() - n, obuf.data() + bufLen);
       pbump(n);
       return -1;  // This will make the stream set failbit
     }
-    n -= bw.getValue();
+    n -= *bw;
   }
   setp(obuf.data(), obuf.data() + bufLen);
   return 0;
@@ -32,14 +32,14 @@ SocketBuffer::int_type SocketBuffer::underflow() {
   auto br =
       internalSocket->read(reinterpret_cast<uint8_t*>(ibuf.data()), bufLen);
   if (!br) {
-    BELL_LOG(error, "SocketBuffer", "Read error: {}", br.errorMessage());
+    BELL_LOG(error, "SocketBuffer", "Read error: {}", br.error());
     setg(nullptr, nullptr, nullptr);
     return traits_type::eof();  // Stream sets failbit
   }
-  if (br.getValue() == 0) {
+  if (*br == 0) {
     return traits_type::eof();  // Stream sets eofbit (clean EOF)
   }
-  setg(ibuf.data(), ibuf.data(), ibuf.data() + br.getValue());
+  setg(ibuf.data(), ibuf.data(), ibuf.data() + *br);
   return traits_type::to_int_type(*ibuf.data());
 }
 
@@ -72,10 +72,10 @@ std::streamsize SocketBuffer::xsgetn(char_type* _s, std::streamsize _n) {
       return (_n - remain);
     }
 
-    if (br.getValue() == 0) {
+    if (*br == 0) {
       return (_n - remain);
     }
-    remain -= br.getValue();
+    remain -= *br;
   }
   return _n;
 }
@@ -92,11 +92,12 @@ std::streamsize SocketBuffer::xsputn(const char_type* s, std::streamsize n) {
   std::streamsize remain = n;
   const char_type* end = s + n;
   while (remain > bufLen) {
-    auto bw = internalSocket->write((uint8_t*)(end - remain), remain);
+    auto bw = internalSocket->write(
+        reinterpret_cast<const uint8_t*>(end - remain), remain);
     if (!bw) {
       return 0;  // Stream sets failbit
     }
-    remain -= bw.getValue();
+    remain -= *bw;
   }
   if (remain > 0) {
     traits_type::copy(pptr(), end - remain, remain);

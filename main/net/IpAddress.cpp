@@ -6,6 +6,9 @@
 #include <netinet/in.h>
 
 #include <fmt/format.h>
+#include <system_error>
+
+#include "bell/Result.h"
 
 using namespace bell::net;
 
@@ -40,7 +43,7 @@ IpAddress::IpAddress(const sockaddr* addr,
   }
 }
 
-std::string IpAddress::toString(bool includePort) const {
+bell::Result<std::string> IpAddress::toString(bool includePort) const {
   // Reserve enough space for largest (IPv6) address
   std::string result(INET6_ADDRSTRLEN, '\0');
 
@@ -62,7 +65,9 @@ std::string IpAddress::toString(bool includePort) const {
       }
     }
   } else {
-    throw std::runtime_error("Unknown address type");
+    // Unknown address type
+    return make_unexpected_errc<std::string>(
+        std::errc::address_family_not_supported);
   }
 
   return result;
@@ -73,31 +78,18 @@ IpAddress::Type IpAddress::getType() const {
 }
 
 const sockaddr* IpAddress::getSockAddrPtrConst() const {
-  if (addressType == Type::Unknown) {
-    throw std::runtime_error("Unknown address type");
-  }
   return reinterpret_cast<const sockaddr*>(&storage);
 }
 
 sockaddr* IpAddress::getSockAddrPtr() {
-  if (addressType == Type::Unknown) {
-    throw std::runtime_error("Unknown address type");
-  }
   return reinterpret_cast<sockaddr*>(&storage);
 }
 
 socklen_t IpAddress::getSockAddrLen() const {
-  if (addressType == Type::Unknown) {
-    throw std::runtime_error("Unknown address type");
-  }
   return addrLen;
 }
 
 void IpAddress::setPort(uint16_t port) {
-  if (addressType == Type::Unknown) {
-    throw std::runtime_error("Unknown address type");
-  }
-
   // In case port is 0, we set it to the default port for the address type
   uint16_t actualPort = port > 0 ? htons(port) : port;
 
@@ -188,7 +180,7 @@ bell::Result<IpAddress> IpAddress::resolveDomain(const std::string& hostname,
 
   int result = getaddrinfo(hostname.c_str(), nullptr, &hints, &res);
   if (result != 0) {
-    return Result<IpAddress>::fromError(result, std::system_category());
+    return tl::make_unexpected(std::error_code(result, std::system_category()));
   }
 
   // We'll use the first valid result

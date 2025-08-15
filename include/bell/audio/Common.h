@@ -1,8 +1,47 @@
 #pragma once
 
 #include <cstdint>
+#include <system_error>
 
 namespace bell::audio {
+
+/**
+ * @brief Error enumereation for various audio operations
+ */
+enum class Errc {
+  Success = 0,
+  NotEnoughBytes = 1,
+  CodecError = 2,
+  UnsupportedConfig = 3,
+  InvalidFormat = 4
+};
+
+namespace internal {
+struct audio_error_category : public std::error_category {
+  const char* name() const noexcept override { return "BellHTTP"; }
+  std::string message(int ev) const noexcept override {
+    switch (static_cast<Errc>(ev)) {
+      case Errc::Success:
+        return "Success";
+      case Errc::NotEnoughBytes:
+        return "Not enough bytes for operation";
+      case Errc::CodecError:
+        return "Unknown error during codec operation";
+      case Errc::InvalidFormat:
+        return "Invalid audio format";
+      case Errc::UnsupportedConfig:
+        return "Unsupported config";
+      default:
+        return "Unknown error";
+    }
+  }
+};
+}  // namespace internal
+
+// Plug in the error code category for std::error_code
+inline std::error_code make_error_code(const bell::audio::Errc& e) {
+  return {static_cast<int>(e), bell::audio::internal::audio_error_category()};
+};
 
 // Enum class for the bit width of audio samples.
 enum class BitWidth : uint8_t {
@@ -10,6 +49,7 @@ enum class BitWidth : uint8_t {
   BW_16 = 16,
   BW_24 = 24,
   BW_32 = 32,
+  BW_64 = 64,  // Not commonly used, but included for completeness
 };
 
 // Enum class for the sample rate of audio samples.
@@ -82,7 +122,13 @@ class Format {
   BitWidth bw = BitWidth::BW_16;
   SampleRate sr = SampleRate::SR_44100HZ;
 };
+
 }  // namespace bell::audio
+
+namespace std {
+template <>
+struct is_error_code_enum<bell::audio::Errc> : true_type {};
+}  // namespace std
 
 namespace bell {
 using AudioFormat = audio::Format;

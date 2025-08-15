@@ -7,7 +7,7 @@
 // bell includes
 #include "BiquadParameters.h"
 #include "TransformPipeline.h"
-#include "bell/audio/Types.h"
+#include "bell/audio/Common.h"
 
 namespace bell::dsp {
 class BiquadTransform : public Transform {

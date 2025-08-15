@@ -18,25 +18,26 @@ void publishCallbackShim(void** state,
 // Read callback for the MQTT lib
 ssize_t mqttPalRead(void* context, uint8_t* buf, size_t len) {
   auto* socket = static_cast<net::Socket*>(context);
+  auto res = socket->read(buf, len);
 
-  try {
-    return static_cast<ssize_t>(socket->read(buf, len).unwrap());
-  } catch (const std::exception& e) {
-    BELL_LOG(error, "mqtt_pal", "Failed to read from socket: {}", e.what());
+  if (!res) {
+    BELL_LOG(error, "mqtt_pal", "Failed to read from socket: {}", res.error());
     return -1;
   }
+
+  return static_cast<ssize_t>(*res);
 }
 
 // Write callback for the MQTT lib
 ssize_t mqttPalWrite(void* context, const uint8_t* buf, size_t len) {
   auto* socket = static_cast<net::Socket*>(context);
-
-  try {
-    return static_cast<ssize_t>(socket->write(buf, len).unwrap());
-  } catch (const std::exception& e) {
-    BELL_LOG(error, "mqtt_pal", "Failed to write to socket: {}", e.what());
+  auto res = socket->write(buf, len);
+  if (!res) {
+    BELL_LOG(error, "mqtt_pal", "Failed to write to socket: {}", res.error());
     return -1;
   }
+
+  return static_cast<ssize_t>(*res);
 }
 }  // namespace
 
@@ -56,11 +57,11 @@ void net::MQTTClient::connect(const std::string& host, uint16_t port,
   // Connect to the broker
   if (secure) {
     auto tlsSocket = std::make_unique<net::TLSSocket>();
-    tlsSocket->connect(host, port, timeoutMs);
+    (void)tlsSocket->connect(host, port, timeoutMs);
     socket = std::move(tlsSocket);
   } else {
     auto tcpSocket = std::make_unique<net::TCPSocket>();
-    tcpSocket->connect(host, port, timeoutMs);
+    (void)tcpSocket->connect(host, port, timeoutMs);
     socket = std::move(tcpSocket);
   }
 
@@ -69,7 +70,7 @@ void net::MQTTClient::connect(const std::string& host, uint16_t port,
   }
 
   // Make the socket non-blocking
-  socket->setBlocking(false);
+  (void)socket->setBlocking(false);
 
   // Pass pointer to this object to the publish callback
   client.publish_response_callback_state = this;

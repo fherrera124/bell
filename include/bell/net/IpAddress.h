@@ -7,7 +7,10 @@
 #include <optional>
 #include <string>
 
-// Bell includes
+// Library includes
+#include "tl/expected.hpp"
+
+// Own includes
 #include "bell/Result.h"
 
 namespace bell::net {
@@ -23,7 +26,7 @@ class IpAddress {
             std::optional<std::string> originalHost = std::nullopt);
 
   // Returns the address in a string format. For IPv4, this is the dotted decimal format. For IPv6, this is the colon-separated format.
-  std::string toString(bool includePort = true) const;
+  bell::Result<std::string> toString(bool includePort = true) const;
 
   // Returns the address type
   Type getType() const;
@@ -73,8 +76,9 @@ class IpAddress {
   /**
    * @brief Resolve the provided hostname to an IP address. In case the hostname is already an IP address, it is directly stored in the Address structure.
    */
-  static Result<IpAddress> resolveDomain(const std::string& hostname,
-                                         int sockType, int family = AF_UNSPEC);
+  static bell::Result<IpAddress> resolveDomain(const std::string& hostname,
+                                               int sockType,
+                                               int family = AF_UNSPEC);
 
  private:
   Type addressType = Type::Unknown;

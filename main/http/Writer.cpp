@@ -2,6 +2,7 @@
 
 #include <ios>
 #include <unordered_map>
+#include "bell/Result.h"
 
 using namespace bell;
 namespace {
@@ -36,7 +37,7 @@ std::optional<std::string> http::Writer::getStatusMessage() {
 
 bell::Result<> http::Writer::writeHeaders() {
   if (headersWritten) {
-    return std::errc::operation_not_permitted;
+    return make_unexpected_errc(std::errc::operation_not_permitted);
   }
 
   // Will fill in standard headers if they are not already set
@@ -46,14 +47,14 @@ bell::Result<> http::Writer::writeHeaders() {
     if (method && path) {
       *ostream << methodToString(*method) << " " << *path << " HTTP/1.1\r\n";
     } else {
-      return std::errc::invalid_argument;
+      return make_unexpected_errc(std::errc::invalid_argument);
     }
   } else {
     if (statusCode) {
       *ostream << "HTTP/1.1 " << *statusCode << " "
                << getStatusMessage().value() << "\r\n";
     } else {
-      return std::errc::invalid_argument;
+      return make_unexpected_errc(std::errc::invalid_argument);
     }
   }
 
@@ -67,7 +68,7 @@ bell::Result<> http::Writer::writeHeaders() {
 
   *ostream << "\r\n";  // End of headers
   if (!ostream->flush() || (ostream->fail() && !ostream->eof())) {
-    return std::errc::io_error;
+    return make_unexpected_errc(std::errc::io_error);
   }
 
   headersWritten = true;
@@ -105,7 +106,7 @@ void http::Writer::enforceStandardHeaders() {
 
 bell::Result<> http::Writer::setContentLength(size_t contentLength) {
   if (!isValid(writerDirection)) {
-    return std::errc::operation_not_supported;
+    return make_unexpected_errc(std::errc::operation_not_supported);
   }
 
   this->contentLength = contentLength;
@@ -118,7 +119,7 @@ bell::Result<> http::Writer::writeRequest(Method method,
                                           const Headers& headers,
                                           size_t expectedContentLength) {
   if (!isValid(Direction::Request)) {
-    return std::errc::operation_not_supported;
+    return make_unexpected_errc(std::errc::operation_not_supported);
   }
 
   // Assign the request parameters
@@ -146,7 +147,7 @@ bell::Result<> http::Writer::writeResponse(int statusCode,
                                            const Headers& headers,
                                            size_t expectedContentLength) {
   if (!isValid(Direction::Response)) {
-    return std::errc::operation_not_supported;
+    return make_unexpected_errc(std::errc::operation_not_supported);
   }
   // Assign the request parameters
   auto res = setStatusCode(statusCode);
@@ -197,7 +198,7 @@ bool http::Writer::isValid(Direction expectedDirection) {
 
 bell::Result<> http::Writer::setPath(const std::string& path) {
   if (!isValid(Direction::Request)) {
-    return std::errc::operation_not_supported;
+    return make_unexpected_errc(std::errc::operation_not_supported);
   }
 
   this->path = path;
@@ -207,7 +208,7 @@ bell::Result<> http::Writer::setPath(const std::string& path) {
 
 bell::Result<> http::Writer::setMethod(Method method) {
   if (!isValid(Direction::Request)) {
-    return std::errc::operation_not_supported;
+    return make_unexpected_errc(std::errc::operation_not_supported);
   }
 
   this->method = method;
@@ -216,7 +217,7 @@ bell::Result<> http::Writer::setMethod(Method method) {
 
 bell::Result<> http::Writer::setStatusCode(int statusCode) {
   if (!isValid(Direction::Response)) {
-    return std::errc::operation_not_supported;
+    return make_unexpected_errc(std::errc::operation_not_supported);
   }
 
   this->statusCode = statusCode;
@@ -230,18 +231,18 @@ std::ostream* http::Writer::getStream() const {
 
 bell::Result<> http::Writer::writeBodyRaw(const char* bytes, size_t bytesLen) {
   if (!headersWritten) {
-    return std::errc::operation_not_permitted;
+    return make_unexpected_errc(std::errc::operation_not_permitted);
   }
 
   if (contentLengthWritten + bytesLen > contentLength) {
-    return std::errc::io_error;
+    return make_unexpected_errc(std::errc::io_error);
   }
 
   ostream->write(bytes, static_cast<std::streamsize>(bytesLen));
   contentLengthWritten += bytesLen;
 
   if (!ostream->flush() || (ostream->fail() && !ostream->eof())) {
-    return std::errc::io_error;
+    return make_unexpected_errc(std::errc::io_error);
   }
 
   return {};

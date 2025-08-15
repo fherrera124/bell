@@ -80,7 +80,7 @@ class TLSSocket : public Socket {
 
   /**
    * @brief Return the last error that occurred on the socket.
-   * 
+   *
    * @return std::error_code error code
    */
   std::error_code lastError() const;
@@ -94,17 +94,18 @@ class TLSSocket : public Socket {
    * @param port The port number to connect to on the specified host.
    * @param timeout The maximum time to wait for the connection to be established, in milliseconds. This parameter is ignored, if the socket is set to a blocking mode.
    */
-  Result<> connect(const std::string& host, uint16_t port, int timeoutMs = 0);
+  bell::Result<> connect(const std::string& host, uint16_t port,
+                         int timeoutMs = 0);
 
   // Socket interface overrides
-  Result<> setSendTimeout(int timeoutMs) override;
-  Result<> setReceiveTimeout(int timeoutMs) override;
-  Result<int> getSendTimeout() override;
-  Result<int> getReceiveTimeout() override;
-  Result<size_t> read(uint8_t* buf, size_t len) override;
-  Result<size_t> write(const uint8_t* buf, size_t len) override;
-  Result<> setBlocking(bool blocking) override;
-  Result<bool> getBlocking() const override;
+  bell::Result<> setSendTimeout(int timeoutMs) override;
+  bell::Result<> setReceiveTimeout(int timeoutMs) override;
+  bell::Result<int> getSendTimeout() override;
+  bell::Result<int> getReceiveTimeout() override;
+  bell::Result<size_t> read(uint8_t* buf, size_t len) override;
+  bell::Result<size_t> write(const uint8_t* buf, size_t len) override;
+  bell::Result<> setBlocking(bool blocking) override;
+  bell::Result<bool> getBlocking() const override;
   bool isValid() const override;
   void close() override;
   int getFd() const override;

@@ -50,21 +50,22 @@ class TCPSocket : public POSIXSocket {
    * @param port The port number to connect to on the specified host.
    * @param timeout The maximum time to wait for the connection to be established, in milliseconds
    */
-  Result<> connect(const std::string& host, uint16_t port, int timeoutMs = 0);
+  bell::Result<> connect(const std::string& host, uint16_t port,
+                         int timeoutMs = 0);
 
   /**
    * @brief Listen for incoming connections on the socket.
    *
    * @param backlog The maximum number of pending connections to allow.
    */
-  Result<> listen(int backlog = 5);
+  bell::Result<> listen(int backlog = 5);
 
   /**
    * @brief Accept an incoming connection on the socket.
    *
    * @return Accepted socket, or an error if the accept operation fails.
    */
-  Result<TCPSocket> accept();
+  bell::Result<TCPSocket> accept();
 
   // POSIXSocket interface override
   int getSockType() override { return SOCK_STREAM; }

@@ -6,17 +6,17 @@
 #include <utility>
 #include <vector>
 
+// Library includes
+#include <dns_sd.h>
+
 // Bell includes
-#include "bell/Logger.h"
 #include "bell/Result.h"
 #include "bell/mdns/Error.h"
 #include "bell/net/IpAddress.h"
 #include "bell/net/SocketPollListener.h"
 #include "bell/net/UDPSocket.h"
 #include "bell/utils/Task.h"
-
-// DNS-SD includes
-#include "dns_sd.h"
+#include "tl/expected.hpp"
 
 using namespace bell::mdns;
 
@@ -119,13 +119,13 @@ class BonjourBrowser : public Browser {
       auto res = DNSServiceCreateConnection(&ref);
       auto err = translateDnsSdError(res);
       if (err) {
-        return err;
+        return tl::make_unexpected(err);
       }
 
       // Get a socket file descriptor for the browse socket
       dnssd_sock_t sock = DNSServiceRefSockFD(ref);
       if (sock == -1) {
-        return std::errc::bad_file_descriptor;
+        return bell::make_unexpected_errc(std::errc::bad_file_descriptor);
       }
 
       // Wrap the socket in a UDP socket handle, so we can use it with poll
@@ -156,7 +156,7 @@ class BonjourBrowser : public Browser {
                                 browseReplyShim, this);
     auto err = translateDnsSdError(res);
     if (err) {
-      return err;
+      return tl::make_unexpected(err);
     }
 
     return {};
@@ -203,7 +203,7 @@ class BonjourBrowser : public Browser {
             DiscoveryEvent event{
                 .type = EventType::ResolveFailure,
                 .service = service,
-                .error = res.getError(),
+                .error = res.error(),
             };
             onEvent(event);
           }
@@ -281,7 +281,7 @@ class BonjourBrowser : public Browser {
             DiscoveryEvent event{
                 .type = EventType::AddressResolveFailure,
                 .service = *serviceItr,
-                .error = res.getError(),
+                .error = res.error(),
             };
             onEvent(event);
           }
@@ -328,7 +328,7 @@ class BonjourBrowser : public Browser {
 
     auto err = translateDnsSdError(res);
     if (err) {
-      return err;
+      return tl::make_unexpected(err);
     }
 
     // Add the resolve context to the cached list
@@ -411,7 +411,7 @@ class BonjourBrowser : public Browser {
 
     auto err = translateDnsSdError(res);
     if (err) {
-      return err;
+      return tl::make_unexpected(err);
     }
 
     // Add the resolve context to the cached list
@@ -508,13 +508,13 @@ class BonjourAdvertiser : public Advertiser {
     auto err = translateDnsSdError(res);
 
     if (err) {
-      return err;
+      return tl::make_unexpected(err);
     }
 
     // Get a socket file descriptor for the browse socket
     dnssd_sock_t sock = DNSServiceRefSockFD(ref);
     if (sock == -1) {
-      return std::errc::bad_file_descriptor;
+      return bell::make_unexpected_errc(std::errc::bad_file_descriptor);
     }
 
     // Wrap the socket in a UDP socket handle, so we can use it with poll
@@ -567,7 +567,7 @@ class BonjourManager : public Manager, public bell::Task {
                         autoResolveService, autoResolveAddresses, resolveIPv6);
     if (!res) {
       // Return an error code indicating service discovery failure
-      return make_error_code(MdnsErrc::service_discovery_failed);
+      return tl::make_unexpected(MdnsErrc::service_discovery_failed);
     }
 
     return {std::move(browser)};
@@ -586,7 +586,7 @@ class BonjourManager : public Manager, public bell::Task {
                               serviceHost, port, txtRecords, interfaceIndex);
 
     if (!res) {
-      return res.getError();
+      return tl::make_unexpected(res.error());
     }
 
     return advertiser;

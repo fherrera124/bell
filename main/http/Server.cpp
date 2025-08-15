@@ -7,6 +7,7 @@
 #include "bell/net/TCPSocket.h"
 #include "bell/utils/Task.h"
 #include "bell/utils/Utils.h"
+#include "tl/expected.hpp"
 
 #include <sys/select.h>
 #include <unistd.h>
@@ -18,7 +19,7 @@ http::Server::Server(int maxConnections)
       maxConnections(maxConnections) {
   notFoundHandler = [](const auto& /*requestReader*/,
                        const auto& responseWriter, const auto& /*params*/) {
-    responseWriter->writeResponseWithBody(404, {}, "Not found");
+    (void)responseWriter->writeResponseWithBody(404, {}, "Not found");
   };
 }
 
@@ -33,19 +34,19 @@ bell::Result<> http::Server::listen(int port) {
   // Try to bind to the specified port
   auto listenRes = listenSocket.bind("", port);
   if (!listenRes) {
-    return listenRes.getError();
+    return tl::make_unexpected(listenRes.error());
   }
 
   // Set the socket to non-blocking mode
   auto res = listenSocket.setBlocking(false);
   if (!res) {
-    return res.getError();
+    return tl::make_unexpected(res.error());
   }
 
   // Start listening for incoming connections
   res = listenSocket.listen(maxConnections);
   if (!res) {
-    return res.getError();
+    return tl::make_unexpected(res.error());
   }
 
   // Prepare master fd set for select
@@ -54,7 +55,7 @@ bell::Result<> http::Server::listen(int port) {
   maxFd = listenSocket.getFd();
 
   startTask();  // Will begin the task loop
-  BELL_LOG(info, LOG_TAG, "Server listening on port {}", listenRes.getValue());
+  BELL_LOG(info, LOG_TAG, "Server listening on port {}", *listenRes);
 
   return {};
 }
@@ -65,22 +66,27 @@ void http::Server::registerCustom404(const RequestHandler& handler) {
 
 void http::Server::acceptConnection() {
   // Accept the connection
-  auto res = listenSocket.accept();
+  auto acceptedSock = listenSocket.accept();
 
-  if (res) {
-    auto sock = res.takeValue();
-    sock.setBlocking(false);
+  if (acceptedSock) {
 
-    int clientFd = sock.getFd();
+    auto setBlockingRes = acceptedSock->setBlocking(false);
+    if (!setBlockingRes) {
+      BELL_LOG(error, LOG_TAG, "Error setBlocking on accepted socket: {}",
+               setBlockingRes.error());
+      return;
+    }
+
+    int clientFd = acceptedSock->getFd();
     FD_SET(clientFd, &masterFdSet);
     BELL_LOG(debug, LOG_TAG, "Accepted connection");
     connections.push_back({
-        std::make_shared<net::TCPSocket>(std::move(sock)),
+        std::make_shared<net::TCPSocket>(std::move(*acceptedSock)),
         false,
     });
   } else {
     BELL_LOG(error, LOG_TAG, "Error accepting connection: {}",
-             res.getError().message());
+             acceptedSock.error());
   }
 }
 
@@ -118,8 +124,7 @@ void http::Server::readFromClient(const Connection& connection) {
   auto readerRes = reader->readHeaders();
 
   if (!readerRes) {
-    BELL_LOG(error, LOG_TAG, "Error reading headers: {}",
-             readerRes.getError().message());
+    BELL_LOG(error, LOG_TAG, "Error reading headers: {}", readerRes.error());
     closeConnection(connection.socket->getFd());
     return;
   }
@@ -129,8 +134,7 @@ void http::Server::readFromClient(const Connection& connection) {
   writer->setHeader("Connection", "close");
 
   // Find the handler for the request
-  auto handler =
-      router.find(reader->getMethod().unwrap(), reader->getPath().unwrap());
+  auto handler = router.find(*reader->getMethod(), *reader->getPath());
 
   if (!handler) {
     notFoundHandler(reader, writer, {});
@@ -140,7 +144,7 @@ void http::Server::readFromClient(const Connection& connection) {
     } catch (const std::exception& e) {
       BELL_LOG(error, LOG_TAG, "Error occured in the request handler: {}",
                e.what());
-      writer->writeResponseWithBody(500, {}, "Internal server error");
+      (void)writer->writeResponseWithBody(500, {}, "Internal server error");
     }
   }
 
