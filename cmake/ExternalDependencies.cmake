@@ -1,7 +1,10 @@
 # Option for disabling message outputs from external dependencies
 function(message)
-    if(NOT MESSAGE_QUIET)
-        _message(${ARGN})
+    if(NOT "${ARGV}" STREQUAL "")
+        # Check for the MESSAGE_QUIET flag
+        if(NOT MESSAGE_QUIET)
+            _message(${ARGV})
+        endif()
     endif()
 endfunction()
 
@@ -94,6 +97,12 @@ endif()
 if(NOT BELL_DISABLE_CODECS AND BELL_CODEC_AAC)
     add_subdirectory(external/fdk-aac)
     list(APPEND BELL_LIBS fdk-aac)
+endif()
+
+# Audio codec - Vorbis, tremor decoder
+if(NOT BELL_DISABLE_CODECS AND BELL_CODEC_TREMOR)
+    add_subdirectory(external/tremor)
+    list(APPEND BELL_LIBS tremor)
 endif()
 
 # Audio backends

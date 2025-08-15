@@ -58,7 +58,6 @@ bell::Result<> http::Connection::connect(const std::string& url, int timeoutMs,
 
 tl::expected<http::Writer, std::error_code> http::Connection::sendRequest(
     Method method, const Headers& extraHeaders, size_t expectedContentLength) {
-
   if (requestSent) {
     return tl::make_unexpected(http::Errc::InvalidState);
   }
@@ -68,7 +67,7 @@ tl::expected<http::Writer, std::error_code> http::Connection::sendRequest(
   }
 
   // Create the writer
-  http::Writer writer(http::Direction::Request, socketStream);
+  auto writer = http::Writer(http::Direction::Request, socketStream);
 
   // Set the host header
   writer.setHeader("Host", parsedUrl.host.value());
@@ -91,7 +90,8 @@ tl::expected<http::Writer, std::error_code> http::Connection::sendRequest(
   return writer;
 }
 
-bell::Result<http::Reader> http::Connection::getResponse() {
+bell::Result<http::Reader> http::Connection::getResponse(
+    std::vector<char>* externalBuffer) {
   if (!requestSent) {
     return tl::make_unexpected(http::Errc::InvalidState);
   }
@@ -100,12 +100,19 @@ bell::Result<http::Reader> http::Connection::getResponse() {
     return tl::make_unexpected(http::Errc::SocketNotOpen);
   }
 
-  http::Reader reader = http::Reader(http::Direction::Response, socketStream);
+  auto reader = externalBuffer
+                    ? http::Reader(http::Direction::Response, socketStream.get(),
+                                   externalBuffer)
+                    : http::Reader(http::Direction::Response, socketStream);
+
   // Read the response headers
   auto res = reader.readHeaders();
   if (!res) {
     return tl::make_unexpected(res.error());
   }
+
+  // Reset the request state
+  requestSent = false;
 
   return reader;
 }
