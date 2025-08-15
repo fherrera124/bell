@@ -118,6 +118,7 @@ void utils::DigestCrypto::getHmac(const uint8_t* key, size_t keyLength,
                                   const uint8_t* message, size_t messageLength,
                                   uint8_t* output) {
   hmacInitialized = true;
+  reset();
   hmac(key, keyLength);
   hmacUpdate(message, messageLength);
   hmacFinish(output);

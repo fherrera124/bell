@@ -56,10 +56,11 @@ class Connection {
 
   /**
    * @brief Returns the response object. This method should be called after sendRequest()
+   * @param externalBuffer Optional pointer to an external buffer to use for reading the response. If not provided, an internal buffer will be used. Passing the external buffer will make the ownership of reader dependent on the Connection's and buffer's lifecycle.
    *
    * @return std::unique_ptr<Reader> Pointer to the response object
    */
-  bell::Result<Reader> getResponse();
+  bell::Result<Reader> getResponse(std::vector<char>* externalBuffer = nullptr);
 
   // Other connection-related methods
  private:

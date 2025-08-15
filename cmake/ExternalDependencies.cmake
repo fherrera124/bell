@@ -99,6 +99,12 @@ if(NOT BELL_DISABLE_CODECS AND BELL_CODEC_AAC)
     list(APPEND BELL_LIBS fdk-aac)
 endif()
 
+# Audio codec - Vorbis, tremor decoder
+if(NOT BELL_DISABLE_CODECS AND BELL_CODEC_TREMOR)
+    add_subdirectory(external/tremor)
+    list(APPEND BELL_LIBS tremor)
+endif()
+
 # Audio backends
 if(BELL_BACKEND_PORTAUDIO)
     find_package(Portaudio REQUIRED)
