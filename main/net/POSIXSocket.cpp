@@ -191,7 +191,7 @@ bell::Result<IpAddress> POSIXSocket::getPeerName() const {
     return make_unexpected_errc<IpAddress>(std::errc::bad_file_descriptor);
   }
 
-  struct sockaddr addr {};
+  struct sockaddr addr{};
   socklen_t addrLen = sizeof(addr);
 
   if (getpeername(getFd(), &addr, &addrLen) == -1) {
@@ -226,7 +226,7 @@ bell::Result<> POSIXSocket::setSendTimeout(int timeoutMs) {
 }
 
 bell::Result<int> POSIXSocket::getReceiveTimeout() {
-  struct timeval timeVal {};
+  struct timeval timeVal{};
 
   return getOptionImpl(SOL_SOCKET, SO_RCVTIMEO, &timeVal, sizeof(timeVal))
       .transform([&timeVal]() {
@@ -235,7 +235,7 @@ bell::Result<int> POSIXSocket::getReceiveTimeout() {
 }
 
 bell::Result<int> POSIXSocket::getSendTimeout() {
-  struct timeval timeVal {};
+  struct timeval timeVal{};
   return getOptionImpl(SOL_SOCKET, SO_SNDTIMEO, &timeVal, sizeof(timeVal))
       .transform([&timeVal]() {
         return static_cast<int>(utils::timevalToMilliseconds(timeVal));
