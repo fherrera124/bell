@@ -1,8 +1,11 @@
 #include "bell/http/Client.h"
 #include "bell/Result.h"
+#include "bell/http/Common.h"
 #include "bell/http/Writer.h"
 #include "bell/net/SocketStream.h"
 #include "bell/net/TLSSocket.h"
+#include "bell/net/URIParser.h"
+#include "tl/expected.hpp"
 
 using namespace bell::http;
 
@@ -58,7 +61,9 @@ bell::Result<Response> DefaultTransport::execute(const Request& req) {
           using T = std::decay_t<decltype(bodyContent)>;
 
           // Case 1: The body is a pre-buffered vector of bytes
-          if constexpr (std::is_same_v<T, std::vector<std::byte>>) {
+          if constexpr (std::is_same_v<T, std::vector<std::byte>> ||
+                        std::is_same_v<T, std::string_view> ||
+                        std::is_same_v<T, tcb::span<std::byte>>) {
             if (!bodyContent.empty()) {
               outStream.write(reinterpret_cast<const char*>(bodyContent.data()),
                               bodyContent.size());
@@ -103,6 +108,15 @@ bell::Result<Response> DefaultTransport::execute(const Request& req) {
   return {std::move(reader)};
 }
 
+bell::Result<Request> Request::create(http::Method method,
+                                      const std::string& url) {
+  auto parsedUrl = bell::net::parseURI(url);
+  if (!parsedUrl) {
+    return tl::make_unexpected(http::Errc::InvalidURL);
+  }
+  return Request({method, *parsedUrl});
+}
+
 Response::Response(http::Reader responseReader)
     : bodyReader(std::move(responseReader)) {
   // Extract status code and message from the reader
@@ -133,8 +147,11 @@ bell::Result<Response> Client::rawRequest(Request& req) {
       [&req](auto&& bodyContent) {
         using T = std::decay_t<decltype(bodyContent)>;
 
-        if constexpr (std::is_same_v<T, std::vector<std::byte>>) {
+        if constexpr (std::is_same_v<T, std::vector<std::byte>> ||
+                      std::is_same_v<T, std::string_view> ||
+                      std::is_same_v<T, tcb::span<std::byte>>) {
           req.contentLength = bodyContent.size();
+
         } else if constexpr (std::is_same_v<T, std::monostate>) {
           // No body, no content length
           req.contentLength = 0;

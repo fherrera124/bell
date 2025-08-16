@@ -177,8 +177,8 @@ std::string_view http::Reader::getHeader(const std::string& headerName) const {
 http::Headers http::Reader::getAllHeaders() const {
   Headers headers{};
   for (const auto& header : phrHeaders) {
-    headers.emplace_back(std::string(header.name, header.name_len),
-                         std::string(header.value, header.value_len));
+    headers.insert({std::string(header.name, header.name_len),
+                    std::string(header.value, header.value_len)});
   }
   return headers;
 }

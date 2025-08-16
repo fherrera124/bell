@@ -1,9 +1,9 @@
 #pragma once
 
 #include <istream>
+#include <map>
 #include <memory>
 #include <optional>
-#include <unordered_map>
 #include <variant>
 #include <vector>
 
@@ -11,6 +11,7 @@
 #include "bell/http/Common.h"
 #include "bell/http/Reader.h"
 #include "bell/net/URIParser.h"
+#include "tcb/span.hpp"
 
 // Go-lang inspired http client
 namespace bell::http {
@@ -21,7 +22,8 @@ namespace bell::http {
  * It can be empty (std::monostate), a pre-filled byte vector, or a stream for large bodies.
  */
 using RequestBody =
-    std::variant<std::monostate, std::vector<std::byte>, std::istream*>;
+    std::variant<std::monostate, std::vector<std::byte>, tcb::span<std::byte>,
+                 std::string_view, std::istream*>;
 
 /**
  * @brief Represents an HTTP request.
@@ -31,6 +33,7 @@ using RequestBody =
  */
 class Request {
  public:
+  Request() = default;
   ~Request() = default;
 
   /**
@@ -47,7 +50,7 @@ class Request {
   /// The parsed URI for the request.
   bell::net::URI uri;
   /// A map of HTTP headers.
-  std::unordered_map<std::string, std::string> headers;
+  Headers headers;
 
   /// The request body, which can be empty, a byte vector, or a stream.
   RequestBody body;
@@ -56,7 +59,7 @@ class Request {
   std::optional<size_t> contentLength;
 
   /// Timeout for the entire HTTP operation in milliseconds.
-  std::optional<int> operationTimeoutMs{};
+  std::optional<int> operationTimeoutMs;
 
  private:
   /**
@@ -64,7 +67,7 @@ class Request {
    * @param method The HTTP method.
    * @param parsedUrl A successfully parsed URI object.
    */
-  Request(http::Method method, bell::net::URI&& parsedUrl)
+  Request(http::Method method, bell::net::URI parsedUrl)
       : method(method), uri(std::move(parsedUrl)) {}
 };
 
@@ -93,9 +96,6 @@ class Response {
   Response(http::Reader responseReader);
   ~Response() = default;
 
-  Response(const Response&) = delete;
-  Response& operator=(const Response&) = delete;
-
   /**
    * @brief Reads the entire response body as a string.
    * @return A Result containing a string_view of the body on success.
@@ -113,6 +113,12 @@ class Response {
    * @return A Result containing a const char* pointer to the data on success.
    */
   bell::Result<const char*> bytesPtr();
+
+  /**
+   * @brief Gets the length of the response body.
+   * @return A Result containing the length of the body on success.
+   */
+  bell::Result<size_t> bytesLength();
 
   /**
    * @brief Gets the underlying stream for reading the response body.
@@ -220,3 +226,10 @@ class Client {
   std::unique_ptr<Transport> transport;
 };
 }  // namespace bell::http
+
+namespace bell {
+using HTTPClient = http::Client;
+using HTTPResponse = http::Response;
+using HTTPRequest = http::Request;
+using HTTPTransport = http::Transport;
+}  // namespace bell

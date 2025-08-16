@@ -1,5 +1,8 @@
 # Enable testing
 if(NOT BELL_DISABLE_TESTS)
+    # Trompeloeil for mocking
+    add_subdirectory(external/trompeloeil)
+    # Doctest for unit testing
     add_subdirectory(external/doctest)
     enable_testing()
     add_subdirectory(test)

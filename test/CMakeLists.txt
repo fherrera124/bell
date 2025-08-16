@@ -19,6 +19,7 @@ add_executable(bell-test
   TaskTest.cpp
   IpAddressTest.cpp
   RadixRouterTest.cpp
+  HTTPClientTest.cpp
 )
 
 if(NOT BELL_DISABLE_MDNS)
@@ -30,7 +31,7 @@ endif()
 target_compile_options(bell-test PRIVATE -Wall -Wextra -Werror)
 
 # Link the doctest library to the test executable
-target_link_libraries(bell-test PRIVATE bell doctest::doctest)
+target_link_libraries(bell-test PRIVATE bell doctest::doctest trompeloeil::trompeloeil)
 
 # Discover and register tests using doctest's module
 doctest_discover_tests(bell-test)

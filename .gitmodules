@@ -16,3 +16,6 @@
 [submodule "external/doctest"]
 	path = external/doctest
 	url = git@github.com:doctest/doctest.git
+[submodule "external/trompeloeil"]
+	path = external/trompeloeil
+	url = git@github.com:rollbear/trompeloeil.git

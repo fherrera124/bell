@@ -1,11 +1,11 @@
 #pragma once
 
 #include <fmt/format.h>
+#include <map>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <system_error>
-#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -41,8 +41,20 @@ inline std::error_code make_error_code(const bell::http::Errc& e) {
   return {static_cast<int>(e), internal::http_error_category()};
 };
 
+// Used for case-insensitive map operations on headers
+struct CaseInsensitiveCompare {
+  bool operator()(const std::string& s1, const std::string& s2) const {
+    // Use a lambda for character-by-character case-insensitive comparison
+    auto nocaseCharCompare = [](unsigned char c1, unsigned char c2) {
+      return std::tolower(c1) < std::tolower(c2);
+    };
+    return std::lexicographical_compare(s1.begin(), s1.end(), s2.begin(),
+                                        s2.end(), nocaseCharCompare);
+  }
+};
+
 // Type definition for a list of HTTP headers
-using Headers = std::unordered_map<std::string, std::string>;
+using Headers = std::map<std::string, std::string, CaseInsensitiveCompare>;
 
 // Used to differentiate between HTTP Requests and Responses, passed as a parameter for the Reader and Writer constructors
 enum class Direction { Request, Response, Invalid };

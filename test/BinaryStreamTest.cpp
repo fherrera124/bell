@@ -1,5 +1,6 @@
 #include <doctest/doctest.h>
 #include <sstream>  // for std::ostringstream
+#include <vector>
 
 #include "bell/io/BinaryStream.h"
 #include "bell/io/MemoryStream.h"  // for bell::IMemoryStream
