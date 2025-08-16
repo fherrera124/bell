@@ -1,4 +1,4 @@
-#include <catch2/catch_test_macros.hpp>
+#include <doctest/doctest.h>
 
 #include <unistd.h>
 #include <atomic>
@@ -53,7 +53,7 @@ void runEchoServer(std::shared_ptr<bell::net::TCPSocket> serverSocket) {
 }
 }  // namespace
 
-TEST_CASE("bell::io::Socket and derieved classes tests", "[bell::io::Socket]") {
+TEST_CASE("bell::io::Socket and derieved classes tests") {
   int echoServerPort = 7542;
   auto echoServerSocket = std::make_shared<bell::net::TCPSocket>();
 
@@ -75,12 +75,12 @@ TEST_CASE("bell::io::Socket and derieved classes tests", "[bell::io::Socket]") {
   // Test the TCP client for basic operations
   auto clientSocket = std::make_unique<bell::net::TCPSocket>();
 
-  SECTION("Connect to echo server") {
+  SUBCASE("Connect to echo server") {
     REQUIRE(clientSocket->connect("127.0.0.1", echoServerPort, 2000).has_value());
     REQUIRE(clientSocket->isValid());
   }
 
-  SECTION("Write to and read from echo server") {
+  SUBCASE("Write to and read from echo server") {
     REQUIRE(clientSocket->connect("127.0.0.1", echoServerPort, 2000));
     std::string message = "Hello, Echo Server!";
     auto bytesWritten = clientSocket->write(
@@ -98,14 +98,14 @@ TEST_CASE("bell::io::Socket and derieved classes tests", "[bell::io::Socket]") {
     REQUIRE(readBuffer.substr(0, *bytesRead) == message);
   }
 
-  SECTION("Connect timeout handling") {
+  SUBCASE("Connect timeout handling") {
     // Test if the client handles connection timeouts correctly
     REQUIRE(clientSocket->setBlocking(false));
     REQUIRE_FALSE(clientSocket->connect("10.255.255.1", echoServerPort,
                                         500));  // Impossible address for demo
   }
 
-  SECTION("Other basic operations") {
+  SUBCASE("Other basic operations") {
     // Example of closing the socket
     REQUIRE(clientSocket->connect("127.0.0.1", echoServerPort, 2000));
     REQUIRE(clientSocket->isValid());

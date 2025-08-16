@@ -15,15 +15,6 @@ class DataStream : public io::DataStream {
 
   ~DataStream() override = default;
 
-  /**
-   * @brief Opens a HTTP connection to the specified URL with the given method and headers.
-   */
-  bell::Result<> open(http::Method method, const std::string& url,
-                      const Headers& headers = {},
-                      const std::byte* body = nullptr, size_t length = 0,
-                      int timeoutMs = defaultHTTPClientTimeout,
-                      bool secure = true);
-
   bool isOpen() const;
   bool isSeekable() const override;
   bool isInfinite() const override;

@@ -1,6 +1,6 @@
 # Enable testing
 if(NOT BELL_DISABLE_TESTS)
-    add_subdirectory(external/catch2)
+    add_subdirectory(external/doctest)
     enable_testing()
     add_subdirectory(test)
 endif()

@@ -1,10 +1,10 @@
-#include <unistd.h>
-#include <catch2/catch_test_macros.hpp>
+#include <doctest/doctest.h>
 
+#include <unistd.h>
 #include "bell/net/IpAddress.h"
 
-TEST_CASE("bell::net::IpAddress tests", "[bell::net::IpAddress]") {
-  SECTION("resolveDomain properly resolves domains") {
+TEST_CASE("bell::net::IpAddress tests") {
+  SUBCASE("resolveDomain properly resolves domains") {
     auto result = bell::net::IpAddress::resolveDomain("localhost", SOCK_STREAM);
 
     // Localhost should resolve to either IPv4 or IPv6
@@ -27,7 +27,7 @@ TEST_CASE("bell::net::IpAddress tests", "[bell::net::IpAddress]") {
     REQUIRE(!result);
   }
 
-  SECTION("resolveDomain properly copies IP addresses") {
+  SUBCASE("resolveDomain properly copies IP addresses") {
     auto result = bell::net::IpAddress::resolveDomain("127.0.0.1", SOCK_STREAM);
 
     REQUIRE(result.has_value());

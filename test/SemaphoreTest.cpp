@@ -1,20 +1,19 @@
+#include <doctest/doctest.h>
 #include <unistd.h>
-#include <catch2/catch_test_macros.hpp>
 
 #include <chrono>
 #include <thread>
 
 #include "bell/utils/Semaphore.h"
 
-TEST_CASE("bell::utils::Semaphore basic functionality",
-          "[bell::utils::Semaphore]") {
+TEST_CASE("bell::utils::Semaphore basic functionality") {
   bell::utils::Semaphore sem(1);
 
-  SECTION("Takes without blocking when semaphore is available") {
+  SUBCASE("Takes without blocking when semaphore is available") {
     REQUIRE_NOTHROW(sem.take());
   }
 
-  SECTION("blocks when not available") {
+  SUBCASE("blocks when not available") {
     sem.take();
 
     // Start a thread that tries to take the semaphore without waiting

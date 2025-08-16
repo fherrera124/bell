@@ -1,4 +1,4 @@
-#include <catch2/catch_test_macros.hpp>
+#include <doctest/doctest.h>
 
 #include <iostream>
 #include <sstream>
@@ -7,8 +7,8 @@
 #include "bell/http/Common.h"
 #include "bell/http/Writer.h"
 
-TEST_CASE("bell::http::Writer tests", "[bell::http::Writer]") {
-  SECTION("Writes a simple GET request") {
+TEST_CASE("bell::http::Writer tests") {
+  SUBCASE("Writes a simple GET request") {
     std::stringstream ss;
     bell::http::Writer writer(bell::http::Direction::Request, &ss);
 
@@ -33,7 +33,7 @@ TEST_CASE("bell::http::Writer tests", "[bell::http::Writer]") {
     REQUIRE(!writer.writeBodyStringView("Hello, world!"));
   }
 
-  SECTION("Writes a simple POST request") {
+  SUBCASE("Writes a simple POST request") {
     std::stringstream ss;
     bell::http::Writer writer(bell::http::Direction::Request, &ss);
 
@@ -52,7 +52,7 @@ TEST_CASE("bell::http::Writer tests", "[bell::http::Writer]") {
     REQUIRE(ss.str() == expected);
   }
 
-  SECTION("Writes a POST request with a long header") {
+  SUBCASE("Writes a POST request with a long header") {
     std::stringstream ss;
     bell::http::Writer writer(bell::http::Direction::Request, &ss);
 
@@ -84,7 +84,7 @@ TEST_CASE("bell::http::Writer tests", "[bell::http::Writer]") {
     REQUIRE(ss.str() == expected);
   }
 
-  SECTION("Writes a simple GET response") {
+  SUBCASE("Writes a simple GET response") {
     std::stringstream ss;
     bell::http::Writer writer(bell::http::Direction::Response, &ss);
 
@@ -107,7 +107,7 @@ TEST_CASE("bell::http::Writer tests", "[bell::http::Writer]") {
     REQUIRE(!writer.writeBodyStringView("Hello, world!"));
   }
 
-  SECTION("Writes a simple POST response") {
+  SUBCASE("Writes a simple POST response") {
     std::stringstream ss;
     bell::http::Writer writer(bell::http::Direction::Response, &ss);
 

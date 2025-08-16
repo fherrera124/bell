@@ -72,6 +72,12 @@ class Reader {
   bell::Result<int> getStatusCode() const;
 
   /**
+   * @brief Returns the status message of the response
+   * @remark Only valid for response readers
+   */
+  bell::Result<std::string_view> getStatusMessage() const;
+
+  /**
    * @brief Returns the path of the request, e.g., /index.html
    * @remark Only valid for request readers
    */

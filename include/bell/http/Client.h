@@ -1,166 +1,222 @@
-
 #pragma once
 
-// Standard includes
-#include <cstddef>
-#include <cstdint>
+#include <istream>
 #include <memory>
 #include <optional>
-#include <string>
-#include <string_view>
-#include <utility>
+#include <unordered_map>
+#include <variant>
 #include <vector>
 
-// Library includes
-#include "fmt/format.h"
-
-// Own includes
 #include "bell/Result.h"
 #include "bell/http/Common.h"
 #include "bell/http/Reader.h"
-#include "bell/http/Writer.h"
-#include "bell/net/SocketStream.h"
 #include "bell/net/URIParser.h"
 
+// Go-lang inspired http client
 namespace bell::http {
-// Default timeout for HTTP operations, in milliseconds
-const int defaultHTTPClientTimeout = 5000;
 
-class Connection {
+/**
+ * @brief A variant representing the body of an HTTP request.
+ *
+ * It can be empty (std::monostate), a pre-filled byte vector, or a stream for large bodies.
+ */
+using RequestBody =
+    std::variant<std::monostate, std::vector<std::byte>, std::istream*>;
+
+/**
+ * @brief Represents an HTTP request.
+ *
+ * Contains all necessary information to send a request, such as method, URI,
+ * headers, and body.
+ */
+class Request {
  public:
-  explicit Connection() = default;
-  ~Connection() = default;
+  ~Request() = default;
 
   /**
-   * @brief Connects to the given URL using the specified timeout and security settings.
-   *
-   * @param url URL to connect to
-   * @param timeoutMs Timeout in milliseconds, or 0 for no timeout
-   * @param secure Whether to use HTTPS (true, port 443) or HTTP (false, port 80)
-   * @return bell::Result<> Result of the connection attempt
+   * @brief Factory function to create a Request object.
+   * @param method The HTTP method (e.g., GET, POST).
+   * @param url The target URL for the request.
+   * @return A Result containing the Request on success, or an error if the URL is invalid.
    */
-  bell::Result<> connect(const std::string& url, int timeoutMs,
-                         bool secure = true) noexcept;
+  static bell::Result<Request> create(http::Method method,
+                                      const std::string& url);
 
-  /**
-   * @brief Sends a HTTP request to the server, with the given method and headers.
-   *
-   * @param method HTTP method to use, e.g. "GET" or "POST"
-   * @param extraHeaders Additional headers to include in the request
-   * @param expectedContentLength Expected content length in bytes, or 0 if the request does not have a body. This is used to set the Content-Length header, if present.
-   * @remark The returned Writer object will have the headers written, so the caller should only use it to write the request body.
-   * @return http::Writer object, which should be used to write the body of the request.
-   */
-  bell::Result<Writer> sendRequest(Method method, const Headers& extraHeaders,
-                                   size_t expectedContentLength);
+  /// The HTTP method for the request.
+  http::Method method;
+  /// The parsed URI for the request.
+  bell::net::URI uri;
+  /// A map of HTTP headers.
+  std::unordered_map<std::string, std::string> headers;
 
-  /**
-   * @brief Returns the response object. This method should be called after sendRequest()
-   * @param externalBuffer Optional pointer to an external buffer to use for reading the response. If not provided, an internal buffer will be used. Passing the external buffer will make the ownership of reader dependent on the Connection's and buffer's lifecycle.
-   *
-   * @return std::unique_ptr<Reader> Pointer to the response object
-   */
-  bell::Result<Reader> getResponse(std::vector<char>* externalBuffer = nullptr);
+  /// The request body, which can be empty, a byte vector, or a stream.
+  RequestBody body;
 
-  // Other connection-related methods
+  /// The explicit length of the request body, if known.
+  std::optional<size_t> contentLength;
+
+  /// Timeout for the entire HTTP operation in milliseconds.
+  std::optional<int> operationTimeoutMs{};
+
  private:
-  // Internal socket stream
-  std::shared_ptr<bell::net::SocketStream> socketStream;
-
-  // Parsed URL
-  bell::net::URI parsedUrl;
-
-  // We only send the request once
-  bool requestSent = false;
+  /**
+   * @brief Private constructor to enforce creation via the static `create` method.
+   * @param method The HTTP method.
+   * @param parsedUrl A successfully parsed URI object.
+   */
+  Request(http::Method method, bell::net::URI&& parsedUrl)
+      : method(method), uri(std::move(parsedUrl)) {}
 };
 
 /**
- * @brief Makes a generic request to the given URL.
+ * @brief Represents an HTTP response received from a server.
  *
- * @param method HTTP method to use, e.g. "GET" or "POST"
- * @param url URL to make the request to
- * @param headers Headers to include in the request
- * @param timeoutMs Timeout in milliseconds
- * @param secure Whether to use HTTPS (true, port 443) or HTTP (false, port 80)
- *
- * @return std::unique_ptr<Connection> Pointer to the http::Connection. The response can be obtained by calling getResponse() on the returned object.
+ * Provides access to the status code, headers, and the response body.
  */
-inline bell::Result<Reader> request(Method method, const std::string& url,
-                                    const Headers& headers = {},
-                                    int timeoutMs = defaultHTTPClientTimeout,
-                                    int secure = true) {
-  Connection conn;
-  auto res = conn.connect(url, timeoutMs, secure);
-  if (!res) {
-    return tl::unexpected(res.error());
-  }
+class Response {
+ public:
+  /// The HTTP status code (e.g., 200, 404).
+  int statusCode = 0;
+  /// The HTTP status message (e.g., "OK", "Not Found").
+  std::string statusMessage;
+  /// The response headers.
+  Headers headers;
+  /// The length of the response body, if provided by the server.
+  std::optional<size_t> contentLength;
+  /// A reader to access the response body.
+  Reader bodyReader;
 
-  auto writerRes = conn.sendRequest(method, headers, 0);
-  if (!writerRes) {
-    return tl::unexpected(writerRes.error());
-  }
+  /**
+   * @brief Constructs a Response from a response reader.
+   * @param responseReader The reader providing the raw response data.
+   */
+  Response(http::Reader responseReader);
+  ~Response() = default;
 
-  return conn.getResponse();
-}
+  Response(const Response&) = delete;
+  Response& operator=(const Response&) = delete;
+
+  /**
+   * @brief Reads the entire response body as a string.
+   * @return A Result containing a string_view of the body on success.
+   */
+  bell::Result<std::string_view> text();
+
+  /**
+   * @brief Reads the entire response body as a vector of bytes.
+   * @return A Result containing a vector of bytes on success.
+   */
+  bell::Result<std::vector<std::byte>> bytes();
+
+  /**
+   * @brief Gets a pointer to the raw byte buffer of the response body.
+   * @return A Result containing a const char* pointer to the data on success.
+   */
+  bell::Result<const char*> bytesPtr();
+
+  /**
+   * @brief Gets the underlying stream for reading the response body.
+   * @return A pointer to the std::istream.
+   */
+  std::istream* stream() const;
+};
 
 /**
- * @brief Makes a generic request to the given URL.
+ * @brief An abstract interface for executing HTTP requests.
  *
- * @param method HTTP method to use, e.g. "GET" or "POST"
- * @param url URL to make the request to
- * @param headers Headers to include in the request
- * @param body Body to include in the request, passed as a pointer to a byte array
- * @param length Length of the body
- * @param timeoutMs Timeout in milliseconds
- * @param secure Whether to use HTTPS (true, port 443) or HTTP (false, port 80)
- *
- * @return std::unique_ptr<Connection> Pointer to the http::Connection. The response can be obtained by calling getResponse() on the returned object.
+ * This allows for different underlying HTTP implementations (e.g., mock, curl).
  */
-inline bell::Result<Reader> requestWithBodyPtr(
-    Method method, const std::string& url, const Headers& headers = {},
-    const std::byte* body = nullptr, size_t length = 0,
-    int timeoutMs = defaultHTTPClientTimeout, bool secure = true) {
-  Connection conn;
-  auto res = conn.connect(url, timeoutMs, secure);
-  if (!res) {
-    return tl::unexpected(res.error());
-  }
-  auto writerRes = conn.sendRequest(method, headers, length);
-  if (!writerRes) {
-    return tl::unexpected(writerRes.error());
-  }
+class Transport {
+ public:
+  virtual ~Transport() = default;
 
-  res = writerRes->writeBodyRaw(reinterpret_cast<const char*>(body), length);
-  if (!res) {
-    return tl::unexpected(res.error());
-  }
-
-  return conn.getResponse();
-}
+  /**
+   * @brief Executes an HTTP request.
+   * @param req The request to execute.
+   * @return A Result containing the Response on success, or an error.
+   */
+  virtual bell::Result<Response> execute(const Request& req) = 0;
+};
 
 /**
- * @brief Makes a generic request to the given URL.
- *
- * @param method HTTP method to use, e.g. "GET" or "POST"
- * @param url URL to make the request to
- * @param headers Headers to include in the request
- * @param body Body to include in the request, passed as a vector of bytes
- * @param timeoutMs Timeout in milliseconds
- * @param secure Whether to use HTTPS (true, port 443) or HTTP (false, port 80)
- *
- * @return std::unique_ptr<Connection> Pointer to the http::Connection. The response can be obtained by calling getResponse() on the returned object.
+ * @brief The default transport implementation for sending HTTP requests.
  */
-inline bell::Result<Reader> requestWithBody(
-    Method method, const std::string& url, const Headers& headers = {},
-    const std::vector<std::byte>& body = {},
-    int timeoutMs = defaultHTTPClientTimeout, bool secure = true) {
-  return requestWithBodyPtr(method, url, headers, body.data(), body.size(),
-                            timeoutMs, secure);
-}
+class DefaultTransport : public Transport {
+ public:
+  DefaultTransport() = default;
 
+  /**
+   * @brief Executes an HTTP request using the default underlying implementation.
+   * @param req The request to execute.
+   * @return A Result containing the Response on success, or an error.
+   */
+  bell::Result<Response> execute(const Request& req) override;
+};
+
+/**
+ * @brief A high-level HTTP client for making requests.
+ *
+ * Provides convenient methods like get(), post(), etc., to interact with web services.
+ */
+class Client {
+ public:
+  /// Default timeout for all operations in milliseconds.
+  int operationTimeoutMs = 5000;
+
+  /**
+   * @brief Constructs a Client with a specific transport layer.
+   * @param transport The transport implementation to use for requests.
+   * Defaults to DefaultTransport.
+   */
+  explicit Client(std::unique_ptr<Transport> transport =
+                      std::make_unique<DefaultTransport>())
+      : transport(std::move(transport)) {}
+
+  /**
+   * @brief Sends a raw HTTP request using the provided Request object.
+   * @param req The Request object containing the HTTP method, URL, headers, and body.
+   * @return A Result containing the Response on success, or an error code on failure.
+   */
+  bell::Result<Response> rawRequest(Request& req);
+
+  /**
+   * @brief Sends a GET request to the specified URL with optional headers.
+   * @param url The URL to send the GET request to.
+   * @param headers Optional headers to include in the request.
+   * @return A Result containing the Response on success, or an error code on failure.
+   * @note The URL should be a valid HTTP or HTTPS URL.
+   */
+  bell::Result<Response> get(const std::string& url,
+                             const Headers& headers = {});
+
+  /**
+   * @brief Sends a POST request to the specified URL.
+   * @param url The URL to send the POST request to.
+   * @param headers Optional headers to include in the request.
+   * @param body The request body. Can be empty, a byte vector, or a stream.
+   * @param bodyLength The length of the body, required for streams.
+   * @return A Result containing the Response on success, or an error.
+   */
+  bell::Result<Response> post(const std::string& url,
+                              const Headers& headers = {},
+                              RequestBody body = std::monostate(),
+                              std::optional<size_t> bodyLength = std::nullopt);
+
+  /**
+   * @brief Sends a PUT request to the specified URL.
+   * @param url The URL to send the PUT request to.
+   * @param headers Optional headers to include in the request.
+   * @param body The request body. Can be empty, a byte vector, or a stream.
+   * @param bodyLength The length of the body, required for streams.
+   * @return A Result containing the Response on success, or an error.
+   */
+  bell::Result<Response> put(const std::string& url,
+                             const Headers& headers = {},
+                             RequestBody body = std::monostate(),
+                             std::optional<size_t> bodyLength = std::nullopt);
+
+ private:
+  /// The transport layer used to execute requests.
+  std::unique_ptr<Transport> transport;
+};
 }  // namespace bell::http
-
-// Alias for the HTTPConnection class
-namespace bell {
-using HTTPConnection = http::Connection;
-};  // namespace bell

@@ -1,4 +1,4 @@
-#include <catch2/catch_test_macros.hpp>
+#include <doctest/doctest.h>
 
 #include "bell/utils/Task.h"
 #include "bell/utils/Utils.h"
@@ -20,10 +20,10 @@ class TestTask : public bell::utils::Task {
   std::atomic<int> loopCounter;
 };
 
-TEST_CASE("bell::utils::Task tests", "[bell::utils::Task]") {
+TEST_CASE("bell::utils::Task tests") {
   TestTask task;
 
-  SECTION("task is properly started and stopped") {
+  SUBCASE("task is properly started and stopped") {
     // Allow some time for the task to run
     bell::utils::sleepMs(100);
 

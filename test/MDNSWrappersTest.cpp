@@ -1,15 +1,13 @@
+#include <doctest/doctest.h>
 #include <unistd.h>
-#include <catch2/catch_test_macros.hpp>
 
 #include <atomic>
-#include <mutex>
-#include <thread>
 
 #include "bell/mdns/Browser.h"
 #include "bell/mdns/Manager.h"
 #include "bell/utils/Utils.h"
 
-TEST_CASE("bell::mdns tests", "[bell::mdns]") {
+TEST_CASE("bell::mdns tests") {
   std::string serviceName = "mdns-discovery-test";
   std::atomic<bool> serviceAdded = false;
   std::atomic<bool> serviceAddrResolved = false;
@@ -37,7 +35,7 @@ TEST_CASE("bell::mdns tests", "[bell::mdns]") {
         }
       });
 
-  SECTION("Properly registers and unregisters a service") {
+  SUBCASE("Properly registers and unregisters a service") {
     REQUIRE_FALSE(serviceAdded);
     REQUIRE_FALSE(serviceAddrResolved);
     REQUIRE_FALSE(serviceRemoved);

@@ -82,7 +82,7 @@ bell::Result<> TCPSocket::connect(const std::string& host, uint16_t port,
   if (timeoutMs > 0) {
     if (err < 0 && errno == EINPROGRESS) {
       // Connection is in progress; use poll to wait for completion
-      struct pollfd pfd{};
+      struct pollfd pfd {};
       pfd.fd = sockFd;
       pfd.events = POLLOUT;
 
@@ -131,7 +131,7 @@ bell::Result<> TCPSocket::listen(int backlog) {
 }
 
 bell::Result<TCPSocket> TCPSocket::accept() {
-  struct sockaddr_in clientAddr{};
+  struct sockaddr_in clientAddr {};
   socklen_t addrLen = sizeof(clientAddr);
 
   // Accept the incoming connection

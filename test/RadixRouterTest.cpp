@@ -1,14 +1,14 @@
-#include <catch2/catch_test_macros.hpp>
+#include <doctest/doctest.h>
 
 // Code under test
 #include "bell/http/RadixRouter.h"
 
 using MockHandlerType = int;
 
-TEST_CASE("bell::http::RadixRouter tests", "[bell::http::RadixRouter]") {
+TEST_CASE("bell::http::RadixRouter tests") {
   bell::http::RadixRouter<MockHandlerType> router;
 
-  SECTION("Inserts and finds exact match routes") {
+  SUBCASE("Inserts and finds exact match routes") {
     int mockHandlerVal = 5;
     router.insert(bell::http::Method::GET, "/users", mockHandlerVal);
 
@@ -17,7 +17,7 @@ TEST_CASE("bell::http::RadixRouter tests", "[bell::http::RadixRouter]") {
     REQUIRE(result->first == mockHandlerVal);
   }
 
-  SECTION("Handles routes with parameters") {
+  SUBCASE("Handles routes with parameters") {
     int mockHandlerVal = 5;
     router.insert(bell::http::Method::GET, "/users/:id", mockHandlerVal);
 
@@ -27,7 +27,7 @@ TEST_CASE("bell::http::RadixRouter tests", "[bell::http::RadixRouter]") {
     REQUIRE(result->first == mockHandlerVal);
   }
 
-  SECTION("Handles catch-all routes") {
+  SUBCASE("Handles catch-all routes") {
     int mockHandlerVal = 5;
     router.insert(bell::http::Method::GET, "/users/*", mockHandlerVal);
 
@@ -37,7 +37,7 @@ TEST_CASE("bell::http::RadixRouter tests", "[bell::http::RadixRouter]") {
     REQUIRE(result->first == mockHandlerVal);
   }
 
-  SECTION("Handles routes with multiple methods") {
+  SUBCASE("Handles routes with multiple methods") {
     int mockGetHandlerVal = 5;
     int mockPostHandlerVal = 6;
 

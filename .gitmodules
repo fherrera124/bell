@@ -13,3 +13,6 @@
 [submodule "external/span"]
 	path = external/span
 	url = https://github.com/tcbrindle/span.git
+[submodule "external/doctest"]
+	path = external/doctest
+	url = git@github.com:doctest/doctest.git

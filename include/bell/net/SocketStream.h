@@ -40,7 +40,7 @@ class SocketBuffer : public std::streambuf {
 };
 
 class SocketStream : public std::iostream {
- private:
+ protected:
   SocketBuffer socketBuf;
   std::shared_ptr<Socket> socket;
 

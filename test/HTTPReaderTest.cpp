@@ -1,16 +1,13 @@
-#include <catch2/catch_test_macros.hpp>
+#include <doctest/doctest.h>
 
-#include <iostream>
 #include <sstream>
 
 // Code under test
-#include "bell/http/Client.h"
 #include "bell/http/Reader.h"
-#include "bell/utils/Utils.h"
 
-TEST_CASE("bell::http::Reader tests", "[bell::http::Reader]") {
+TEST_CASE("bell::http::Reader tests") {
   // HTTP response parsing tests
-  SECTION("Parses correct HTTP responses") {
+  SUBCASE("Parses correct HTTP responses") {
     std::istringstream mockResponse(
         "HTTP/1.1 200 OK\r\n"
         "Content-Type: text/html\r\n"
@@ -26,8 +23,7 @@ TEST_CASE("bell::http::Reader tests", "[bell::http::Reader]") {
     REQUIRE(reader.getContentLength() == 11);
     REQUIRE(reader.getHeader("Content-Type") == "text/html");
 
-    REQUIRE(!reader.readHeaders()
-                 );  // Should throw if headers are read again
+    REQUIRE(!reader.readHeaders());  // Should throw if headers are read again
 
     // Should throw on request-specific methods
     REQUIRE(!reader.getMethod());
@@ -39,7 +35,7 @@ TEST_CASE("bell::http::Reader tests", "[bell::http::Reader]") {
     REQUIRE(content == "Hello-world");
   }
 
-  SECTION("Throws on malformed response") {
+  SUBCASE("Throws on malformed response") {
     std::istringstream mockResponse(
         "HTTP/1.1 200 OK\r\n"
         "Content-Type text/html\r\n"  // Missing colon
@@ -50,7 +46,7 @@ TEST_CASE("bell::http::Reader tests", "[bell::http::Reader]") {
     REQUIRE(!reader.readHeaders());
   }
 
-  SECTION("Parses various status codes") {
+  SUBCASE("Parses various status codes") {
     std::istringstream mockResponse(
         "HTTP/1.1 404 Not Found\r\n"
         "Content-Type: text/html\r\n"
@@ -62,7 +58,7 @@ TEST_CASE("bell::http::Reader tests", "[bell::http::Reader]") {
     REQUIRE(reader.getStatusCode() == 404);
   }
 
-  SECTION("Parses multiple headers and case insensitivity") {
+  SUBCASE("Parses multiple headers and case insensitivity") {
     std::istringstream mockResponse(
         "HTTP/1.1 200 OK\r\n"
         "Content-Type: text/html\r\n"
@@ -81,14 +77,14 @@ TEST_CASE("bell::http::Reader tests", "[bell::http::Reader]") {
 
   // HTTP request parsing tests
   // New Sections for HTTP Requests:
-  SECTION("Parses correct HTTP requests") {
+  SUBCASE("Parses correct HTTP requests") {
     std::istringstream mockRequest(
         "GET /index.html HTTP/1.1\r\n"
         "Host: example.com\r\n"
         "User-Agent: TestAgent\r\n"
         "\r\n");
     bell::http::Reader reader(bell::http::Direction::Request, &mockRequest);
-    REQUIRE_NOTHROW(reader.readHeaders());
+    REQUIRE(reader.readHeaders());
     REQUIRE(reader.getMethod() == bell::http::Method::GET);
     REQUIRE(reader.getPath() == "/index.html");
     REQUIRE(reader.getHeader("Host") == "example.com");
@@ -96,13 +92,13 @@ TEST_CASE("bell::http::Reader tests", "[bell::http::Reader]") {
     REQUIRE(!reader.getStatusCode());
   }
 
-  SECTION("Parses query parameters from HTTP requests") {
+  SUBCASE("Parses query parameters from HTTP requests") {
     std::istringstream mockRequest(
         "GET /search?query=test&lang=en HTTP/1.1\r\n"
         "Host: example.com\r\n"
         "\r\n");
     bell::http::Reader reader(bell::http::Direction::Request, &mockRequest);
-    REQUIRE_NOTHROW(reader.readHeaders());
+    REQUIRE(reader.readHeaders());
 
     // Verify method and path are parsed correctly
     REQUIRE(reader.getMethod() == bell::http::Method::GET);
@@ -116,17 +112,17 @@ TEST_CASE("bell::http::Reader tests", "[bell::http::Reader]") {
     REQUIRE(queryParams->at("lang") == "en");
   }
 
-  SECTION("Handles missing Host header in HTTP/1.1 requests") {
+  SUBCASE("Handles missing Host header in HTTP/1.1 requests") {
     std::istringstream mockRequest(
         "GET /index.html HTTP/1.1\r\n"
         "User-Agent: TestAgent\r\n"
         "\r\n");
     bell::http::Reader reader(bell::http::Direction::Request, &mockRequest);
-    REQUIRE(!reader.readHeaders()
-                 );  // Missing Host should cause error in HTTP/1.1
+    REQUIRE(
+        !reader.readHeaders());  // Missing Host should cause error in HTTP/1.1
   }
 
-  SECTION("Throws on malformed request lines") {
+  SUBCASE("Throws on malformed request lines") {
     std::istringstream mockRequest(
         "GET /index.html HTTP\r\n"  // Missing version
         "Host: example.com\r\n"
@@ -135,7 +131,7 @@ TEST_CASE("bell::http::Reader tests", "[bell::http::Reader]") {
     REQUIRE(!reader.readHeaders());
   }
 
-  SECTION("Parses various HTTP methods") {
+  SUBCASE("Parses various HTTP methods") {
     std::istringstream mockRequest(
         "POST /submit HTTP/1.1\r\n"
         "Host: example.com\r\n"
@@ -150,7 +146,7 @@ TEST_CASE("bell::http::Reader tests", "[bell::http::Reader]") {
     REQUIRE(reader.getHeader("Content-Type") == "application/json");
   }
 
-  SECTION("Parses multiple headers in HTTP requests") {
+  SUBCASE("Parses multiple headers in HTTP requests") {
     std::istringstream mockRequest(
         "PUT /resource/123 HTTP/1.1\r\n"
         "Host: example.com\r\n"

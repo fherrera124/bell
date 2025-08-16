@@ -5,6 +5,7 @@
 #include <string>
 #include <string_view>
 #include <system_error>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -40,11 +41,8 @@ inline std::error_code make_error_code(const bell::http::Errc& e) {
   return {static_cast<int>(e), internal::http_error_category()};
 };
 
-// Type definition for HTTP headers
-using Header = std::pair<std::string, std::string>;
-
 // Type definition for a list of HTTP headers
-using Headers = std::vector<Header>;
+using Headers = std::unordered_map<std::string, std::string>;
 
 // Used to differentiate between HTTP Requests and Responses, passed as a parameter for the Reader and Writer constructors
 enum class Direction { Request, Response, Invalid };
@@ -60,20 +58,6 @@ enum class Method { GET, POST, PUT, DELETE, HEAD, OPTIONS, PATCH, INVALID };
  */
 Method parseMethod(std::string_view method);
 
-inline Header rangeHeader(std::optional<size_t> start,
-                          std::optional<size_t> end = std::nullopt) {
-  if (start.has_value() && end.has_value()) {
-    return {"Range", fmt::format("bytes={}-{}", start.value(), end.value())};
-  }
-  if (start.has_value()) {
-    return {"Range", fmt::format("bytes={}-", start.value())};
-  }
-  if (end.has_value()) {
-    return {"Range", fmt::format("bytes=-{}", end.value())};
-  }
-  return {"Range", "bytes=0-"};  // Default range if no start or end is provided
-}
-
 /// @brief Returns a string representation of the HTTP method
 std::string_view methodToString(Method method);
 }  // namespace bell::http
@@ -85,7 +69,6 @@ struct is_error_code_enum<bell::http::Errc> : true_type {};
 
 // Alias for the HTTPCommon class
 namespace bell {
-using HTTPHeader = http::Header;
 using HTTPHeaders = http::Headers;
 using HTTPMethod = http::Method;
 using HTTPDirection = http::Direction;

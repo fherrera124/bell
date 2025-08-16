@@ -1,10 +1,10 @@
-#include <catch2/catch_test_macros.hpp>
+#include <doctest/doctest.h>
 #include <sstream>  // for std::ostringstream
 
 #include "bell/io/BinaryStream.h"
 #include "bell/io/MemoryStream.h"  // for bell::IMemoryStream
 
-TEST_CASE("BinaryStream encodes and decodes data properly", "[BinaryStream]") {
+TEST_CASE("BinaryStream encodes and decodes data properly") {
   // Static so we retain value through the test
   static std::ostringstream result;
   static int idx = 0;
@@ -24,13 +24,13 @@ TEST_CASE("BinaryStream encodes and decodes data properly", "[BinaryStream]") {
   int64_t int64Val = -22152211245125;
   uint64_t uint64Val = 123123123123;
 
-  SECTION("throws when trying to read writable stream") {
+  SUBCASE("throws when trying to read writable stream") {
     char testVal;
 
     REQUIRE_THROWS(bs >> testVal);
   }
 
-  SECTION("encodes char and byte properly") {
+  SUBCASE("encodes char and byte properly") {
     bs << byteVal;
     bs << chVal;
 
@@ -39,7 +39,7 @@ TEST_CASE("BinaryStream encodes and decodes data properly", "[BinaryStream]") {
     REQUIRE(result.str()[idx++] == chVal);
   }
 
-  SECTION("encodes 16bit values") {
+  SUBCASE("encodes 16bit values") {
     bs << int16Val;
     bs << uint16Val;
 
@@ -54,7 +54,7 @@ TEST_CASE("BinaryStream encodes and decodes data properly", "[BinaryStream]") {
     REQUIRE(static_cast<uint8_t>(res[idx++]) == (uint16Val & 0xFF));
   }
 
-  SECTION("encodes 32bit values") {
+  SUBCASE("encodes 32bit values") {
     bs << int32Val;
     bs << uint32Val;
 
@@ -73,7 +73,7 @@ TEST_CASE("BinaryStream encodes and decodes data properly", "[BinaryStream]") {
     REQUIRE(static_cast<uint8_t>(res[idx++]) == (uint32Val & 0xFF));
   }
 
-  SECTION("encodes 64bit values") {
+  SUBCASE("encodes 64bit values") {
     bs << int64Val;
     bs << uint64Val;
 
@@ -100,7 +100,7 @@ TEST_CASE("BinaryStream encodes and decodes data properly", "[BinaryStream]") {
     REQUIRE(static_cast<uint8_t>(res[idx++]) == (uint64Val & 0xFF));
   }
 
-  SECTION("decodes values properly") {
+  SUBCASE("decodes values properly") {
     // Copy previously encoded data into a string, wrap with memorystream
     std::string res = result.str();
     bell::io::IMemoryStream istr((std::byte*)res.data(), res.size());

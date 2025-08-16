@@ -350,6 +350,18 @@ bell::Result<http::Method> http::Reader::getMethod() const {
   return method.value();
 }
 
+bell::Result<std::string_view> http::Reader::getStatusMessage() const {
+  if (!isValid(Direction::Response)) {
+    return tl::make_unexpected(
+        std::make_error_code(std::errc::operation_not_permitted));
+  }
+  if (!statusMessage.has_value()) {
+    return tl::make_unexpected(std::make_error_code(std::errc::no_message));
+  }
+
+  return statusMessage.value();
+}
+
 bell::Result<std::string_view> http::Reader::getPath() const {
   if (!isValid(Direction::Request)) {
     return tl::make_unexpected(
