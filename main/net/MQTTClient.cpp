@@ -18,7 +18,7 @@ void publishCallbackShim(void** state,
 // Read callback for the MQTT lib
 ssize_t mqttPalRead(void* context, uint8_t* buf, size_t len) {
   auto* socket = static_cast<net::Socket*>(context);
-  auto res = socket->read(buf, len);
+  auto res = socket->read(reinterpret_cast<std::byte*>(buf), len);
 
   if (!res) {
     BELL_LOG(error, "mqtt_pal", "Failed to read from socket: {}", res.error());
@@ -31,7 +31,7 @@ ssize_t mqttPalRead(void* context, uint8_t* buf, size_t len) {
 // Write callback for the MQTT lib
 ssize_t mqttPalWrite(void* context, const uint8_t* buf, size_t len) {
   auto* socket = static_cast<net::Socket*>(context);
-  auto res = socket->write(buf, len);
+  auto res = socket->write(reinterpret_cast<const std::byte*>(buf), len);
   if (!res) {
     BELL_LOG(error, "mqtt_pal", "Failed to write to socket: {}", res.error());
     return -1;

@@ -14,7 +14,8 @@ SocketBuffer::SocketBuffer(std::shared_ptr<Socket> socket)
 int SocketBuffer::sync() {
   size_t n = pptr() - pbase();
   while (n > 0) {
-    auto bw = internalSocket->write(reinterpret_cast<uint8_t*>(pptr() - n), n);
+    auto bw =
+        internalSocket->write(reinterpret_cast<std::byte*>(pptr() - n), n);
     if (!bw) {
       // Set failbit and preserve the socket error
       BELL_LOG(error, "SocketBuffer", "Write failed: {}", bw.error());
@@ -30,7 +31,7 @@ int SocketBuffer::sync() {
 
 SocketBuffer::int_type SocketBuffer::underflow() {
   auto br =
-      internalSocket->read(reinterpret_cast<uint8_t*>(ibuf.data()), bufLen);
+      internalSocket->read(reinterpret_cast<std::byte*>(ibuf.data()), bufLen);
   if (!br) {
     BELL_LOG(error, "SocketBuffer", "Read error: {}", br.error());
     setg(nullptr, nullptr, nullptr);
@@ -65,8 +66,8 @@ std::streamsize SocketBuffer::xsgetn(char_type* _s, std::streamsize _n) {
   std::streamsize remain = _n - bn;
   char_type* end = _s + _n;
   while (remain > 0) {
-    auto br =
-        internalSocket->read(reinterpret_cast<uint8_t*>(end - remain), remain);
+    auto br = internalSocket->read(reinterpret_cast<std::byte*>(end - remain),
+                                   remain);
 
     if (!br) {
       return (_n - remain);
@@ -93,7 +94,7 @@ std::streamsize SocketBuffer::xsputn(const char_type* s, std::streamsize n) {
   const char_type* end = s + n;
   while (remain > bufLen) {
     auto bw = internalSocket->write(
-        reinterpret_cast<const uint8_t*>(end - remain), remain);
+        reinterpret_cast<const std::byte*>(end - remain), remain);
     if (!bw) {
       return 0;  // Stream sets failbit
     }

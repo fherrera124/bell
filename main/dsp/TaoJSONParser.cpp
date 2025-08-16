@@ -30,15 +30,15 @@ std::shared_ptr<Transform> parseTransformJson(
 
   const auto& transformType = json.at("type").get_string_type();
 
-  std::vector<uint8_t> channels;
+  std::vector<int> channels;
 
   if (json.find("channels") != nullptr && json.at("channels").is_array()) {
     // Parse the channels
-    channels = json.at("channels").as<std::vector<uint8_t>>();
+    channels = json.at("channels").as<std::vector<int>>();
   } else if (json.find("channel") != nullptr &&
              json.at("channel").is_number()) {
     // Parse the channel
-    channels.push_back(json.at("channel").as<uint8_t>());
+    channels.push_back(json.at("channel").as<int>());
   } else if (transformType !=
              "mixer") {  // Mixer transform doesnt specify channels
     throw std::invalid_argument("Channels not specified for transform");

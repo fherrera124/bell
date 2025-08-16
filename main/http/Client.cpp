@@ -134,7 +134,7 @@ bell::Result<std::vector<std::byte>> Response::bytes() {
   return bodyReader.getBodyBytes();
 }
 
-bell::Result<const char*> Response::bytesPtr() {
+bell::Result<const std::byte*> Response::bytesPtr() {
   return bodyReader.getBodyBytesPtr();
 }
 

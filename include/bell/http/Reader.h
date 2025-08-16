@@ -111,7 +111,7 @@ class Reader {
    *
    * @return const char* Pointer to the body of the response
    */
-  bell::Result<const char*> getBodyBytesPtr();
+  bell::Result<const std::byte*> getBodyBytesPtr();
 
   /**
    * @brief Returns the amount of bytes stored in the body buffer, which can be obtained using getBodyBytesPtr().

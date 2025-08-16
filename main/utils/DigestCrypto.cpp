@@ -44,9 +44,10 @@ void utils::DigestCrypto::reset() {
   }
 }
 
-void utils::DigestCrypto::update(const uint8_t* bytes, size_t length) {
+void utils::DigestCrypto::update(const std::byte* bytes, size_t length) {
   // Update the context with the specified bytes
-  auto result = mbedtls_md_update(&ctx, bytes, length);
+  auto result =
+      mbedtls_md_update(&ctx, reinterpret_cast<const uint8_t*>(bytes), length);
   if (result != 0) {
     throw std::runtime_error(fmt::format(
         "Failed to update digest context, mbedtls error: {}", result));
@@ -55,12 +56,13 @@ void utils::DigestCrypto::update(const uint8_t* bytes, size_t length) {
 
 void utils::DigestCrypto::updateString(std::string_view str) {
   // Update the context with the specified string
-  update(reinterpret_cast<const uint8_t*>(str.data()), str.size());
+  update(reinterpret_cast<const std::byte*>(str.data()), str.size());
 }
 
-void utils::DigestCrypto::hmac(const uint8_t* key, size_t keyLength) {
+void utils::DigestCrypto::hmac(const std::byte* key, size_t keyLength) {
   // Initialize the HMAC context
-  auto result = mbedtls_md_hmac_starts(&ctx, key, keyLength);
+  auto result = mbedtls_md_hmac_starts(
+      &ctx, reinterpret_cast<const uint8_t*>(key), keyLength);
   if (result != 0) {
     throw std::runtime_error(fmt::format(
         "Failed to initialize HMAC context, mbedtls error: {}", result));
@@ -69,9 +71,10 @@ void utils::DigestCrypto::hmac(const uint8_t* key, size_t keyLength) {
   hmacInitialized = true;
 }
 
-void utils::DigestCrypto::hmacUpdate(const uint8_t* bytes, size_t length) {
+void utils::DigestCrypto::hmacUpdate(const std::byte* bytes, size_t length) {
   // Update the HMAC context with the specified bytes
-  auto result = mbedtls_md_hmac_update(&ctx, bytes, length);
+  auto result = mbedtls_md_hmac_update(
+      &ctx, reinterpret_cast<const uint8_t*>(bytes), length);
   if (result != 0) {
     throw std::runtime_error(fmt::format(
         "Failed to update HMAC context, mbedtls error: {}", result));
@@ -80,21 +83,22 @@ void utils::DigestCrypto::hmacUpdate(const uint8_t* bytes, size_t length) {
 
 void utils::DigestCrypto::hmacUpdateString(const std::string_view& key) {
   // Update the HMAC context with the specified string
-  hmacUpdate(reinterpret_cast<const uint8_t*>(key.data()), key.size());
+  hmacUpdate(reinterpret_cast<const std::byte*>(key.data()), key.size());
 }
 
-void utils::DigestCrypto::finish(uint8_t* output) {
+void utils::DigestCrypto::finish(std::byte* output) {
   // Finalize the context and store the result in the output array
-  auto result = mbedtls_md_finish(&ctx, output);
+  auto result = mbedtls_md_finish(&ctx, reinterpret_cast<uint8_t*>(output));
   if (result != 0) {
     throw std::runtime_error(fmt::format(
         "Failed to finish digest computation, mbedtls error: {}", result));
   }
 }
 
-void utils::DigestCrypto::hmacFinish(uint8_t* output) {
+void utils::DigestCrypto::hmacFinish(std::byte* output) {
   // Finalize the HMAC context and store the result in the output array
-  auto result = mbedtls_md_hmac_finish(&ctx, output);
+  auto result =
+      mbedtls_md_hmac_finish(&ctx, reinterpret_cast<uint8_t*>(output));
   if (result != 0) {
     throw std::runtime_error(fmt::format(
         "Failed to finish HMAC computation, mbedtls error: {}", result));
@@ -106,17 +110,17 @@ size_t utils::DigestCrypto::getDigestSize() {
   return mbedtls_md_get_size(mbedtls_md_info_from_type(digestType));
 }
 
-void utils::DigestCrypto::getDigest(const uint8_t* bytes, size_t length,
-                                    uint8_t* output) {
+void utils::DigestCrypto::getDigest(const std::byte* bytes, size_t length,
+                                    std::byte* output) {
   hmacInitialized = false;
   reset();
   update(bytes, length);
   finish(output);
 }
 
-void utils::DigestCrypto::getHmac(const uint8_t* key, size_t keyLength,
-                                  const uint8_t* message, size_t messageLength,
-                                  uint8_t* output) {
+void utils::DigestCrypto::getHmac(const std::byte* key, size_t keyLength,
+                                  const std::byte* message,
+                                  size_t messageLength, std::byte* output) {
   hmacInitialized = true;
   reset();
   hmac(key, keyLength);

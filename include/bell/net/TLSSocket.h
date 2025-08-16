@@ -102,8 +102,8 @@ class TLSSocket : public Socket {
   bell::Result<> setReceiveTimeout(int timeoutMs) override;
   bell::Result<int> getSendTimeout() override;
   bell::Result<int> getReceiveTimeout() override;
-  bell::Result<size_t> read(uint8_t* buf, size_t len) override;
-  bell::Result<size_t> write(const uint8_t* buf, size_t len) override;
+  bell::Result<size_t> read(std::byte* buf, size_t len) override;
+  bell::Result<size_t> write(const std::byte* buf, size_t len) override;
   bell::Result<> setBlocking(bool blocking) override;
   bell::Result<bool> getBlocking() const override;
   bool isValid() const override;

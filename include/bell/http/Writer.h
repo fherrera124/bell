@@ -155,7 +155,7 @@ class Writer {
    * @param bytes Pointer to the byte array.
    * @param bytesLen The number of bytes to write from the array.
    */
-  bell::Result<> writeBodyRaw(const char* bytes, size_t bytesLen);
+  bell::Result<> writeBodyRaw(const std::byte* bytes, size_t bytesLen);
 
   /**
    * @brief Returns true if the headers have been written to the stream.

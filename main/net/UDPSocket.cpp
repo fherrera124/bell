@@ -27,7 +27,7 @@
 using namespace bell::net;
 
 tl::expected<size_t, std::error_code> UDPSocket::recvfrom(
-    uint8_t* buf, size_t len, const IpAddress& address) {
+    std::byte* buf, size_t len, const IpAddress& address) {
   if (!isValid()) {
     return make_unexpected_errc<size_t>(std::errc::bad_file_descriptor);
   }
@@ -48,7 +48,7 @@ tl::expected<size_t, std::error_code> UDPSocket::recvfrom(
   return static_cast<size_t>(res);
 }
 
-bell::Result<size_t> UDPSocket::sendto(const uint8_t* buf, size_t len,
+bell::Result<size_t> UDPSocket::sendto(const std::byte* buf, size_t len,
                                        const IpAddress& address) {
   if (!isValid()) {
     return make_unexpected_errc<size_t>(std::errc::bad_file_descriptor);

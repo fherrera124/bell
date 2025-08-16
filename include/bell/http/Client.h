@@ -112,7 +112,7 @@ class Response {
    * @brief Gets a pointer to the raw byte buffer of the response body.
    * @return A Result containing a const char* pointer to the data on success.
    */
-  bell::Result<const char*> bytesPtr();
+  bell::Result<const std::byte*> bytesPtr();
 
   /**
    * @brief Gets the length of the response body.

@@ -8,7 +8,7 @@
 
 using namespace bell::dsp;
 
-void Transform::setChannels(const std::vector<uint8_t>& channels) {
+void Transform::setChannels(const std::vector<int>& channels) {
   std::scoped_lock lock(accessMutex);
   this->channels = channels;
 }

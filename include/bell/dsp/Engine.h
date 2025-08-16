@@ -31,8 +31,8 @@ class Engine {
    * @param format Format of the audio samples
    * @return DataSlots* Pointer to the data slots containing the processed audio information. The caller should check whether the audio format has changed.
    */
-  DataSlots* process(const uint8_t* inputBuffer, size_t inputBufferLen,
-                     uint8_t* outputBuffer, size_t outputBufferLen,
+  DataSlots* process(const std::byte* inputBuffer, size_t inputBufferLen,
+                     std::byte* outputBuffer, size_t outputBufferLen,
                      const audio::Format& format);
 
  private:

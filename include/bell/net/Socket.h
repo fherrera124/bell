@@ -95,7 +95,7 @@ class Socket {
    * @param len The number of bytes to write from the buffer.
    * @return The number of bytes successfully written.
    */
-  virtual bell::Result<size_t> write(const uint8_t* buf, size_t len) = 0;
+  virtual bell::Result<size_t> write(const std::byte* buf, size_t len) = 0;
 
   /**
    * @brief Read data from the socket.
@@ -110,7 +110,7 @@ class Socket {
    * that the connection was closed, while a value less than len could indicate that
    * no more data is currently available.
    */
-  virtual bell::Result<size_t> read(uint8_t* buf, size_t len) = 0;
+  virtual bell::Result<size_t> read(std::byte* buf, size_t len) = 0;
 
   /**
    * @brief Check if the socket is open

@@ -79,14 +79,14 @@ class Transform {
   virtual Type getType() const { return Type::OTHER; }
 
   // Set the channels that the transform will affect.
-  void setChannels(const std::vector<uint8_t>& channels);
+  void setChannels(const std::vector<int>& channels);
 
   // Return the channels that the transform will affect.
-  std::vector<uint8_t> getChannels() const { return channels; }
+  std::vector<int> getChannels() const { return channels; }
 
  protected:
   std::recursive_mutex accessMutex;
-  std::vector<uint8_t> channels{};
+  std::vector<int> channels{};
   audio::SampleRate sampleRate = audio::SampleRate::SR_44100HZ;
 };
 

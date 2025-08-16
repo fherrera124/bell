@@ -47,7 +47,7 @@ class UDPSocket : public POSIXSocket {
    * that the connection was closed, while a value less than len could indicate that
    * no more data is currently available.
    */
-  bell::Result<size_t> recvfrom(uint8_t* buf, size_t len,
+  bell::Result<size_t> recvfrom(std::byte* buf, size_t len,
                                 const IpAddress& address);
 
   /**
@@ -62,7 +62,7 @@ class UDPSocket : public POSIXSocket {
    * @param address The address to which the data should be sent.
    * @return The number of bytes successfully written.
    */
-  bell::Result<size_t> sendto(const uint8_t* buf, size_t len,
+  bell::Result<size_t> sendto(const std::byte* buf, size_t len,
                               const IpAddress& address);
 
   // POSIXSocket interface override

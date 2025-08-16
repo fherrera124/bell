@@ -9,8 +9,8 @@ void Engine::applyPipeline(const std::shared_ptr<TransformPipeline>& pipeline) {
   activePipeline = pipeline;
 }
 
-DataSlots* Engine::process(const uint8_t* inputBuffer, size_t inputBufferLen,
-                           uint8_t* outputBuffer, size_t outputBufferLen,
+DataSlots* Engine::process(const std::byte* inputBuffer, size_t inputBufferLen,
+                           std::byte* outputBuffer, size_t outputBufferLen,
                            const audio::Format& format) {
   std::scoped_lock lock(accessMutex);
 

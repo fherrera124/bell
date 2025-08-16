@@ -32,7 +32,7 @@ class CircularByteBuffer {
    * @param dataLen The number of bytes to write.
    * @return The number of bytes actually written to the buffer.
    */
-  size_t write(const uint8_t* data, size_t dataLen);
+  size_t write(const std::byte* data, size_t dataLen);
 
   /**
    * @brief Reads data from the buffer.
@@ -44,7 +44,7 @@ class CircularByteBuffer {
    * @param dataLen The number of bytes to read.
    * @return The number of bytes actually read from the buffer.
    */
-  size_t read(uint8_t* buffer, size_t dataLen);
+  size_t read(std::byte* buffer, size_t dataLen);
 
   /**
    * @brief Gets the current number of bytes available to read in the buffer.
@@ -64,7 +64,7 @@ class CircularByteBuffer {
   std::condition_variable condEmpty;
 
   const size_t storageCapacity;
-  std::vector<uint8_t> buffer;
+  std::vector<std::byte> buffer;
   size_t headPos{};      // Write position
   size_t tailPos{};      // Read position
   size_t currentSize{};  // Number of bytes currently in the buffer

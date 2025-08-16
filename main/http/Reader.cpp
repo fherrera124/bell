@@ -223,7 +223,7 @@ bell::Result<std::vector<std::byte>> http::Reader::getBodyBytes() {
   };
 }
 
-bell::Result<const char*> http::Reader::getBodyBytesPtr() {
+bell::Result<const std::byte*> http::Reader::getBodyBytesPtr() {
   if (!usingExternalBuffer) {
     bufferPtr = &internalBuffer;
   }
@@ -235,7 +235,8 @@ bell::Result<const char*> http::Reader::getBodyBytesPtr() {
     }
   }
 
-  return bufferPtr->data() + bufferPtr->size() - readContentLength;
+  return reinterpret_cast<const std::byte*>(
+      bufferPtr->data() + bufferPtr->size() - readContentLength);
 }
 
 bell::Result<> http::Reader::parseQueryParams() {

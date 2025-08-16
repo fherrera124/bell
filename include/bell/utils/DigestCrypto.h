@@ -29,7 +29,7 @@ class DigestCrypto {
    * @param bytes Pointer to the byte array to update the hash with.
    * @param length The number of bytes to process.
    */
-  void update(const uint8_t* bytes, size_t length);
+  void update(const std::byte* bytes, size_t length);
 
   /**
    * @brief Updates the digest with a string.
@@ -48,7 +48,7 @@ class DigestCrypto {
    * @param key Pointer to the key array.
    * @param keyLength Length of the key in bytes.
    */
-  void hmac(const uint8_t* key, size_t keyLength);
+  void hmac(const std::byte* key, size_t keyLength);
 
   /**
    * @brief Updates the HMAC with a chunk of data.
@@ -58,7 +58,7 @@ class DigestCrypto {
    * @param bytes Pointer to the byte array to update the HMAC with.
    * @param length The number of bytes to process.
    */
-  void hmacUpdate(const uint8_t* bytes, size_t length);
+  void hmacUpdate(const std::byte* bytes, size_t length);
 
   /**
    * @brief Updates the HMAC with a string.
@@ -77,7 +77,7 @@ class DigestCrypto {
    * @remark Size of the output array must be at least getDigestSize() bytes.
    * @param output Pointer to the output array where the digest result will be stored.
    */
-  void finish(uint8_t* output);
+  void finish(std::byte* output);
 
   /**
    * @brief Finalizes the HMAC computation.
@@ -87,7 +87,7 @@ class DigestCrypto {
    * @remark Size of the output array must be at least getDigestSize() bytes.
    * @param output Pointer to the output array where the HMAC result will be stored.
    */
-  void hmacFinish(uint8_t* output);
+  void hmacFinish(std::byte* output);
 
   /**
    * @brief Gets the size of the digest output.
@@ -110,7 +110,7 @@ class DigestCrypto {
    * @param length The number of bytes to hash.
    * @param output Pointer to the output array where the digest result will be stored, must be at least getDigestSize() bytes.
    */
-  void getDigest(const uint8_t* bytes, size_t length, uint8_t* output);
+  void getDigest(const std::byte* bytes, size_t length, std::byte* output);
 
   /**
    * @brief Performs a one-shot HMAC computation, simplifying the process.
@@ -121,8 +121,8 @@ class DigestCrypto {
    * @param messageLength Length of the message in bytes.
    * @param output Pointer to the output array where the HMAC result will be stored, must be at least getDigestSize() bytes.
    */
-  void getHmac(const uint8_t* key, size_t keyLength, const uint8_t* message,
-               size_t messageLength, uint8_t* output);
+  void getHmac(const std::byte* key, size_t keyLength, const std::byte* message,
+               size_t messageLength, std::byte* output);
 
  private:
   mbedtls_md_context_t ctx{};

@@ -141,7 +141,8 @@ void net::TLSSocket::setupBioCallbacks(bool blocking) {
                                     size_t len) {
     auto* socket = static_cast<TCPSocket*>(ctx);
 
-    auto res = transformBioRes(socket->write(buf, len), false);
+    auto res = transformBioRes(
+        socket->write(reinterpret_cast<const std::byte*>(buf), len), false);
     if (res) {
       return *res;
     }
@@ -162,7 +163,8 @@ void net::TLSSocket::setupBioCallbacks(bool blocking) {
         return timeoutRes.error().value();
       }
 
-      auto res = transformBioRes(socket->read(buf, len), true);
+      auto res = transformBioRes(
+          socket->read(reinterpret_cast<std::byte*>(buf), len), true);
       if (res) {
         return *res;
       }
@@ -174,7 +176,8 @@ void net::TLSSocket::setupBioCallbacks(bool blocking) {
     recvFunc = [](void* ctx, unsigned char* buf, size_t len) {
       auto* socket = static_cast<TCPSocket*>(ctx);
 
-      auto res = transformBioRes(socket->read(buf, len), true);
+      auto res = transformBioRes(
+          socket->read(reinterpret_cast<std::byte*>(buf), len), true);
       if (res) {
         return *res;
       }
@@ -220,8 +223,8 @@ int net::TLSSocket::takeFd() {
   return innerSocket.takeFd();
 }
 
-bell::Result<size_t> net::TLSSocket::read(uint8_t* buf, size_t len) {
-  int res = mbedtls_ssl_read(&sslCtx, buf, len);
+bell::Result<size_t> net::TLSSocket::read(std::byte* buf, size_t len) {
+  int res = mbedtls_ssl_read(&sslCtx, reinterpret_cast<uint8_t*>(buf), len);
 
   if (res < 0) {
     return tl::make_unexpected(mbedtlsToCommonErrc(res));
@@ -230,8 +233,9 @@ bell::Result<size_t> net::TLSSocket::read(uint8_t* buf, size_t len) {
   return static_cast<size_t>(res);
 }
 
-bell::Result<size_t> net::TLSSocket::write(const uint8_t* buf, size_t len) {
-  int res = mbedtls_ssl_write(&sslCtx, buf, len);
+bell::Result<size_t> net::TLSSocket::write(const std::byte* buf, size_t len) {
+  int res =
+      mbedtls_ssl_write(&sslCtx, reinterpret_cast<const uint8_t*>(buf), len);
 
   if (res < 0) {
     return tl::make_unexpected(mbedtlsToCommonErrc(res));

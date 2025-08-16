@@ -7,7 +7,7 @@ using namespace bell::io;
 CircularByteBuffer::CircularByteBuffer(size_t capacity)
     : storageCapacity(capacity), buffer(capacity) {}
 
-size_t CircularByteBuffer::write(const uint8_t* data, size_t dataLen) {
+size_t CircularByteBuffer::write(const std::byte* data, size_t dataLen) {
   if (data == nullptr || dataLen == 0) {
     return 0;
   }
@@ -45,7 +45,7 @@ size_t CircularByteBuffer::write(const uint8_t* data, size_t dataLen) {
   return bytesToCopy;
 }
 
-size_t CircularByteBuffer::read(uint8_t* buffer, size_t dataLen) {
+size_t CircularByteBuffer::read(std::byte* buffer, size_t dataLen) {
   if (buffer == nullptr || dataLen == 0) {
     return 0;
   }

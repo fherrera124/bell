@@ -63,7 +63,7 @@ std::error_code POSIXSocket::lastError() const {
   return std::error_code();
 }
 
-bell::Result<size_t> POSIXSocket::read(uint8_t* buf, size_t len) {
+bell::Result<size_t> POSIXSocket::read(std::byte* buf, size_t len) {
   if (!isValid()) {
     return tl::make_unexpected(
         std::make_error_code(std::errc::invalid_argument));
@@ -78,7 +78,7 @@ bell::Result<size_t> POSIXSocket::read(uint8_t* buf, size_t len) {
   return static_cast<size_t>(res);
 }
 
-bell::Result<size_t> POSIXSocket::write(const uint8_t* buf, size_t len) {
+bell::Result<size_t> POSIXSocket::write(const std::byte* buf, size_t len) {
   if (!isValid()) {
     return tl::make_unexpected(
         std::make_error_code(std::errc::invalid_argument));

@@ -229,7 +229,8 @@ std::ostream* http::Writer::getStream() const {
   return ostream;
 }
 
-bell::Result<> http::Writer::writeBodyRaw(const char* bytes, size_t bytesLen) {
+bell::Result<> http::Writer::writeBodyRaw(const std::byte* bytes,
+                                          size_t bytesLen) {
   if (!headersWritten) {
     return make_unexpected_errc(std::errc::operation_not_permitted);
   }
@@ -238,7 +239,8 @@ bell::Result<> http::Writer::writeBodyRaw(const char* bytes, size_t bytesLen) {
     return make_unexpected_errc(std::errc::io_error);
   }
 
-  ostream->write(bytes, static_cast<std::streamsize>(bytesLen));
+  ostream->write(reinterpret_cast<const char*>(bytes),
+                 static_cast<std::streamsize>(bytesLen));
   contentLengthWritten += bytesLen;
 
   if (!ostream->flush() || (ostream->fail() && !ostream->eof())) {
@@ -249,5 +251,6 @@ bell::Result<> http::Writer::writeBodyRaw(const char* bytes, size_t bytesLen) {
 }
 
 bell::Result<> http::Writer::writeBodyStringView(std::string_view body) {
-  return writeBodyRaw(body.data(), body.size());
+  return writeBodyRaw(reinterpret_cast<const std::byte*>(body.data()),
+                      body.size());
 }

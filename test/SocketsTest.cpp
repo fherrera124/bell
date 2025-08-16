@@ -36,11 +36,12 @@ void runEchoServer(std::shared_ptr<bell::net::TCPSocket> serverSocket) {
               std::string buffer;
               buffer.resize(1024);
               size_t bytesRead = *sock.read(
-                  reinterpret_cast<uint8_t*>(buffer.data()), buffer.size());
+                  reinterpret_cast<std::byte*>(buffer.data()), buffer.size());
               if (bytesRead > 0) {
                 BELL_LOG(info, "Echo server", "Received {} bytes", bytesRead);
                 (void)sock.write(
-                    reinterpret_cast<const uint8_t*>(buffer.data()), bytesRead);
+                    reinterpret_cast<const std::byte*>(buffer.data()),
+                    bytesRead);
               }
             });
       });
@@ -76,7 +77,8 @@ TEST_CASE("bell::io::Socket and derieved classes tests") {
   auto clientSocket = std::make_unique<bell::net::TCPSocket>();
 
   SUBCASE("Connect to echo server") {
-    REQUIRE(clientSocket->connect("127.0.0.1", echoServerPort, 2000).has_value());
+    REQUIRE(
+        clientSocket->connect("127.0.0.1", echoServerPort, 2000).has_value());
     REQUIRE(clientSocket->isValid());
   }
 
@@ -84,14 +86,14 @@ TEST_CASE("bell::io::Socket and derieved classes tests") {
     REQUIRE(clientSocket->connect("127.0.0.1", echoServerPort, 2000));
     std::string message = "Hello, Echo Server!";
     auto bytesWritten = clientSocket->write(
-        reinterpret_cast<const uint8_t*>(message.data()), message.size());
+        reinterpret_cast<const std::byte*>(message.data()), message.size());
 
     REQUIRE(bytesWritten.has_value());
     REQUIRE(bytesWritten == message.size());
 
     std::string readBuffer(1024, '\0');
     auto bytesRead = clientSocket->read(
-        reinterpret_cast<uint8_t*>(readBuffer.data()), readBuffer.size());
+        reinterpret_cast<std::byte*>(readBuffer.data()), readBuffer.size());
 
     REQUIRE(bytesRead);
     REQUIRE(bytesRead == message.size());
