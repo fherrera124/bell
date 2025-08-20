@@ -138,6 +138,10 @@ bell::Result<const std::byte*> Response::bytesPtr() {
   return bodyReader.getBodyBytesPtr();
 }
 
+bell::Result<size_t> Response::bytesLength() {
+  return bodyReader.getBodyBytesLength();
+}
+
 std::istream* Response::stream() const {
   return bodyReader.getStream();
 }
