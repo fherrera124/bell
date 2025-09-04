@@ -3,19 +3,19 @@
 namespace bell::io {
 
 FileDataStream::FileDataStream(std::ifstream&& file) : file(std::move(file)) {
-  if (!file.is_open() || !file.good()) {
+  if (!this->file.is_open() || !this->file.good()) {
     throw std::runtime_error(
         "FileDataStream: provided ifstream is not open or in bad state");
   }
 
   // Determine size (store current pos, seek, then restore)
-  auto currentPos = file.tellg();
-  file.seekg(0, std::ios::end);
-  std::streampos endPos = file.tellg();
+  auto currentPos = this->file.tellg();
+  this->file.seekg(0, std::ios::end);
+  std::streampos endPos = this->file.tellg();
   if (endPos >= 0) {
     fileSize = static_cast<size_t>(endPos);
   }
-  file.seekg(currentPos, std::ios::beg);
+  this->file.seekg(currentPos, std::ios::beg);
 }
 
 size_t FileDataStream::position() const {

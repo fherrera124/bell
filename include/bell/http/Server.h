@@ -16,6 +16,7 @@ namespace bell::http {
 class Server : bell::utils::Task {
  public:
   Server(int maxConnections = 5);
+  ~Server() override;
   using RequestHandler = std::function<void(
       const std::unique_ptr<Reader>& requestReader,
       const std::unique_ptr<Writer>& responseWriter,

@@ -23,6 +23,13 @@ http::Server::Server(int maxConnections)
   };
 }
 
+http::Server::~Server() {
+  stopTask();
+  if (listenSocket.isValid()) {
+    listenSocket.close();
+  }
+}
+
 bell::Result<> http::Server::listen(int port) {
   // Stop the task if it's already running
   stopTask();
@@ -106,10 +113,10 @@ void http::Server::registerPost(const std::string& path,
 }
 
 void http::Server::closeConnection(int fd) {
-  for (auto it = connections.begin(); it != connections.end();) {
-    if (it->socket->getFd() == fd) {
+  for (auto& connection : connections) {
+    if (connection.socket->getFd() == fd) {
       // Mark the connection as closed
-      it->closed = true;
+      connection.closed = true;
       return;
     }
   }
