@@ -5,7 +5,7 @@
 #include <cstdint>
 #include <memory>
 
-#include "tcb/span.hpp"
+#include "bell/audio/Common.h"
 
 // Common headers
 #include "bell/Result.h"
@@ -13,11 +13,6 @@
 
 namespace bell::audio {
 struct ContainerStreamInfo {
-  int streamIndex;
-};
-
-struct EncodedAudioFrame {
-  tcb::span<std::byte> data;
   int streamIndex;
 };
 
@@ -38,7 +33,7 @@ class Container {
   virtual bell::Result<> openForRead(
       std::shared_ptr<bell::io::DataStream> dataStream) = 0;
 
-  virtual bell::Result<EncodedAudioFrame> readNextFrame() = 0;
+  virtual bell::Result<EncodedPacket> readNextPacket() = 0;
 
   /**
      * @brief Seeks to a specific timestamp

@@ -1,8 +1,9 @@
 #include "bell/audio/OggContainer.h"
+#include <iostream>
 #include "bell/Logger.h"
 #include "bell/Result.h"
 #include "bell/audio/Common.h"
-#include "ogg.h"
+#include "ogg/ogg.h"
 
 using namespace bell::audio;
 
@@ -14,11 +15,7 @@ bell::Result<> OggContainer::openForRead(
     std::shared_ptr<bell::io::DataStream> dataStream) {
   stream = std::move(dataStream);
 
-  oggSyncState = ogg_sync_create();
-  if (!oggSyncState) {
-    return tl::make_unexpected(
-        std::make_error_code(std::errc::not_enough_memory));
-  }
+  ogg_sync_init(&oggSyncState);
 
   auto res = readNextPage();
   if (!res) {
@@ -26,12 +23,9 @@ bell::Result<> OggContainer::openForRead(
   }
 
   streamSerialNo = ogg_page_serialno(&oggPage);
-  oggStreamState = ogg_stream_create(streamSerialNo);
-  if (!oggStreamState) {
-    return tl::make_unexpected(audio::Errc::InvalidFormat);
-  }
+  ogg_stream_init(&oggStreamState, streamSerialNo);
 
-  if (ogg_stream_pagein(oggStreamState, &oggPage) < 0) {
+  if (ogg_stream_pagein(&oggStreamState, &oggPage) < 0) {
     // Could not feed the the first page
     return tl::make_unexpected(audio::Errc::CodecError);
   }
@@ -44,32 +38,27 @@ bell::Result<> OggContainer::openForRead(
 
 bell::Result<> OggContainer::readNextPage() {
   while (true) {
-    int ret = ogg_sync_pageout(oggSyncState, &oggPage);
+    int ret = ogg_sync_pageout(&oggSyncState, &oggPage);
     if (ret == 1)
       return {};  // Found a page
 
-    uint8_t* bufIn = ogg_sync_bufferin(oggSyncState, bufferInLen);
+    char* bufIn = ogg_sync_buffer(&oggSyncState, bufferInLen);
     auto res = stream->read(reinterpret_cast<std::byte*>(bufIn), bufferInLen);
     if (!res) {
       return tl::make_unexpected(res.error());
     }
 
     // Notify Ogg of the new data
-    ogg_sync_wrote(oggSyncState, *res);
+    ogg_sync_wrote(&oggSyncState, *res);
   }
 
   return {};
 }
 
-bell::Result<EncodedAudioFrame> OggContainer::readNextFrame() {
-  if (packet.packet != nullptr) {
-    ogg_packet_release(&packet);
-    packet.packet = nullptr;
-  }
-
+bell::Result<EncodedPacket> OggContainer::readNextPacket() {
   int ret;
   // Try to get the next packet from the current page
-  while ((ret = ogg_stream_packetout(oggStreamState, &packet)) != 1) {
+  while ((ret = ogg_stream_packetout(&oggStreamState, &packet)) != 1) {
     if (ret < 0) {
       // Synchronization lost or other error
       return tl::make_unexpected(audio::Errc::CodecError);
@@ -82,28 +71,23 @@ bell::Result<EncodedAudioFrame> OggContainer::readNextFrame() {
     }
 
     // Feed the new page to the stream
-    if (ogg_stream_pagein(oggStreamState, &oggPage) < 0) {
+    if (ogg_stream_pagein(&oggStreamState, &oggPage) < 0) {
       return tl::make_unexpected(audio::Errc::CodecError);
     }
   }
 
   // Create EncodedAudioFrame from the packet
-  EncodedAudioFrame frame;
+  EncodedPacket frame;
   frame.data = {reinterpret_cast<std::byte*>(packet.packet),
                 static_cast<size_t>(packet.bytes)};
-  frame.streamIndex = 0;
+  frame.streamIdx = 0;
+  frame.timestamp = packet.granulepos;
+  // TODO: calculate duration
 
   return frame;
 }
 
 void OggContainer::close() {
-  if (oggStreamState) {
-    ogg_stream_destroy(oggStreamState);
-    oggStreamState = nullptr;
-  }
-
-  if (oggSyncState) {
-    ogg_sync_destroy(oggSyncState);
-    oggSyncState = nullptr;
-  }
+  ogg_stream_destroy(&oggStreamState);
+  ogg_sync_destroy(&oggSyncState);
 }

@@ -141,16 +141,19 @@ struct fdk_aacenc_error_category : public std::error_category {
     }
   }
 };
+
+const fdk_aacdec_error_category fdkAACDecErrorCategory{};
+const fdk_aacenc_error_category fdkAACEncErrorCategory{};
 }  // namespace internal
 
 // std::error_code helper
 inline std::error_code make_fdk_aacdec_error_code(int err) {
-  return {static_cast<int>(err), internal::fdk_aacdec_error_category()};
+  return {static_cast<int>(err), internal::fdkAACDecErrorCategory};
 };
 
 // std::error_code helper
 inline std::error_code make_fdk_aacenc_error_code(int err) {
-  return {static_cast<int>(err), internal::fdk_aacenc_error_category()};
+  return {static_cast<int>(err), internal::fdkAACEncErrorCategory};
 };
 
 class AACCodec : public Codec {
@@ -158,71 +161,44 @@ class AACCodec : public Codec {
   AACCodec() = default;
   ~AACCodec() override;
 
-  enum class AACMode {
-    AAC_LC,  // Low Complexity
-
-    // TODO: Support for other AAC types
-    // Currently only AAC_LC is supported, due to its patent being expired
-    HE_AAC,     // High Efficiency AAC
-    HE_AAC_V2,  // High Efficiency AAC v2
-    AAC_LD,     // Low Delay
-    AAC_ELD,    // Enhanced Low Delay
-    BSAC,       // Bit-Sliced Arithmetic Coding
-    USAC,       // Unified Speech and Audio Coding
-  };
-
-  // AAC specific codec configuration
-  struct AACCodecConfig {
-    int transportType = 0;  // Transport type, e.g., TT_MP4_RAW
-    std::optional<AACMode> mode =
-        AACMode::AAC_LC;  // AAC mode, e.g., AAC_LC, HE_AAC
-
-    std::optional<int> bitrateMode =
-        3;  // Optional mode for the VBR bitrate, 3 being medium quality
-
-    std::optional<size_t>
-        bitrate;  // Optional CBR bitrate in bits per second, overrides bitrateMode when set
-
-    std::optional<std::vector<uint8_t>>
-        decoderAudioSpecificConfig;  // Optional decoder audio specific config
-  };
-
   // Delete copy constructor and copy assignment operator
   AACCodec(const AACCodec&) = delete;
   AACCodec& operator=(const AACCodec&) = delete;
 
   // Codec implementation
   bell::Result<> setupEncode(const AudioFormat& audioFormat,
-                             std::optional<int> samplesPerFrame,
-                             const std::any& codecSpecificConfig) override;
+                             const CodecConfig& codecSpecificConfig) override;
   bell::Result<> setupDecode(const AudioFormat& audioFormat,
-                             std::optional<int> samplesPerFrame,
-                             const std::any& codecSpecificConfig) override;
-  bell::Result<std::byte*> encode(const std::byte* pcmInput, size_t inputLength,
-                                  size_t& outputLength) override;
-  bell::Result<std::byte*> decode(const std::byte* encodedInput,
-                                  size_t inputLength,
-                                  size_t& outputLength) override;
-
-  std::any getConfig() const override { return config; }
+                             const CodecConfig& codecSpecificConfig) override;
+  bell::Result<SetupStatus> setupDecodeFromHeaders(
+      tcb::span<const std::byte> encodedInput) override {
+    (void)encodedInput;
+    return tl::make_unexpected(Errc::OperationNotSupported);
+  };
+  bell::Result<EncodeResult> encode(
+      tcb::span<const std::byte> pcmInput) override;
+  bell::Result<DecodeResult> decode(
+      tcb::span<const std::byte> encodedInput) override;
   audio::Format getAudioFormat() const override { return audioFormat; }
 
  private:
   const char* LOG_TAG = "audio::AACCodec";
 
+  AudioFormat audioFormat;
+
   // Codec configuration
-  AACCodecConfig config{};
+  AACConfig config{};
+  uint32_t samplesPerFrame = 960;
 
   AACENCODER* encoder = nullptr;
   AAC_DECODER_INSTANCE* decoder = nullptr;
   CStreamInfo* streamInfo = nullptr;  // Stream info for decoded audio
 
   // tmp buffer for encode / decode calls
-  std::vector<uint8_t> tmpBuffer;
+  std::vector<std::byte> tmpBuffer;
 };
 }  // namespace bell::audio
 
 namespace bell {
 using AACCodec = audio::AACCodec;
-using AACCodecConfig = audio::AACCodec::AACCodecConfig;
 }  // namespace bell

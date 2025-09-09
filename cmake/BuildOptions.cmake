@@ -2,6 +2,10 @@ option(BELL_DISABLE_TESTS "Disable bell unit tests" ON)
 option(BELL_RUN_CLANGTIDY "Run clang-tidy static analysis" OFF)
 option(BELL_DISABLE_SANITIZERS "Disable sanitizers" ON)
 
+# Audio containers
+option(BELL_DISABLE_CONTAINERS "Disable the entire audio container wrapper" OFF)
+option(BELL_CONTAINER_OGG "Support OGG container" ON)
+
 # Audio codecs
 option(BELL_DISABLE_CODECS "Disable the entire audio codec wrapper" OFF)
 option(BELL_CODEC_AAC "Support fdk-aac codec" ON)
@@ -30,12 +34,18 @@ message(STATUS "Bell options:")
 message(STATUS "    Disable unit tests: ${BELL_DISABLE_TESTS}")
 message(STATUS "    Run clang-tidy: ${BELL_RUN_CLANGTIDY}")
 message(STATUS "    Disable sanitizers: ${BELL_DISABLE_SANITIZERS}")
+message(STATUS "    Disable all containers: ${BELL_DISABLE_CONTAINERS}")
+
+if(NOT BELL_DISABLE_CONTAINERS)
+    message(STATUS "  * OGG audio container: ${BELL_CONTAINER_OGG}")
+endif()
+
 message(STATUS "    Disable all codecs: ${BELL_DISABLE_CODECS}")
 
 if(NOT BELL_DISABLE_CODECS)
     message(STATUS "  * AAC audio codec: ${BELL_CODEC_AAC}")
     message(STATUS "  * MP3 audio codec: ${BELL_CODEC_MP3}")
-    message(STATUS "  * Tremor audio codec: ${BELL_CODEC_TREMOR}")
+    message(STATUS "  * Tremor (vorbis) audio codec: ${BELL_CODEC_TREMOR}")
     message(STATUS "    Use Vorbis float version: ${BELL_VORBIS_FLOAT}")
     message(STATUS "  * Opus audio codec: ${BELL_CODEC_OPUS}")
 endif()

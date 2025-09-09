@@ -41,14 +41,12 @@ int OpusCodec::getOpusFrameSize(int frameDuration) {
 }
 
 bell::Result<> OpusCodec::setupEncode(const AudioFormat& audioFormat,
-                                      std::optional<int> samplesPerFrame,
-                                      const std::any& codecSpecificConfig) {
+                                      const CodecConfig& codecSpecificConfig) {
   // Check if the config is of the correct type
-  try {
-    config = std::any_cast<OpusCodecConfig>(codecSpecificConfig);
-  } catch (const std::bad_any_cast& err) {
-    return tl::make_unexpected(audio::Errc::UnsupportedConfig);
+  if (!std::holds_alternative<OpusConfig>(codecSpecificConfig)) {
+    return tl::make_unexpected(Errc::UnsupportedConfig);
   }
+  config = std::get<OpusConfig>(codecSpecificConfig);
 
   tmpBuffer.resize(tmpBufferSize);
 
@@ -76,15 +74,14 @@ bell::Result<> OpusCodec::setupEncode(const AudioFormat& audioFormat,
     return tl::make_unexpected(make_opus_error_code(opusError));
   }
 
-  if (samplesPerFrame.has_value()) {
-    this->samplesPerFrame = samplesPerFrame;
+  if (config.samplesPerPacket.has_value()) {
     int frameLength =
-        static_cast<int>(audioFormat.samplesToMs(samplesPerFrame.value()));
+        static_cast<int>(audioFormat.samplesToMs(*config.samplesPerPacket));
     auto opusDuration = getOpusFrameSize(frameLength);
 
     // Fallback on 20ms if unsupported
     if (opusDuration == OPUS_FRAMESIZE_20_MS) {
-      this->samplesPerFrame = 960;
+      config.samplesPerPacket = 960;
     }
 
     // Encoder settings
@@ -101,13 +98,12 @@ bell::Result<> OpusCodec::setupEncode(const AudioFormat& audioFormat,
 }
 
 bell::Result<> OpusCodec::setupDecode(const AudioFormat& audioFormat,
-                                      std::optional<int> samplesPerFrame,
-                                      const std::any& codecSpecificConfig) {
-  try {
-    config = std::any_cast<OpusCodecConfig>(codecSpecificConfig);
-  } catch (const std::bad_any_cast&) {
-    return tl::make_unexpected(audio::Errc::UnsupportedConfig);
+                                      const CodecConfig& codecSpecificConfig) {
+  // Check if the config is of the correct type
+  if (!std::holds_alternative<OpusConfig>(codecSpecificConfig)) {
+    return tl::make_unexpected(Errc::UnsupportedConfig);
   }
+  config = std::get<OpusConfig>(codecSpecificConfig);
 
   // Resize the tmpbuffer
   tmpBuffer.resize(config.bufferSize);
@@ -121,7 +117,6 @@ bell::Result<> OpusCodec::setupDecode(const AudioFormat& audioFormat,
     return tl::make_unexpected(audio::Errc::UnsupportedConfig);
   }
   this->audioFormat = audioFormat;
-  this->samplesPerFrame = samplesPerFrame;
 
   int opusError = 0;
 
@@ -140,14 +135,14 @@ bell::Result<> OpusCodec::setupDecode(const AudioFormat& audioFormat,
   return {};
 }
 
-bell::Result<std::byte*> OpusCodec::encode(const std::byte* pcmInput,
-                                           size_t inputLength,
-                                           size_t& outputLength) {
+bell::Result<Codec::EncodeResult> OpusCodec::encode(
+    tcb::span<const std::byte> pcmInput) {
   assert(encoder != nullptr);
   int32_t packetSize = opus_encode(
-      encoder, reinterpret_cast<const opus_int16*>(pcmInput),
-      static_cast<int>(inputLength) / getAudioFormat().getNumChannels(),
-      tmpBuffer.data(), static_cast<int>(tmpBuffer.size()));
+      encoder, reinterpret_cast<const opus_int16*>(pcmInput.data()),
+      static_cast<int>(pcmInput.size()) / getAudioFormat().getNumChannels(),
+      reinterpret_cast<uint8_t*>(tmpBuffer.data()),
+      static_cast<int>(tmpBuffer.size()));
 
   // Handle encoded result
   if (packetSize < 0) {
@@ -160,20 +155,23 @@ bell::Result<std::byte*> OpusCodec::encode(const std::byte* pcmInput,
     return tl::make_unexpected(audio::Errc::NotEnoughBytes);
   }
 
-  outputLength = packetSize;
-  return reinterpret_cast<std::byte*>(tmpBuffer.data());
+  return EncodeResult{
+      .packets =
+          {
+              {.data = {tmpBuffer.data(), static_cast<uint32_t>(packetSize)}},
+          },
+      .consumedInputBytes = pcmInput.size()};
 }
 
-bell::Result<std::byte*> OpusCodec::decode(const std::byte* encodedInput,
-                                           size_t inputLength,
-                                           size_t& outputLength) {
+bell::Result<Codec::DecodeResult> OpusCodec::decode(
+    tcb::span<const std::byte> encodedInput) {
   assert(decoder != nullptr);
 
-  auto pcmLen =
-      opus_decode(decoder, reinterpret_cast<const unsigned char*>(encodedInput),
-                  static_cast<int32_t>(inputLength),
-                  reinterpret_cast<opus_int16*>(tmpBuffer.data()),
-                  samplesPerFrame.value_or(960), false);
+  auto pcmLen = opus_decode(
+      decoder, reinterpret_cast<const unsigned char*>(encodedInput.data()),
+      static_cast<int32_t>(encodedInput.size()),
+      reinterpret_cast<opus_int16*>(tmpBuffer.data()),
+      config.samplesPerPacket.value_or(960), false);
 
   // Handle encoded result
   if (pcmLen < 0) {
@@ -185,6 +183,8 @@ bell::Result<std::byte*> OpusCodec::decode(const std::byte* encodedInput,
     return tl::make_unexpected(audio::Errc::NotEnoughBytes);
   }
 
-  outputLength = getAudioFormat().samplesToBytes(pcmLen);
-  return reinterpret_cast<std::byte*>(tmpBuffer.data());
+  return DecodeResult{
+      .pcm = {tmpBuffer.data(), getAudioFormat().samplesToBytes(pcmLen)},
+      .consumedInputBytes = encodedInput.size(),
+  };
 }

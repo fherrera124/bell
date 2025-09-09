@@ -70,6 +70,12 @@ if(UNIX AND NOT APPLE)
     list(APPEND BELL_LIBS avahi-client avahi-common)
 endif()
 
+if (NOT BELL_DISABLE_CONTAINERS AND BELL_CONTAINER_OGG)
+    add_subdirectory(external/libogg)
+    # Include ogg
+    list(APPEND BELL_LIBS ogg)
+endif()
+
 # Audio codec - Opus and Opus resampler
 if(NOT BELL_DISABLE_CODECS AND BELL_CODEC_OPUS)
     # Opus build configuration
@@ -102,7 +108,7 @@ endif()
 # Audio codec - Vorbis, tremor decoder
 if(NOT BELL_DISABLE_CODECS AND BELL_CODEC_TREMOR)
     add_subdirectory(external/tremor)
-    list(APPEND BELL_LIBS tremor)
+    list(APPEND BELL_LIBS vorbisidec)
 endif()
 
 # Audio backends

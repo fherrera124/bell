@@ -1,15 +1,62 @@
 #pragma once
 
 // Standard includes
-#include <any>
 #include <cstddef>
 #include <optional>
+#include <variant>
 
-// Common headers, required before bell result
+// Own headers
 #include "bell/Result.h"
 #include "bell/audio/Common.h"
 
 namespace bell::audio {
+
+struct OpusConfig {
+  // Preferred samples per packet (optional)
+  std::optional<uint32_t> samplesPerPacket;
+
+  // Opus application, defaults to OPUS_APPLICATION_AUDIO
+  std::optional<int> application;
+
+  // This will be the maximum decoded frame size in bytes, in a single decode call.
+  // The default is set to be enough to store 100ms of audio at 48kHz, 2 channels, 16-bit.
+  size_t bufferSize = (100 * 48000 / 1000) * 2 * 2;
+};
+
+struct AACConfig {
+  // Preferred samples per packet (optional)
+  std::optional<uint32_t> samplesPerPacket;
+
+  int transportType = 0;
+
+  enum class Profile : uint8_t {
+    AAC_LC,
+
+    // TODO: Support for other AAC types
+    // Currently only AAC_LC is supported, due to its patent being expired
+    HE_AAC,     // High Efficiency AAC
+    HE_AAC_V2,  // High Efficiency AAC v2
+    AAC_LD,     // Low Delay
+    AAC_ELD,    // Enhanced Low Delay
+    BSAC,       // Bit-Sliced Arithmetic Coding
+    USAC,       // Unified Speech and Audio Coding
+  } profile = Profile::AAC_LC;
+
+  // Bitrate configuration
+  struct Bitrate {
+    enum class Mode { VBR, CBR } mode = Mode::VBR;
+    int quality = 3;               // For VBR (0=low, 5=high)
+    std::optional<size_t> cbrBps;  // For CBR (bits/sec)
+  } bitrate;
+
+  // Optional decoder audio specific config
+  std::optional<std::vector<uint8_t>> decoderAudioSpecificConfig;
+};
+
+struct TremorConfig {};
+
+using CodecConfig = std::variant<OpusConfig, AACConfig, TremorConfig>;
+
 /**
  * Base class for audio codecs
  */
@@ -18,73 +65,83 @@ class Codec {
   Codec() = default;
   virtual ~Codec() = default;
 
+  struct EncodeResult {
+    std::vector<EncodedPacket> packets;
+    size_t consumedInputBytes = 0;
+  };
+
+  struct DecodeResult {
+    tcb::span<const std::byte> pcm;
+    size_t consumedInputBytes = 0;
+  };
+
+  enum class SetupStatus : uint8_t {
+    Incomplete,  // More headers/data needed
+    Ready        // Codec is ready to decode
+  };
+
   /**
    * @brief Setups the codec in encode mode
    *
    * @param audioFormat PCM audio format to use with this codec
-   * @param samplesPerFrame optional, preferred samples-per-frame value
    * @param codecSpecificConfig codec-specific configuration, see implementation details
    * @return Result of the operation, might return Errc::UnsupportedConfig if codec does not support the requested config
    */
   virtual bell::Result<> setupEncode(
       const AudioFormat& audioFormat,
-      std::optional<int> samplesPerFrame = std::nullopt,
-      const std::any& codecSpecificConfig = {}) = 0;
+      const CodecConfig& codecSpecificConfig = {}) = 0;
 
   /**
    * @brief Setups the codec in decode mode
    *
    * @param audioFormat PCM audio format to use with this codec
-   * @param samplesPerFrame optional, preferred samples-per-frame value
    * @param codecSpecificConfig codec-specific configuration, see implementation details
    * @return Result of the operation, might return Errc::UnsupportedConfig if codec does not support the requested config
    */
   virtual bell::Result<> setupDecode(
       const AudioFormat& audioFormat,
-      std::optional<int> samplesPerFrame = std::nullopt,
-      const std::any& codecSpecificConfig = {}) = 0;
+      const CodecConfig& codecSpecificConfig = {}) = 0;
 
   /**
-   * @brief Returns the full codec configuration
+   * @brief Setups the codec in decode mode, by reading the codec-specific configuration from the encoded input
+   *
+   * @remark In case this method returns false, call it again with the next encoded input data. Some codecs require multiple headers to be parsed.
+   * @param encodedInput Pointer to the encoded input data
+   * @param inputLength Length of the encoded input data
+   * @return Setup result, might return Errc::UnsupportedConfig if codec does not support the requested config
    */
-  virtual std::any getConfig() const = 0;
+  virtual bell::Result<SetupStatus> setupDecodeFromHeaders(
+      tcb::span<const std::byte> encodedInput) = 0;
 
   /**
-   * @brief Returns the configured bitwidth
+   * @brief Returns the configured audio format
    */
   virtual bell::audio::Format getAudioFormat() const = 0;
 
   /**
    * @brief Encodes the input PCM data, returning the encoded data
    *
-   * @param pcmInput Pointer to the input PCM data, in the format specified by the audioFormat
-   * @param inputLength Length of the input PCM data
-   * @param outputLength Pointer to size_t to store the length of the encoded data
-   * @return uint8_t* Pointer to the encoded data, or error
+   * @param pcmInput Span of the input PCM data, in the format specified by the audioFormat
+   * @return EncodeResult contains the encoded data, or error
    */
-  virtual bell::Result<std::byte*> encode(const std::byte* pcmInput,
-                                          size_t inputLength,
-                                          size_t& outputLength) = 0;
+  virtual bell::Result<EncodeResult> encode(
+      tcb::span<const std::byte> pcmInput) = 0;
 
   /**
    * @brief Decodes the input encoded data, returning the decoded PCM data
    *
-   * @param encodedInput Pointer to the input encoded data
-   * @param inputLength Length of the input encoded data
-   * @param outputLength Pointer to size_t to store the length of the decoded PCM data
-   * @param result Result code of the operation, indicating success, error, or need for more data
-   * @return std::byte* Pointer to the decoded PCM data, or error
+   * @param encodedInput Span of the encoded input data
+   * @return DecodeResult contains the decoded PCM data, or error
    */
-  virtual bell::Result<std::byte*> decode(const std::byte* encodedInput,
-                                          size_t inputLength,
-                                          size_t& outputLength) = 0;
-
- protected:
-  AudioFormat audioFormat{};
-  std::optional<int> samplesPerFrame{};
+  virtual bell::Result<DecodeResult> decode(
+      tcb::span<const std::byte> encodedInput) = 0;
 };
 }  // namespace bell::audio
 
 namespace bell {
 using AudioCodec = audio::Codec;
-}
+
+using OpusConfig = audio::OpusConfig;
+using AACConfig = audio::AACConfig;
+using TremorConfig = audio::TremorConfig;
+}  // namespace bell

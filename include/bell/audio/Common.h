@@ -1,7 +1,10 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 #include <system_error>
+
+#include <tcb/span.hpp>
 
 namespace bell::audio {
 
@@ -13,7 +16,15 @@ enum class Errc {
   NotEnoughBytes = 1,
   CodecError = 2,
   UnsupportedConfig = 3,
-  InvalidFormat = 4
+  InvalidFormat = 4,
+  OperationNotSupported = 5
+};
+
+struct EncodedPacket {
+  tcb::span<std::byte> data;
+  std::optional<uint32_t> timestamp = std::nullopt;
+  std::optional<uint32_t> duration = std::nullopt;
+  uint32_t streamIdx = 0;
 };
 
 namespace internal {
@@ -43,15 +54,33 @@ inline std::error_code make_error_code(const bell::audio::Errc& e) {
   return {static_cast<int>(e), bell::audio::internal::audio_error_category()};
 };
 
-// Enum class for the bit width of audio samples.
-enum class BitWidth : uint8_t {
-  BW_8 = 8,
-  BW_16 = 16,
-  BW_24 = 24,
-  BW_32 = 32,
-  BW_64 = 64,  // Not commonly used, but included for completeness
+// Enum class for the sample format. Replaces BitWidth.
+enum class SampleFormat : uint8_t {
+  U8,   // Unsigned 8-bit PCM
+  S16,  // Signed 16-bit PCM
+  S24,  // Signed 24-bit PCM (usually stored in 32 bits)
+  S32,  // Signed 32-bit PCM
+  F32,  // 32-bit Floating-Point
+  F64,  // 64-bit Floating-Point
 };
 
+// Helper to get the size of a sample in bytes
+inline size_t getSampleSizeInBytes(SampleFormat format) {
+  switch (format) {
+    case SampleFormat::U8:
+      return 1;
+    case SampleFormat::S16:
+      return 2;
+    case SampleFormat::S24:
+      return 3;  // Packed 24-bit
+    case SampleFormat::S32:
+    case SampleFormat::F32:
+      return 4;
+    case SampleFormat::F64:
+      return 8;
+  }
+  return 0;  // Should not happen
+}
 // Enum class for the sample rate of audio samples.
 enum class SampleRate : uint32_t {
   SR_8000HZ = 8000,
@@ -67,62 +96,63 @@ class Format {
   // Default constructor
   Format() = default;
 
-  Format(uint8_t numChannels, BitWidth bitWidth, SampleRate sampleRate)
-      : ch(numChannels), bw(bitWidth), sr(sampleRate) {}
-
-  Format(uint8_t numChannels, uint8_t bitWidth, uint32_t sampleRate)
-      : ch(numChannels),
-        bw(static_cast<BitWidth>(bitWidth)),
-        sr(static_cast<SampleRate>(sampleRate)) {}
-
+  Format(int numChannels, SampleFormat sampleFormat, SampleRate sampleRate)
+      : ch(numChannels), sf(sampleFormat), sr(sampleRate) {}
   // Getters
-  BitWidth getBitWidth() const { return bw; }
+  SampleFormat getSampleFormat() const { return sf; }
   SampleRate getSampleRate() const { return sr; }
   uint8_t getNumChannels() const { return ch; }
   uint32_t getSampleRateValue() const { return static_cast<uint32_t>(sr); }
 
   // Setters
-  void setBitWidth(BitWidth bitWidth) { bw = bitWidth; }
+  void setSampleFormat(SampleFormat sampleFormat) { sf = sampleFormat; }
   void setSampleRate(SampleRate sampleRate) { sr = sampleRate; }
-  void setNumChannels(uint8_t numChannels) { ch = numChannels; }
+  void setNumChannels(int numChannels) { ch = numChannels; }
 
-  bool operator==(const Format& other) const {
-    return bw == other.bw && sr == other.sr && ch == other.ch;
+  // Operators
+  constexpr bool operator==(const Format& other) const noexcept {
+    return sf == other.sf && sr == other.sr && ch == other.ch;
   }
 
-  bool operator!=(const Format& other) const { return !(*this == other); }
+  constexpr bool operator!=(const Format& other) const noexcept {
+    return !(*this == other);
+  }
+
+  // --- Conversion Methods (with fixes and improvements) ---
 
   // Convert sample count to bytes
-  uint32_t samplesToBytes(uint32_t samples) const {
-    return (static_cast<int>(bw) / 8) * samples * ch;
+  constexpr uint32_t samplesToBytes(uint32_t samples) const noexcept {
+    return getSampleSizeInBytes(sf) * samples * ch;
   }
 
   // Convert bytes to sample count
-  uint32_t bytesToSamples(uint32_t bytes) const {
-    return bytes / (static_cast<int>(bw) / 8) / ch;
+  constexpr uint32_t bytesToSamples(uint32_t bytes) const noexcept {
+    // Avoid division by zero if format is invalid
+    const uint32_t frameSize = getSampleSizeInBytes(sf) * ch;
+    return frameSize > 0 ? bytes / frameSize : 0;
   }
 
-  // Convert milliseconds to samples
-  uint32_t msToSamples(uint32_t ms) const {
-    return (static_cast<int>(sr) / 1000) * ms;
+  // Convert milliseconds to samples (FIXED)
+  constexpr uint32_t msToSamples(uint32_t ms) const noexcept {
+    // Multiply first to preserve precision, use 64-bit intermediate to prevent overflow
+    return (static_cast<uint64_t>(getSampleRateValue()) * ms) / 1000;
   }
 
-  // Convert samples to milliseconds
-  uint32_t samplesToMs(uint32_t samples) const {
-    return samples / (static_cast<int>(sr) / 1000);
+  // Convert samples to milliseconds (FIXED)
+  constexpr uint32_t samplesToMs(uint32_t samples) const noexcept {
+    return (static_cast<uint64_t>(samples) * 1000) / getSampleRateValue();
   }
 
   // Convert milliseconds to bytes
-  uint32_t msToBytes(uint32_t ms) const {
+  constexpr uint32_t msToBytes(uint32_t ms) const noexcept {
     return samplesToBytes(msToSamples(ms));
   }
 
  private:
-  uint8_t ch = 2;
-  BitWidth bw = BitWidth::BW_16;
+  int ch = 2;
+  SampleFormat sf = SampleFormat::S16;
   SampleRate sr = SampleRate::SR_44100HZ;
 };
-
 }  // namespace bell::audio
 
 namespace std {
@@ -133,5 +163,5 @@ struct is_error_code_enum<bell::audio::Errc> : true_type {};
 namespace bell {
 using AudioFormat = audio::Format;
 using SampleRate = audio::SampleRate;
-using BitWidth = audio::BitWidth;
+using SampleFormat = audio::SampleFormat;
 }  // namespace bell

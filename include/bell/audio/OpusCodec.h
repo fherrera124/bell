@@ -35,11 +35,13 @@ struct opus_error_category : public std::error_category {
     }
   }
 };
+
+const opus_error_category opusErrorCategory{};
 }  // namespace internal
 
 // std::error_code helper
 inline std::error_code make_opus_error_code(int err) {
-  return {static_cast<int>(err), internal::opus_error_category()};
+  return {static_cast<int>(err), internal::opusErrorCategory};
 };
 
 class OpusCodec : public Codec {
@@ -47,34 +49,25 @@ class OpusCodec : public Codec {
   OpusCodec() = default;
   ~OpusCodec() override;
 
-  // Opus specific codec configuration
-  struct OpusCodecConfig {
-    // Opus application, defaults to OPUS_APPLICATION_AUDIO
-    std::optional<int> application;
-
-    // This will be the maximum decoded frame size in bytes, in a single decode call.
-    // The default is set to be enough to store 100ms of audio at 48kHz, 2 channels, 16-bit.
-    uint32_t bufferSize = (100 * 44800 / 1000) * 2 * 2;
-  };
-
   // Delete copy constructor and copy assignment operator
   OpusCodec(const OpusCodec&) = delete;
   OpusCodec& operator=(const OpusCodec&) = delete;
 
   // Codec implementation
   bell::Result<> setupEncode(const AudioFormat& audioFormat,
-                             std::optional<int> samplesPerFrame,
-                             const std::any& codecSpecificConfig) override;
+                             const CodecConfig& codecSpecificConfig) override;
   bell::Result<> setupDecode(const AudioFormat& audioFormat,
-                             std::optional<int> samplesPerFrame,
-                             const std::any& codecSpecificConfig) override;
-  bell::Result<std::byte*> encode(const std::byte* pcmInput, size_t inputLength,
-                                  size_t& outputLength) override;
-  bell::Result<std::byte*> decode(const std::byte* encodedInput,
-                                  size_t inputLength,
-                                  size_t& outputLength) override;
+                             const CodecConfig& codecSpecificConfig) override;
+  bell::Result<SetupStatus> setupDecodeFromHeaders(
+      tcb::span<const std::byte> encodedInput) override {
+    (void)encodedInput;
+    return tl::make_unexpected(Errc::OperationNotSupported);
+  };
+  bell::Result<EncodeResult> encode(
+      tcb::span<const std::byte> pcmInput) override;
+  bell::Result<DecodeResult> decode(
+      tcb::span<const std::byte> encodedInput) override;
 
-  std::any getConfig() const override { return config; }
   audio::Format getAudioFormat() const override { return audioFormat; }
 
  private:
@@ -82,14 +75,16 @@ class OpusCodec : public Codec {
   OpusEncoder* encoder = nullptr;
   OpusDecoder* decoder = nullptr;
 
+  AudioFormat audioFormat;
+
   // Codec configuration
-  OpusCodecConfig config{};
+  OpusConfig config;
 
   /// Max opus frame size is 1275 as from RFC6716.
   static const int tmpBufferSize = 1024 * 2;
 
   // tmp buffer for encode / decode calls
-  std::vector<uint8_t> tmpBuffer;
+  std::vector<std::byte> tmpBuffer;
 
   /// maps int to OPUS_FRAMESIZE_*
   static int getOpusFrameSize(int frameDuration);
@@ -98,5 +93,4 @@ class OpusCodec : public Codec {
 
 namespace bell {
 using OpusCodec = audio::OpusCodec;
-using OpusCodecConfig = audio::OpusCodec::OpusCodecConfig;
 }  // namespace bell

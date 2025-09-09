@@ -1,10 +1,10 @@
 #include "bell/audio/AACCodec.h"
 
 // Standar includes
-#include <any>
 #include <cassert>
 #include <cstddef>
 #include <unordered_map>
+#include <variant>
 
 // Library includes
 
@@ -57,16 +57,13 @@ AACCodec::~AACCodec() {
 }
 
 bell::Result<> AACCodec::setupEncode(const AudioFormat& audioFormat,
-                                     std::optional<int> samplesPerFrame,
-                                     const std::any& codecSpecificConfig) {
-  try {
-    // Check if the config is of the correct type
-    config = std::any_cast<AACCodecConfig>(codecSpecificConfig);
-  } catch (const std::bad_any_cast&) {
+                                     const CodecConfig& codecSpecificConfig) {
+  if (!std::holds_alternative<AACConfig>(codecSpecificConfig)) {
     return tl::make_unexpected(Errc::UnsupportedConfig);
   }
+  config = std::get<AACConfig>(codecSpecificConfig);
 
-  if (config.mode != AACMode::AAC_LC) {
+  if (config.profile != AACConfig::Profile::AAC_LC) {
     BELL_LOG(error, LOG_TAG, "AAC Codec only supports AAC_LC");
     return tl::make_unexpected(Errc::UnsupportedConfig);
   }
@@ -106,14 +103,13 @@ bell::Result<> AACCodec::setupEncode(const AudioFormat& audioFormat,
     return tl::make_unexpected(make_fdk_aacenc_error_code(res));
   }
 
-  if (config.bitrate.has_value()) {
+  if (config.bitrate.mode == AACConfig::Bitrate::Mode::CBR) {
     // bitrate cbr mode
-    res = aacEncoder_SetParam(encoder, AACENC_BITRATE, config.bitrate.value());
+    res = aacEncoder_SetParam(encoder, AACENC_BITRATE, *config.bitrate.cbrBps);
   } else {
     // vbr mode
-    res =
-        aacEncoder_SetParam(encoder, AACENC_BITRATEMODE,
-                            config.bitrateMode.value_or(3));  // Default bitrate
+    res = aacEncoder_SetParam(encoder, AACENC_BITRATEMODE,
+                              config.bitrate.quality);
   }
 
   if (res != AACENC_OK) {
@@ -132,10 +128,10 @@ bell::Result<> AACCodec::setupEncode(const AudioFormat& audioFormat,
   }
 
   // Ensure default frame length is set
-  this->samplesPerFrame = samplesPerFrame.value_or(1024);
+  this->samplesPerFrame = config.samplesPerPacket.value_or(960);
 
   res = aacEncoder_SetParam(encoder, AACENC_GRANULE_LENGTH,
-                            this->samplesPerFrame.value_or(1024));
+                            this->samplesPerFrame);
   if (res != AACENC_OK) {
     BELL_LOG(error, LOG_TAG,
              "aacEncoder_SetParam (AACENC_GRANULE_LENGTH) error {}",
@@ -166,21 +162,18 @@ bell::Result<> AACCodec::setupEncode(const AudioFormat& audioFormat,
 }
 
 bell::Result<> AACCodec::setupDecode(const AudioFormat& audioFormat,
-                                     std::optional<int> samplesPerFrame,
-                                     const std::any& codecSpecificConfig) {
-  try {
-    config = std::any_cast<AACCodecConfig>(codecSpecificConfig);
-  } catch (const std::bad_any_cast&) {
+                                     const CodecConfig& codecSpecificConfig) {
+  if (!std::holds_alternative<AACConfig>(codecSpecificConfig)) {
     return tl::make_unexpected(Errc::UnsupportedConfig);
   }
 
   // Ensure default frame length is set
-  this->samplesPerFrame = samplesPerFrame.value_or(1024);
+  this->samplesPerFrame = config.samplesPerPacket.value_or(960);
   this->audioFormat = audioFormat;
 
-  if (config.mode != AACMode::AAC_LC) {
+  if (config.profile != AACConfig::Profile::AAC_LC) {
     BELL_LOG(error, LOG_TAG, "AAC Codec only supports AAC_LC");
-    return tl::make_unexpected(audio::Errc::UnsupportedConfig);
+    return tl::make_unexpected(Errc::UnsupportedConfig);
   }
 
   std::vector<uint8_t> asc;
@@ -229,7 +222,7 @@ bell::Result<> AACCodec::setupDecode(const AudioFormat& audioFormat,
   }
 
   const size_t expectedOutputSize =
-      audioFormat.samplesToBytes(this->samplesPerFrame.value());
+      audioFormat.samplesToBytes(this->samplesPerFrame);
 
   if (tmpBuffer.size() < expectedOutputSize) {
     tmpBuffer.resize(expectedOutputSize);
@@ -237,16 +230,15 @@ bell::Result<> AACCodec::setupDecode(const AudioFormat& audioFormat,
   return {};
 }
 
-bell::Result<std::byte*> AACCodec::encode(const std::byte* pcmInput,
-                                          size_t inputLength,
-                                          size_t& outputLength) {
+bell::Result<Codec::EncodeResult> AACCodec::encode(
+    tcb::span<const std::byte> pcmInput) {
   assert(encoder != nullptr);
 
   INT iidentify = IN_AUDIO_DATA;
   INT oidentify = OUT_BITSTREAM_DATA;
   INT ibufferElementSize = sizeof(INT_PCM);  // 16bit pcm
-  INT ibufferSize = static_cast<INT>(inputLength);
-  const UCHAR* constInputBuf = reinterpret_cast<const UCHAR*>(pcmInput);
+  INT ibufferSize = static_cast<INT>(pcmInput.size());
+  const UCHAR* constInputBuf = reinterpret_cast<const UCHAR*>(pcmInput.data());
   // Have to cast down const, due to libfdk api :/
   UCHAR* inputBuffer = const_cast<UCHAR*>(constInputBuf);  // NOLINT
 
@@ -258,12 +250,14 @@ bell::Result<std::byte*> AACCodec::encode(const std::byte* pcmInput,
   inBuf.bufElSizes = &ibufferElementSize;
 
   AACENC_InArgs iargs;
-  iargs.numInSamples = static_cast<INT>(inputLength / sizeof(INT_PCM));
+  iargs.numInSamples =
+      static_cast<INT>(audioFormat.bytesToSamples(pcmInput.size()) *
+                       audioFormat.getNumChannels());
   INT obufferElementSize = 1;
   INT obufferSize = static_cast<INT>(tmpBuffer.size());
   AACENC_BufDesc outBuf;
   outBuf.numBufs = 1;
-  UCHAR* outBuffer = tmpBuffer.data();
+  UCHAR* outBuffer = reinterpret_cast<UCHAR*>(tmpBuffer.data());
   outBuf.bufs = reinterpret_cast<void**>(&outBuffer);
   outBuf.bufferIdentifiers = &oidentify;
   outBuf.bufSizes = &obufferSize;
@@ -279,26 +273,27 @@ bell::Result<std::byte*> AACCodec::encode(const std::byte* pcmInput,
   }
 
   if (err == AACENC_OK) {
-    outputLength = oargs.numOutBytes;
-    return reinterpret_cast<std::byte*>(tmpBuffer.data());
+    return EncodeResult{
+        .packets = {{.data = {tmpBuffer.data(), tmpBuffer.size()}}},
+        .consumedInputBytes = audioFormat.samplesToBytes(oargs.numInSamples),
+    };
   }
 
   BELL_LOG(error, LOG_TAG, "AAC encoding failed with error code: {}",
            static_cast<int>(err));
-  outputLength = 0;
 
   return tl::make_unexpected(make_fdk_aacenc_error_code(err));
 }
 
-bell::Result<std::byte*> AACCodec::decode(const std::byte* encodedInput,
-                                          size_t inputLength,
-                                          size_t& outputLength) {
+bell::Result<Codec::DecodeResult> AACCodec::decode(
+    tcb::span<const std::byte> encodedInput) {
   assert(decoder != nullptr);
 
-  UINT bytesRead = inputLength;
-  UINT validBytes = inputLength;
+  UINT bytesRead = encodedInput.size();
+  UINT validBytes = bytesRead;
 
-  const UCHAR* constInputPtr = reinterpret_cast<const UCHAR*>(encodedInput);
+  const UCHAR* constInputPtr =
+      reinterpret_cast<const UCHAR*>(encodedInput.data());
   // Const cast is required due to fdk-aac API only accepting non-const pointers
   UCHAR* inputPtr = const_cast<UCHAR*>(constInputPtr);  // NOLINT
   std::array<UCHAR*, 1> bufferArray = {inputPtr};
@@ -321,10 +316,14 @@ bell::Result<std::byte*> AACCodec::decode(const std::byte* encodedInput,
     streamInfo = aacDecoder_GetStreamInfo(decoder);
   }
 
-  // Calculate output len
-  outputLength = static_cast<unsigned long>(streamInfo->frameSize *
-                                            streamInfo->numChannels) *
-                 sizeof(short);
-
-  return reinterpret_cast<std::byte*>(tmpBuffer.data());
+  return DecodeResult{
+      .pcm =
+          {
+              tmpBuffer.data(),
+              static_cast<unsigned long>(streamInfo->frameSize *
+                                         streamInfo->numChannels) *
+                  sizeof(short),
+          },
+      .consumedInputBytes = bytesRead,
+  };
 }
