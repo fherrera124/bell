@@ -65,7 +65,7 @@ enum class SampleFormat : uint8_t {
 };
 
 // Helper to get the size of a sample in bytes
-inline size_t getSampleSizeInBytes(SampleFormat format) {
+constexpr size_t getSampleSizeInBytes(SampleFormat format) {
   switch (format) {
     case SampleFormat::U8:
       return 1;
@@ -99,10 +99,12 @@ class Format {
   Format(int numChannels, SampleFormat sampleFormat, SampleRate sampleRate)
       : ch(numChannels), sf(sampleFormat), sr(sampleRate) {}
   // Getters
-  SampleFormat getSampleFormat() const { return sf; }
-  SampleRate getSampleRate() const { return sr; }
-  uint8_t getNumChannels() const { return ch; }
-  uint32_t getSampleRateValue() const { return static_cast<uint32_t>(sr); }
+  constexpr SampleFormat getSampleFormat() const { return sf; }
+  constexpr SampleRate getSampleRate() const { return sr; }
+  constexpr uint8_t getNumChannels() const { return ch; }
+  constexpr uint32_t getSampleRateValue() const {
+    return static_cast<uint32_t>(sr);
+  }
 
   // Setters
   void setSampleFormat(SampleFormat sampleFormat) { sf = sampleFormat; }

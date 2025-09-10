@@ -39,7 +39,7 @@ class Engine {
   std::shared_ptr<TransformPipeline> activePipeline;
   DataSlots innerDataSlots{
       .numSamples = 0,
-      .sampleFormat = audio::Format(0, audio::BitWidth::BW_16,
+      .sampleFormat = audio::Format(0, audio::SampleFormat::S16,
                                     audio::SampleRate::SR_44100HZ),
   };
   std::mutex accessMutex;

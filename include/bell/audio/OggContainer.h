@@ -13,16 +13,10 @@ class OggContainer : public Container {
   bell::Result<> openForRead(
       std::shared_ptr<bell::io::DataStream> dataStream) override;
   bell::Result<EncodedPacket> readNextPacket() override;
-  bell::Result<> seekToTime(uint64_t timeMs) override {
-    (void)timeMs;
-    return {};
-  }
-  bell::Result<> seekToFrame(size_t frameIndex) override {
-    (void)frameIndex;
-    return {};
-  }
-  uint64_t tellTime() const override { return 0; }
-  uint64_t getDurationMs() const override { return 0; }
+  bell::Result<> seekToFrame(size_t frameIndex,
+                             size_t allowedDistance = 0) override;
+  uint64_t tellFrame() const override;
+  uint64_t getTotalFrames() const override;
 
  private:
   const char* LOG_TAG = "OggContainer";
@@ -32,6 +26,8 @@ class OggContainer : public Container {
   ogg_sync_state oggSyncState;
   ogg_page oggPage;
   ogg_packet packet;
+  uint64_t totalFrames;
+  uint64_t currentFrame = 0;
   uint32_t streamSerialNo;  // TODO: support multiple streams
 
   bell::Result<> readNextPage();

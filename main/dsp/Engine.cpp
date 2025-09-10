@@ -36,8 +36,8 @@ DataSlots* Engine::process(const std::byte* inputBuffer, size_t inputBufferLen,
 
   uint8_t numChannels = format.getNumChannels();
 
-  switch (format.getBitWidth()) {
-    case audio::BitWidth::BW_16: {
+  switch (format.getSampleFormat()) {
+    case audio::SampleFormat::S16: {
       for (size_t frameIdx = 0; frameIdx < innerDataSlots.numSamples;
            frameIdx++) {
         for (auto chan = 0; chan < numChannels; chan++) {
@@ -49,7 +49,7 @@ DataSlots* Engine::process(const std::byte* inputBuffer, size_t inputBufferLen,
       break;
     }
 
-    case audio::BitWidth::BW_32: {
+    case audio::SampleFormat::S32: {
       for (size_t frameIdx = 0; frameIdx < innerDataSlots.numSamples;
            frameIdx++) {
         for (auto chan = 0; chan < numChannels; chan++) {
@@ -78,8 +78,8 @@ DataSlots* Engine::process(const std::byte* inputBuffer, size_t inputBufferLen,
   auto* outputData16 = reinterpret_cast<int16_t*>(outputBuffer);
   auto* outputData32 = reinterpret_cast<int32_t*>(outputBuffer);
 
-  switch (format.getBitWidth()) {
-    case audio::BitWidth::BW_16: {
+  switch (format.getSampleFormat()) {
+    case audio::SampleFormat::S16: {
       for (size_t frameIdx = 0; frameIdx < innerDataSlots.numSamples;
            frameIdx++) {
         for (auto chan = 0; chan < numChannels; chan++) {
@@ -91,7 +91,7 @@ DataSlots* Engine::process(const std::byte* inputBuffer, size_t inputBufferLen,
       break;
     }
 
-    case audio::BitWidth::BW_32: {
+    case audio::SampleFormat::S32: {
       for (size_t frameIdx = 0; frameIdx < innerDataSlots.numSamples;
            frameIdx++) {
         for (auto chan = 0; chan < numChannels; chan++) {

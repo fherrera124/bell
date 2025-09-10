@@ -2,7 +2,7 @@
 #include <fstream>
 #include "bell/Logger.h"
 #include "bell/audio/OggContainer.h"
-#include "bell/audio/VorbisCodec.h"
+#include "bell/audio/TremorVorbisCodec.h"
 #include "bell/io/FileDataStream.h"
 
 #define DOCTEST_CONFIG_IMPLEMENT
@@ -35,41 +35,20 @@ int main(int argc, char* argv[]) {
     return 1;
   }
 
-  auto vorbisCodec = std::make_shared<bell::audio::VorbisCodec>();
+   res = oggContainer->seekToFrame(20000);
+   if (!res) {
+     std::cerr << "Failed to seek to frame" << std::endl;
+     std::cout << "Error message: " << res.error().message() << std::endl;
+     return 1;
+   }
 
-  bool isSetup = false;
-  for (int x = 0; x < 10; ++x) {
-    auto pageRes = oggContainer->readNextFrame();
-    if (!pageRes) {
-      std::cerr << "Failed to read frame" << std::endl;
+   auto frameRes = oggContainer->readNextPacket();
+   if (!frameRes) {
+     std::cerr << "Failed to read packet" << std::endl;
+     return 1;
+   }
 
-    } else if (!isSetup) {
-      auto page = pageRes.value();
-      std::cout << "Page size: " << page.data.size() << std::endl;
-      auto setupRes = vorbisCodec->setupDecodeFromHeaders(page.data.data(),
-                                                          page.data.size());
-      if (setupRes.has_value() && setupRes.value()) {
-        std::cout << "Setup successful" << std::endl;
-        isSetup = true;
-      } else if (setupRes.has_value()) {
-        std::cerr << "Need more frame" << std::endl;
-      } else {
-        std::cerr << "Failed to setup decode" << setupRes.error().message()<< std::endl;
-      }
-    } else if (isSetup) {
-      auto page = pageRes.value();
-      std::cout << "Page size: " << page.data.size() << std::endl;
-      size_t outputLen = 0;
-      auto decodeRes =
-          vorbisCodec->decode(page.data.data(), page.data.size(), outputLen);
-      if (decodeRes.has_value()) {
-        std::cout << "Decode successful " << outputLen << std::endl;
-      } else {
-        std::cerr << "Failed to decode" << decodeRes.error().message() << std::endl;
-      }
-    }
-  }
-
+   std::cout << frameRes->data.size() << std::endl;
   // return 0;
 
   // doctest::Context context;
