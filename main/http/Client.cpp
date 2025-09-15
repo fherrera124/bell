@@ -47,8 +47,6 @@ bell::Result<std::shared_ptr<bell::Socket>> ConnectionPool::acquire(
     return lease;
   }
 
-  // No socket available: caller can create one and call insert(), or you can
-  // extend this to lazily create here via a factory.
   return bell::make_unexpected_errc<std::shared_ptr<bell::Socket>>(
       std::errc::no_such_file_or_directory);
 }
