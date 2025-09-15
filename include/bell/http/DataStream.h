@@ -11,8 +11,8 @@
 namespace bell::http {
 class DataStream : public io::DataStream {
  public:
-  explicit DataStream(std::unique_ptr<Client> httpClient,
-                      size_t chunkSize = 1024)
+  explicit DataStream(std::shared_ptr<Client> httpClient,
+                      size_t chunkSize = 4 * 1024L)
       : httpClient(std::move(httpClient)), chunkSize(chunkSize) {}
 
   ~DataStream() override = default;
@@ -32,7 +32,7 @@ class DataStream : public io::DataStream {
   const char* LOG_TAG = "HTTPDataStream";
 
   // HTTP client handle
-  std::unique_ptr<Client> httpClient;
+  std::shared_ptr<Client> httpClient;
 
   bool isSeekableFlag = false;
 
@@ -48,8 +48,11 @@ class DataStream : public io::DataStream {
 
   size_t currentPosition = 0;
 
+  int64_t totalRequestTimeMs = 0;
+
   // Keeps params of the HTTP request, reused for range-based files
   Request httpRequest;
+  std::optional<Response> activeResponse;
 
   // Requests a new range of data from the server, filling up the lastReadChunk buffer.
   // This is called only for seekable streams

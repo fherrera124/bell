@@ -1,5 +1,8 @@
+
 #include "bell/http/DataStream.h"
+
 #include <cassert>
+
 #include "bell/Logger.h"
 #include "bell/http/Client.h"
 #include "bell/http/Common.h"
@@ -8,20 +11,63 @@ using namespace bell::http;
 
 bell::Result<> DataStream::open(bell::HTTPMethod method, const std::string& url,
                                 const Headers& headers) {
-  // Ensure the chunk size is valid
   lastReadChunk.resize(chunkSize);
   bytesInLastReadChunk = 0;
   chunkStartPosition = 0;
+  currentPosition = 0;
+  isSeekableFlag = false;
+  activeResponse.reset();
 
   auto req = Request::create(method, url);
   if (!req) {
     return tl::make_unexpected(req.error());
   }
 
+  req->operationTimeoutMs = 3000;
   req->headers = headers;
   this->httpRequest = *req;
+  this->httpRequest.headers["Connection"] = "keep-alive";
+  this->httpRequest.headers["Range"] = fmt::format("bytes=0-{}", chunkSize - 1);
 
-  return requestNextRange();
+  // Initial request
+  auto response = httpClient->rawRequest(httpRequest);
+  if (!response) {
+    BELL_LOG(error, LOG_TAG, "HTTP request error: {}", response.error());
+    return tl::make_unexpected(response.error());
+  }
+
+  totalSize = response->contentLength;
+  activeResponse = *response;
+
+  // Detect seekability via Content-Range
+  if (activeResponse->headers.contains("Content-Range")) {
+    auto rangeHeader = activeResponse->headers.at("Content-Range");
+    auto slashPos = rangeHeader.find('/');
+    if (slashPos != std::string::npos) {
+      try {
+        totalSize = std::stoll(rangeHeader.substr(slashPos + 1));
+        isSeekableFlag = true;
+      } catch (const std::invalid_argument& e) {
+        BELL_LOG(error, LOG_TAG, "Failed to parse Content-Range header: {}",
+                 e.what());
+        return bell::make_unexpected_errc<>(std::errc::bad_message);
+      }
+    }
+  } else if (totalSize.has_value()) {
+    // If Content-Length exists but no Content-Range → finite, not seekable
+    isSeekableFlag = false;
+  }
+
+  // Preload first chunk
+  auto* stream = activeResponse->stream();
+  stream->read(reinterpret_cast<char*>(lastReadChunk.data()), chunkSize);
+  if (stream->fail() && !stream->eof()) {
+    return bell::make_unexpected_errc<>(std::errc::io_error);
+  }
+  bytesInLastReadChunk = static_cast<size_t>(stream->gcount());
+  chunkStartPosition = 0;
+
+  return {};
 }
 
 bool DataStream::isSeekable() const {
@@ -44,7 +90,6 @@ bell::Result<> DataStream::seek(size_t offset) {
   if (!isSeekable()) {
     return bell::make_unexpected_errc<>(std::errc::invalid_argument);
   }
-
   if (offset >= totalSize.value_or(0)) {
     return bell::make_unexpected_errc<>(std::errc::invalid_seek);
   }
@@ -62,106 +107,83 @@ bell::Result<size_t> DataStream::read(std::byte* outputBuffer,
   size_t toRead = outputBufferLen;
 
   while (toRead > 0) {
-    // Copy remaining bytes from current chunk
-    size_t availableInChunk = 0;
-    if (bytesInLastReadChunk > chunkStartPosition) {
-      availableInChunk = bytesInLastReadChunk - chunkStartPosition;
-    }
+    // Copy from current chunk
+    size_t availableInChunk = (bytesInLastReadChunk > chunkStartPosition)
+                                  ? bytesInLastReadChunk - chunkStartPosition
+                                  : 0;
 
     if (availableInChunk > 0) {
       size_t toCopy = std::min(toRead, availableInChunk);
       std::copy(lastReadChunk.data() + chunkStartPosition,
                 lastReadChunk.data() + chunkStartPosition + toCopy,
                 outputBuffer + totalCopied);
+
       chunkStartPosition += toCopy;
       currentPosition += toCopy;
       totalCopied += toCopy;
       toRead -= toCopy;
 
-      // If we've satisfied the request, return
       if (toRead == 0) {
         break;
       }
     }
 
-    // No more data in current chunk, request next
+    // Need more data
     if (isSeekable()) {
       auto res = requestNextRange();
       if (!res) {
         return bell::make_unexpected_errc<size_t>(std::errc::io_error);
       }
     } else {
-      /*
-      // For non-seekable streams, just read next chunk from the same connection
-      auto* stream = connection->getResponse()->getStream();
+      if (!activeResponse) {
+        break;
+      }
+      auto* stream = activeResponse->stream();
       stream->read(reinterpret_cast<char*>(lastReadChunk.data()), chunkSize);
       if (stream->fail() && !stream->eof()) {
         return bell::make_unexpected_errc<size_t>(std::errc::io_error);
       }
       bytesInLastReadChunk = static_cast<size_t>(stream->gcount());
       chunkStartPosition = 0;
-
       if (bytesInLastReadChunk == 0) {
-        // EOF for finite streams
-        break;
+        break;  // EOF
       }
-      */
     }
-
-    // If after fetching, no bytes were read, break (EOF for finite streams)
-    if (bytesInLastReadChunk == 0) {
-      break;
-    }
-
-    // Reset chunk position for next read iteration
-    chunkStartPosition = 0;
   }
 
   return totalCopied;
 }
 
 bell::Result<> DataStream::requestNextRange() {
+  assert(isSeekable());
 
   size_t chunkReadSize =
       std::min(chunkSize, totalSize.value_or(SIZE_MAX) - currentPosition);
 
-  // Range starts exactly at currentPosition;
-  httpRequest.headers["Content-Range"] = fmt::format(
-      "bytes {}-{}", currentPosition, currentPosition + chunkReadSize - 1);
+  if (chunkReadSize == 0) {
+    return bell::make_unexpected_errc<>(std::errc::invalid_seek);
+  }
+
+  httpRequest.headers["Range"] = fmt::format(
+      "bytes={}-{}", currentPosition, currentPosition + chunkReadSize - 1);
+
+  // Reset the old response
+  activeResponse.reset();
+  BELL_LOG(debug, LOG_TAG, "Requesting range: {}",
+           httpRequest.headers["Range"]);
 
   auto response = httpClient->rawRequest(httpRequest);
   if (!response) {
+    BELL_LOG(error, LOG_TAG, "HTTP request error: {}", response.error());
     return tl::make_unexpected(response.error());
   }
 
-  totalSize = response->contentLength;
+  activeResponse = *response;
 
-  if (response->headers.contains("Content-Range")) {
-    auto rangeHeader = response->headers.at("Content-Range");
-    // Parse the Content-Range header
-    // Example: "bytes 0-1023/2048"
-    auto rangeHeaderItr = rangeHeader.find('/');
+  auto* stream = activeResponse->stream();
+  stream->read(reinterpret_cast<char*>(lastReadChunk.data()),
+               *response->contentLength);
 
-    auto totalSizeStr = rangeHeader.substr(rangeHeader.find('/') + 1);
-    if (rangeHeaderItr != std::string::npos) {
-      try {
-        totalSize = std::stoll(totalSizeStr.data());
-        isSeekableFlag = true;
-      } catch (const std::invalid_argument& e) {
-        BELL_LOG(error, LOG_TAG, "Failed to parse Content-Range header: {}",
-                 e.what());
-        return bell::make_unexpected_errc<>(std::errc::bad_message);
-      }
-    } else {
-      isSeekableFlag = false;
-    }
-  }
-
-  size_t toRead = *response->contentLength;
-  auto* stream = response->stream();
-  assert(toRead <= lastReadChunk.size());
-
-  stream->read(reinterpret_cast<char*>(lastReadChunk.data()), toRead);
   if (stream->fail() && !stream->eof()) {
     return bell::make_unexpected_errc<>(std::errc::io_error);
   }

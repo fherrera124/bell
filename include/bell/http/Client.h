@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <istream>
 #include <map>
 #include <memory>
@@ -10,6 +11,7 @@
 #include "bell/Result.h"
 #include "bell/http/Common.h"
 #include "bell/http/Reader.h"
+#include "bell/net/Socket.h"
 #include "bell/net/URIParser.h"
 #include "tcb/span.hpp"
 
@@ -127,6 +129,69 @@ class Response {
   std::istream* stream() const;
 };
 
+class ConnectionPool : public std::enable_shared_from_this<ConnectionPool> {
+ public:
+  ConnectionPool(size_t maxConnections = 8);
+
+  ~ConnectionPool();
+
+  bell::Result<std::shared_ptr<Socket>> acquire(const std::string& host,
+                                                int port);
+
+  void insert(const std::string& host, int port,
+              std::unique_ptr<Socket> socket);
+
+ private:
+  const char* LOG_TAG = "ConnectionPool";
+
+  const int connectionIdleTimeoutSec = 60 * 5;
+
+  friend struct PoolDeleter;
+
+  // Used as key for the connection pool map
+  struct ConnectionKey {
+    std::string host;
+    int port;
+
+    bool operator==(const ConnectionKey& other) const noexcept {
+      return port == other.port && host == other.host;
+    }
+  };
+
+  struct KeyHasher {
+    std::size_t operator()(const ConnectionKey& k) const noexcept {
+      std::hash<std::string> sh;
+      std::hash<int> ih;
+      return (sh(k.host) ^ static_cast<std::size_t>(ih(k.port)));
+    }
+  };
+
+  struct PoolDeleter {
+    std::weak_ptr<ConnectionPool> pool;
+    ConnectionKey key;
+
+    void operator()(bell::Socket* s) const noexcept;
+  };
+
+  // A connection item with its last used timestamp
+  using ConnectionItem =
+      std::pair<std::unique_ptr<Socket>, std::chrono::system_clock::time_point>;
+
+  std::unordered_map<ConnectionKey, std::vector<ConnectionItem>, KeyHasher>
+      pool;
+  size_t maxConnections;
+
+  // ConnectionPoll access mutex
+  std::mutex poolMutex;
+
+  // Enforces the maximum number of connections by removing the oldest ones
+  void enforceMaxConnections();
+
+  // Called by deleter: reinserts a socket back into the pool.
+  void reinsert(const ConnectionKey& key,
+                std::unique_ptr<bell::Socket> sock) noexcept;
+};
+
 /**
  * @brief An abstract interface for executing HTTP requests.
  *
@@ -149,7 +214,12 @@ class Transport {
  */
 class DefaultTransport : public Transport {
  public:
-  DefaultTransport() = default;
+  /**
+   * @brief Constructs a DefaultTransport with an optional connection pool.
+   * @param connectionPoll An optional shared pointer to a ConnectionPoll for
+   * connection reuse. If nullptr, the default connection pool is used.
+   */
+  DefaultTransport(std::shared_ptr<ConnectionPool> connectionPoll = nullptr);
 
   /**
    * @brief Executes an HTTP request using the default underlying implementation.
@@ -157,6 +227,9 @@ class DefaultTransport : public Transport {
    * @return A Result containing the Response on success, or an error.
    */
   bell::Result<Response> execute(const Request& req) override;
+
+ private:
+  std::shared_ptr<ConnectionPool> connectionPool;
 };
 
 /**

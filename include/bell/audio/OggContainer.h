@@ -7,7 +7,7 @@ namespace bell::audio {
 class OggContainer : public Container {
  public:
   OggContainer() = default;
-  ~OggContainer() override {};
+  ~OggContainer() override{};
 
   // Base class overrides
   bell::Result<> openForRead(
@@ -28,9 +28,14 @@ class OggContainer : public Container {
   ogg_packet packet;
   uint64_t totalFrames;
   uint64_t currentFrame = 0;
+  uint64_t absoluteOffset = 0;
   uint32_t streamSerialNo;  // TODO: support multiple streams
 
+  // Seek table to map granule position (frame number) to a byte offset in the stream.
+  std::vector<std::pair<uint64_t, int64_t>> seekTable;
+
   bell::Result<> readNextPage();
+  void buildSeekTable(int64_t streamSize);
 
   void close();
 };

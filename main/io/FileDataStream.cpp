@@ -44,7 +44,7 @@ bell::Result<size_t> FileDataStream::read(std::byte* outputBuffer,
     return 0;  // Nothing to read
   }
 
-  if (file.eof()) {
+  if (file.eof() || (position() == fileSize)) {
     return 0;  // End of file reached
   }
 

@@ -1,4 +1,5 @@
 #include "bell/net/TLSSocket.h"
+#include <netinet/tcp.h>
 
 // Standard includes
 #include <cerrno>
@@ -128,7 +129,7 @@ bell::Result<> net::TLSSocket::connect(const std::string& host, uint16_t port,
 
   while ((ret = mbedtls_ssl_handshake(&sslCtx)) != 0) {
     if (ret != MBEDTLS_ERR_SSL_WANT_READ && ret != MBEDTLS_ERR_SSL_WANT_WRITE) {
-      BELL_LOG(error, LOG_TAG, "Failed to perform TLS handshake");
+      BELL_LOG(error, LOG_TAG, "Failed to perform TLS handshake {}", ret);
       return tl::make_unexpected(make_tls_error_code(ret));
     }
   }

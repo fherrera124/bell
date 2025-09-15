@@ -15,13 +15,13 @@ using namespace bell::audio;
 
 namespace {
 // Map bell sample format to PortAudio sample format
-bell::Result<PaSampleFormat> getSampleFormat(const BitWidth& bitWidth) {
+bell::Result<PaSampleFormat> getSampleFormat(const SampleFormat& bitWidth) {
   switch (bitWidth) {
-    case BitWidth::BW_16:
+    case bell::SampleFormat::S16:
       return paInt16;
-    case BitWidth::BW_24:
+    case bell::SampleFormat::S24:
       return paInt24;
-    case BitWidth::BW_32:
+    case bell::SampleFormat::S32:
       return paInt32;
     default:
       return bell::make_unexpected_errc<PaSampleFormat>(

@@ -1,35 +1,203 @@
 #include "bell/http/Client.h"
+
+// System includes
+#include <netinet/tcp.h>
+
+// Own includes
 #include "bell/Result.h"
 #include "bell/http/Common.h"
 #include "bell/http/Writer.h"
 #include "bell/net/SocketStream.h"
 #include "bell/net/TLSSocket.h"
 #include "bell/net/URIParser.h"
-#include "tl/expected.hpp"
 
 using namespace bell::http;
+namespace {
+// Default connection pool with a size of 8, shared across all DefaultTransport instances
+std::shared_ptr<ConnectionPool> defaultConnectionPoll =
+    std::make_shared<ConnectionPool>(8);
+}  // namespace
+
+ConnectionPool::ConnectionPool(size_t maxConnections)
+    : maxConnections(maxConnections) {}
+
+ConnectionPool::~ConnectionPool() {}
+
+bell::Result<std::shared_ptr<bell::Socket>> ConnectionPool::acquire(
+    const std::string& host, int port) {
+  std::scoped_lock lock(poolMutex);
+
+  ConnectionKey key{host, port};
+  auto it = pool.find(key);
+
+  if (it != pool.end() && !it->second.empty()) {
+    // Pop a socket (LIFO)
+    auto& vec = it->second;
+    auto entry = std::move(vec.back());
+    vec.pop_back();
+
+    PoolDeleter del{this->weak_from_this(), key};
+
+    // Transfer ownership out of unique_ptr into the lease
+    std::unique_ptr<bell::Socket> up = std::move(entry.first);
+    bell::Socket* raw = up.release();
+
+    std::shared_ptr<bell::Socket> lease(raw, std::move(del));
+
+    return lease;
+  }
+
+  // No socket available: caller can create one and call insert(), or you can
+  // extend this to lazily create here via a factory.
+  return bell::make_unexpected_errc<std::shared_ptr<bell::Socket>>(
+      std::errc::no_such_file_or_directory);
+}
+
+void ConnectionPool::insert(const std::string& host, int port,
+                            std::unique_ptr<Socket> socket) {
+  std::scoped_lock lock(poolMutex);
+
+  ConnectionKey key{host, port};
+
+  pool[key].emplace_back(std::move(socket), std::chrono::system_clock::now());
+
+  enforceMaxConnections();
+}
+
+void ConnectionPool::PoolDeleter::operator()(bell::Socket* s) const noexcept {
+  if (!s)
+    return;
+  // Try to reinsert back into the pool; if pool is gone, delete the socket.
+  auto p = pool.lock();
+  if (p) {
+    try {
+      p->reinsert(key, std::unique_ptr<bell::Socket>(s));
+      return;
+    } catch (...) {
+      // Fall through and delete on exception to avoid leaks.
+    }
+  } else {
+  }
+  delete s;
+}
+
+void ConnectionPool::reinsert(const ConnectionKey& key,
+                              std::unique_ptr<bell::Socket> sock) noexcept {
+  try {
+    std::scoped_lock lk(poolMutex);
+    auto& bucket = pool[key];
+    bucket.emplace_back(std::move(sock), std::chrono::system_clock::now());
+    enforceMaxConnections();
+  } catch (...) {
+    // Last-resort: if we cannot reinsert due to OOM or other issues,
+    // drop the connection to avoid leaks.
+  }
+}
+
+void ConnectionPool::enforceMaxConnections() {
+  auto now = std::chrono::system_clock::now();
+  const auto maxAge = std::chrono::seconds(connectionIdleTimeoutSec);
+  size_t totalSize = 0;
+
+  for (auto poolIt = pool.begin(); poolIt != pool.end();) {
+    auto& conns = poolIt->second;
+
+    for (auto connsIt = conns.begin(); connsIt != conns.end();) {
+      if ((now - connsIt->second) > maxAge) {
+        connsIt = conns.erase(connsIt);
+      } else {
+        ++connsIt;
+      }
+    }
+
+    if (conns.empty()) {
+      poolIt = pool.erase(poolIt);
+    } else {
+      totalSize += conns.size();
+      ++poolIt;
+    }
+  }
+
+  while (totalSize > maxConnections) {
+    auto oldestPoolIt = pool.end();
+    auto oldestTimestamp = std::chrono::system_clock::time_point::max();
+
+    // Find the globally oldest connection
+    for (auto it = pool.begin(); it != pool.end(); ++it) {
+      if (!it->second.empty() && it->second.front().second < oldestTimestamp) {
+        oldestTimestamp = it->second.front().second;
+        oldestPoolIt = it;
+      }
+    }
+
+    // Found oldest connection
+    if (oldestPoolIt != pool.end()) {
+      auto& connsToPrune = oldestPoolIt->second;
+
+      // Remove the oldest connection
+      connsToPrune.erase(connsToPrune.begin());
+      totalSize--;
+
+      // If the conns is now empty, remove it from the pool map.
+      if (connsToPrune.empty()) {
+        pool.erase(oldestPoolIt);
+      }
+    } else {
+      break;
+    }
+  }
+}
+
+DefaultTransport::DefaultTransport(
+    std::shared_ptr<ConnectionPool> connectionPoll) {
+  if (connectionPoll) {
+    this->connectionPool = std::move(connectionPoll);
+  } else {
+    this->connectionPool = defaultConnectionPoll;
+  }
+}
 
 bell::Result<Response> DefaultTransport::execute(const Request& req) {
   std::shared_ptr<net::SocketStream> socketStream;
 
-  if (req.uri.scheme == "https") {
-    auto socket = std::make_shared<net::TLSSocket>();
-    auto res = socket->connect(*req.uri.host, req.uri.port.value_or(443),
-                               req.operationTimeoutMs.value_or(0));
-    if (!res) {
-      return tl::make_unexpected(res.error());
-    }
+  int port = req.uri.port.value_or(req.uri.scheme == "https" ? 443 : 80);
 
-    socketStream = std::make_shared<net::SocketStream>(std::move(socket));
+  auto connection = connectionPool->acquire(*req.uri.host, port);
+
+  if (connection) {
+    socketStream = std::make_shared<net::SocketStream>(*connection);
   } else {
-    auto socket = std::make_shared<net::TCPSocket>();
-    auto res = socket->connect(*req.uri.host, req.uri.port.value_or(443),
-                               req.operationTimeoutMs.value_or(0));
-    if (!res) {
-      return tl::make_unexpected(res.error());
-    }
+    if (req.uri.scheme == "https") {
+      auto socket = std::make_unique<net::TLSSocket>();
+      auto res = socket->connect(*req.uri.host, port,
+                                 req.operationTimeoutMs.value_or(0));
+      if (!res) {
+        return tl::make_unexpected(res.error());
+      }
 
-    socketStream = std::make_shared<net::SocketStream>(std::move(socket));
+      connectionPool->insert(*req.uri.host, port, std::move(socket));
+      auto connection = connectionPool->acquire(*req.uri.host, port);
+      if (!connection) {
+        return tl::make_unexpected(connection.error());
+      }
+      socketStream = std::make_shared<net::SocketStream>(*connection);
+    } else {
+      auto socket = std::make_unique<net::TCPSocket>();
+      // Set nodelay on socket
+      (void)socket->setOption(IPPROTO_TCP, TCP_NODELAY, 1);
+      auto res = socket->connect(*req.uri.host, port,
+                                 req.operationTimeoutMs.value_or(0));
+      if (!res) {
+        return tl::make_unexpected(res.error());
+      }
+
+      connectionPool->insert(*req.uri.host, port, std::move(socket));
+      auto connection = connectionPool->acquire(*req.uri.host, port);
+      if (!connection) {
+        return tl::make_unexpected(connection.error());
+      }
+      socketStream = std::make_shared<net::SocketStream>(*connection);
+    }
   }
 
   // Create a writer for the request
