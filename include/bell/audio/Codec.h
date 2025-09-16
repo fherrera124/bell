@@ -71,7 +71,7 @@ class Codec {
   };
 
   struct DecodeResult {
-    tcb::span<const std::byte> pcm;
+    tcb::span<std::byte> pcm;
     size_t consumedInputBytes = 0;
   };
 

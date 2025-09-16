@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.10)
 
 project(Tremor C)
 
-find_package(Ogg REQUIRED)
+# find_package(Ogg REQUIRED)
 
 # Define the source files for the libvorbisidec library
 set(LIBVORBISIDEC_SOURCES
@@ -24,5 +24,6 @@ set(LIBVORBISIDEC_SOURCES
 add_library(vorbisidec STATIC ${LIBVORBISIDEC_SOURCES})
 
 target_link_libraries(vorbisidec PUBLIC Ogg::ogg)
-
-target_include_directories(vorbisidec PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_compile_options(vorbisidec PRIVATE -Wno-incompatible-pointer-types)
+target_include_directories(vorbisidec PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(vorbisidec PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)

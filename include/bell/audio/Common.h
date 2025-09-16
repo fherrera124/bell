@@ -54,7 +54,7 @@ inline std::error_code make_error_code(const bell::audio::Errc& e) {
   return {static_cast<int>(e), bell::audio::internal::audio_error_category()};
 };
 
-// Enum class for the sample format. Replaces BitWidth.
+// Enum class for the sample format
 enum class SampleFormat : uint8_t {
   U8,   // Unsigned 8-bit PCM
   S16,  // Signed 16-bit PCM
@@ -80,6 +80,21 @@ constexpr size_t getSampleSizeInBytes(SampleFormat format) {
       return 8;
   }
   return 0;  // Should not happen
+}
+
+constexpr SampleFormat bitwidthToFixedSampleFormat(int bw) {
+  switch (bw) {
+    case 8:
+      return SampleFormat::U8;
+    case 16:
+      return SampleFormat::S16;
+    case 24:
+      return SampleFormat::S24;
+    case 32:
+      return SampleFormat::S32;
+    default:
+      return SampleFormat::S16;  // Default to S16 for unsupported bit widths
+  }
 }
 // Enum class for the sample rate of audio samples.
 enum class SampleRate : uint32_t {
@@ -119,8 +134,6 @@ class Format {
   constexpr bool operator!=(const Format& other) const noexcept {
     return !(*this == other);
   }
-
-  // --- Conversion Methods (with fixes and improvements) ---
 
   // Convert sample count to bytes
   constexpr uint32_t samplesToBytes(uint32_t samples) const noexcept {
