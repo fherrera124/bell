@@ -23,6 +23,15 @@ class DataStream {
   virtual ~DataStream() = default;
 
   /**
+   * @brief Enumeration for seek origin.
+   */
+  enum class SeekOrigin {
+    Begin,    // From the beginning of the stream
+    Current,  // From the current position
+    End       // From the end of the stream
+  };
+
+  /**
    * @brief Indicates whether the stream supports random access via seek().
    *
    * @return true if seek() can be called to move to an arbitrary position.
@@ -69,9 +78,11 @@ class DataStream {
    * For non-seekable streams, this returns an error Result.
    *
    * @param offset Absolute byte offset from the start of the stream.
+   * @param origin Seek origin (default: Begin).
    * @return Success if seek was possible; error otherwise.
    */
-  virtual bell::Result<> seek(size_t offset) = 0;
+  virtual bell::Result<> seek(size_t offset,
+                              SeekOrigin origin = SeekOrigin::Begin) = 0;
 
   /**
    * @brief Reads data from the stream into the provided buffer.

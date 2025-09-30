@@ -26,8 +26,22 @@ size_t FileDataStream::position() const {
   return static_cast<size_t>(pos);
 }
 
-bell::Result<> FileDataStream::seek(size_t offset) {
-  file.seekg(static_cast<std::streamoff>(offset), std::ios::beg);
+bell::Result<> FileDataStream::seek(size_t offset, SeekOrigin origin) {
+  auto stdOrigin = std::ios::beg;
+  switch (origin) {
+    case SeekOrigin::Begin:
+      stdOrigin = std::ios::beg;
+      break;
+    case SeekOrigin::Current:
+      stdOrigin = std::ios::cur;
+      break;
+    case SeekOrigin::End:
+      stdOrigin = std::ios::end;
+      offset = 0 - offset;
+      break;
+  }
+
+  file.seekg(static_cast<std::streamoff>(offset), stdOrigin);
   if (!file) {
     return bell::make_unexpected_errc(std::errc::bad_file_descriptor);
   }

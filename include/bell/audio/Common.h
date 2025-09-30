@@ -17,7 +17,9 @@ enum class Errc {
   CodecError = 2,
   UnsupportedConfig = 3,
   InvalidFormat = 4,
-  OperationNotSupported = 5
+  OperationNotSupported = 5,
+  EndOfStream = 6,
+  IoError = 7,
 };
 
 struct EncodedPacket {
@@ -47,11 +49,13 @@ struct audio_error_category : public std::error_category {
     }
   }
 };
+
+const audio_error_category audioErrorCategory{};
 }  // namespace internal
 
 // Plug in the error code category for std::error_code
 inline std::error_code make_error_code(const bell::audio::Errc& e) {
-  return {static_cast<int>(e), bell::audio::internal::audio_error_category()};
+  return {static_cast<int>(e), internal::audioErrorCategory};
 };
 
 // Enum class for the sample format

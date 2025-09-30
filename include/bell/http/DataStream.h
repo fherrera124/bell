@@ -24,7 +24,7 @@ class DataStream : public io::DataStream {
   bool isInfinite() const override;
   std::optional<size_t> size() const override;
   size_t position() const override;
-  bell::Result<> seek(size_t offset) override;
+  bell::Result<> seek(size_t offset, SeekOrigin origin) override;
   bell::Result<size_t> read(std::byte* outputBuffer,
                             size_t outputBufferLen) override;
 

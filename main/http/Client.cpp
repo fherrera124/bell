@@ -163,6 +163,8 @@ bell::Result<Response> DefaultTransport::execute(const Request& req) {
   auto connection = connectionPool->acquire(*req.uri.host, port);
 
   if (connection) {
+    std::cout << "Reusing existing connection to " << *req.uri.host << ":"
+              << port << std::endl;
     socketStream = std::make_shared<net::SocketStream>(*connection);
   } else {
     if (req.uri.scheme == "https") {
@@ -214,6 +216,7 @@ bell::Result<Response> DefaultTransport::execute(const Request& req) {
                                  req.contentLength.value_or(0));
 
   if (!res) {
+    std::cout << "Error during request write" << std::endl;
     return tl::make_unexpected(res.error());
   }
 
@@ -258,6 +261,8 @@ bell::Result<Response> DefaultTransport::execute(const Request& req) {
   socketStream->flush();
 
   if (socketStream->bad()) {
+    std::cout << "Stream bad after flush" << std::endl;
+
     return bell::make_unexpected_errc<Response>(std::errc::io_error);
   }
 
@@ -267,8 +272,13 @@ bell::Result<Response> DefaultTransport::execute(const Request& req) {
   // Try to read the headers
   res = reader.readHeaders();
   if (!res) {
+    std::cout << "Error during headers read" << std::endl;
     return tl::make_unexpected(res.error());
   }
+
+  // for (const auto& header : reader.getAllHeaders()) {
+  //   std::cout << header.first << ": " << header.second << std::endl;
+  // }
 
   // Move the reader into the response
   return {std::move(reader)};

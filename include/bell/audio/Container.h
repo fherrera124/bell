@@ -53,7 +53,7 @@ class Container {
   /**
    * @brief Gets the duration of the audio stream in milliseconds
    */
-  virtual uint64_t getTotalFrames() const = 0;
+  virtual uint64_t getTotalFrames() = 0;
 };
 
 }  // namespace bell::audio

@@ -86,7 +86,8 @@ size_t DataStream::position() const {
   return currentPosition;
 }
 
-bell::Result<> DataStream::seek(size_t offset) {
+bell::Result<> DataStream::seek(size_t offset, SeekOrigin origin) {
+  (void)origin;  // TODO: support other origins
   if (!isSeekable()) {
     return bell::make_unexpected_errc<>(std::errc::invalid_argument);
   }

@@ -34,11 +34,13 @@ struct http_error_category : public std::error_category {
     }
   }
 };
+
+const http_error_category httpErrorCategory{};
 }  // namespace internal
 
 // Plug in the error code category for std::error_code
 inline std::error_code make_error_code(const bell::http::Errc& e) {
-  return {static_cast<int>(e), internal::http_error_category()};
+  return {static_cast<int>(e), internal::httpErrorCategory};
 };
 
 // Used for case-insensitive map operations on headers
