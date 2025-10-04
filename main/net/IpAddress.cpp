@@ -180,7 +180,8 @@ bell::Result<IpAddress> IpAddress::resolveDomain(const std::string& hostname,
 
   int result = getaddrinfo(hostname.c_str(), nullptr, &hints, &res);
   if (result != 0) {
-    return tl::make_unexpected(std::error_code(result, std::system_category()));
+    return nonstd::make_unexpected(
+        std::error_code(result, std::system_category()));
   }
 
   // We'll use the first valid result

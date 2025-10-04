@@ -53,18 +53,19 @@ bell::Result<> OggContainer::openForRead(
                                 bell::io::DataStream::SeekOrigin::End);
     if (!seekRes) {
       BELL_LOG(warn, LOG_TAG, "Could not seek to end - {}", seekRes.error());
-      return tl::make_unexpected(seekRes.error());
+      return nonstd::make_unexpected(seekRes.error());
     }
 
     bool reachedEnd = false;
     while (!reachedEnd) {
       auto pageRes = readNextPage();
-      if (pageRes.error() == bell::audio::Errc::EndOfStream) {
+      if (!pageRes.has_value() &&
+          pageRes.error() == bell::audio::Errc::EndOfStream) {
         reachedEnd = true;
       } else if (!pageRes) {
         BELL_LOG(warn, LOG_TAG, "Could not read page during init - {}",
                  pageRes.error());
-        return tl::make_unexpected(pageRes.error());
+        return nonstd::make_unexpected(pageRes.error());
       }
     }
 
@@ -76,7 +77,7 @@ bell::Result<> OggContainer::openForRead(
     if (!seekRes) {
       BELL_LOG(warn, LOG_TAG, "Could not seek back to start - {}",
                seekRes.error());
-      return tl::make_unexpected(seekRes.error());
+      return nonstd::make_unexpected(seekRes.error());
     }
   }
 
@@ -84,7 +85,7 @@ bell::Result<> OggContainer::openForRead(
   auto firstPageRes = readNextPage();
   if (!firstPageRes) {
     BELL_LOG(error, "OggContainer", "Could not read the first Ogg page.");
-    return tl::make_unexpected(audio::Errc::InvalidFormat);
+    return nonstd::make_unexpected(audio::Errc::InvalidFormat);
   }
   streamSerialNo = ogg_page_serialno(&oggPage);
 
@@ -92,7 +93,7 @@ bell::Result<> OggContainer::openForRead(
 
   if (ogg_stream_pagein(&oggStreamState, &oggPage) < 0) {
     BELL_LOG(error, "OggContainer", "ogg_stream_pagein failed on first page.");
-    return tl::make_unexpected(audio::Errc::CodecError);
+    return nonstd::make_unexpected(audio::Errc::CodecError);
   }
 
   dataStartOffset = stream->position();
@@ -114,19 +115,19 @@ bell::Result<> OggContainer::readNextPage() {
 
     // Need more data
     if (stream->size() && stream->position() >= *stream->size()) {
-      return tl::make_unexpected(audio::Errc::EndOfStream);
+      return nonstd::make_unexpected(audio::Errc::EndOfStream);
     }
 
     char* buffer = ogg_sync_buffer(&oggSyncState, decodeBytesCount);
     if (!buffer) {
-      return tl::make_unexpected(audio::Errc::CodecError);
+      return nonstd::make_unexpected(audio::Errc::CodecError);
     }
     auto readRes =
         stream->read(reinterpret_cast<std::byte*>(buffer), decodeBytesCount);
     if (!readRes)
-      return tl::make_unexpected(readRes.error());
+      return nonstd::make_unexpected(readRes.error());
     if (*readRes == 0)
-      return tl::make_unexpected(audio::Errc::EndOfStream);
+      return nonstd::make_unexpected(audio::Errc::EndOfStream);
     ogg_sync_wrote(&oggSyncState, *readRes);
   }
 
@@ -136,7 +137,7 @@ bell::Result<> OggContainer::readNextPage() {
 bell::Result<EncodedPacket> OggContainer::readNextPacket() {
   while (ogg_stream_packetout(&oggStreamState, &packet) != 1) {
     if (auto pageRes = readNextPage(); !pageRes) {
-      return tl::make_unexpected(pageRes.error());
+      return nonstd::make_unexpected(pageRes.error());
     }
     // Only feed pages for our serial
     if (ogg_page_serialno(&oggPage) != streamSerialNo) {
@@ -164,7 +165,7 @@ bell::Result<EncodedPacket> OggContainer::readNextPacket() {
 bell::Result<> OggContainer::seekToFrame(size_t frameIndex,
                                          size_t allowedDistance) {
   if (!stream->isSeekable() || !stream->size()) {
-    return tl::make_unexpected(audio::Errc::OperationNotSupported);
+    return nonstd::make_unexpected(audio::Errc::OperationNotSupported);
   }
 
   if (frameIndex > totalFrames) {
@@ -178,89 +179,112 @@ bell::Result<> OggContainer::seekToFrame(size_t frameIndex,
   uint64_t beginTime = 0;
   uint64_t endTime = totalFrames;
 
-  // Coarse seek with binary search
-  // This loop quickly finds the page immediately preceding the target frame.
+  ogg_sync_reset(&oggSyncState);
+  ogg_stream_reset(&oggStreamState);
+
+  int bisectionIterations = 0;
+  int pagesConsidered = 0;
+
+  // Coarse seek with binary search to find page preceding target frame
   while (searchBegin < searchEnd) {
+    ++bisectionIterations;
     ogg_int64_t bisect;
     if (searchEnd - searchBegin < decodeBytesCount) {
       bisect = searchBegin;
     } else {
-      // Make an intelligent guess based on frame position
       bisect = searchBegin + rescalePosition(frameIndex - beginTime,
                                              endTime - beginTime,
                                              searchEnd - searchBegin);
-      // Back up a bit to ensure we don't land inside the target page
       if (bisect >= decodeBytesCount) {
         bisect -= decodeBytesCount;
       }
     }
 
     BELL_LOG(debug, LOG_TAG,
-             "Bisection seek: frameIndex={} begin={} end={} bisect={} "
+             "Bisection seek iter {}: frameIndex={} begin={} end={} bisect={} "
              "beginTime={} endTime={}",
-             frameIndex, searchBegin, searchEnd, bisect, beginTime, endTime);
+             bisectionIterations, frameIndex, searchBegin, searchEnd, bisect,
+             beginTime, endTime);
+
     if (auto seekRes = stream->seek(bisect, io::DataStream::SeekOrigin::Begin);
         !seekRes) {
-      return tl::make_unexpected(seekRes.error());
+      return nonstd::make_unexpected(seekRes.error());
     }
 
     ogg_int64_t lastPageOffset = -1;
     while (stream->position() < searchEnd) {
       lastPageOffset = stream->position();
       auto pageRes = readNextPage();
-      if (pageRes.error() == audio::Errc::EndOfStream) {
-        searchEnd = lastPageOffset;  // No more pages in this range
+      if (!pageRes && pageRes.error() == audio::Errc::EndOfStream) {
+        // No more pages in this range
+        searchEnd = lastPageOffset;
         break;
       }
-      if (!pageRes)
-        return tl::make_unexpected(pageRes.error());
+      if (!pageRes) {
+        return nonstd::make_unexpected(pageRes.error());
+      }
 
       if (ogg_page_serialno(&oggPage) == streamSerialNo) {
         ogg_int64_t granulepos = ogg_page_granulepos(&oggPage);
         if (granulepos != -1) {
+          ++pagesConsidered;
           if (granulepos < (ogg_int64_t)frameIndex) {
-            // This page is a candidate, it's before our target
+            // Candidate page before target
             bestOffset = lastPageOffset;
             beginTime = granulepos;
             searchBegin = stream->position();
+
           } else {
-            // We've overshot the target
+            // Overshot; narrow to lower half
             searchEnd = lastPageOffset;
             endTime = granulepos;
-            break;  // Narrow the search to the lower half
+
+            break;
           }
         }
       }
     }
   }
 
-  // If no suitable page was found, seek to the beginning of the data.
+  BELL_LOG(
+      debug, LOG_TAG,
+      "Coarse seek complete: iterations={} pagesConsidered={} bestOffset={} "
+      "beginTime={} endTime={}",
+      bisectionIterations, pagesConsidered, bestOffset, beginTime, endTime);
+
+  // Decide final coarse seek target
   ogg_int64_t seekTo = (bestOffset != -1) ? bestOffset : dataStartOffset;
   if (auto seekRes = stream->seek(seekTo, io::DataStream::SeekOrigin::Begin);
       !seekRes) {
-    return tl::make_unexpected(seekRes.error());
+    return nonstd::make_unexpected(seekRes.error());
   }
 
-  // Reset all decoder state
+  // Reset decoder state now that we are positioned at page boundary
   ogg_sync_reset(&oggSyncState);
   ogg_stream_reset(&oggStreamState);
   currentFrame = beginTime;
 
-  // Fine tuning to exact page
+  // If we are already close enough, skip fine tuning
   if (frameIndex > currentFrame &&
       (frameIndex - currentFrame) <= allowedDistance) {
-    // We landed close enough, no need to fine-tune.
+    BELL_LOG(
+        debug, LOG_TAG,
+        "Seek within allowed distance (currentFrame={} target={} delta={}) "
+        "- skipping fine tune",
+        currentFrame, frameIndex, frameIndex - currentFrame);
     return {};
   }
 
-  // Discard packets until we reach the target frame
+  BELL_LOG(debug, LOG_TAG, "Fine-tuning seek from frame {} to {}", currentFrame,
+           frameIndex);
+
+  // Discard packets until we reach (or pass) target frame
   while (currentFrame < frameIndex) {
     auto packetRes = readNextPacket();
     if (!packetRes) {
-      // Reached EOF or error before finding the frame
       return (packetRes.error() == audio::Errc::EndOfStream)
                  ? bell::Result<>()
-                 : tl::make_unexpected(packetRes.error());
+                 : nonstd::make_unexpected(packetRes.error());
     }
   }
 

@@ -2,7 +2,7 @@
 
 #include "bell/Logger.h"
 #include "bell/net/IpAddress.h"
-#include "tl/expected.hpp"
+#include "nonstd/expected.hpp"
 
 // Platform specific socket includes
 #ifdef _WIN32
@@ -26,7 +26,7 @@
 
 using namespace bell::net;
 
-tl::expected<size_t, std::error_code> UDPSocket::recvfrom(
+nonstd::expected<size_t, std::error_code> UDPSocket::recvfrom(
     std::byte* buf, size_t len, const IpAddress& address) {
   if (!isValid()) {
     return make_unexpected_errc<size_t>(std::errc::bad_file_descriptor);
@@ -42,7 +42,7 @@ tl::expected<size_t, std::error_code> UDPSocket::recvfrom(
       const_cast<sockaddr*>(address.getSockAddrPtrConst()),  // NOLINT
       &addressLen);
   if (res < 0) {
-    return tl::make_unexpected(errorFromErrno());
+    return nonstd::make_unexpected(errorFromErrno());
   }
 
   return static_cast<size_t>(res);
@@ -61,7 +61,7 @@ bell::Result<size_t> UDPSocket::sendto(const std::byte* buf, size_t len,
                const_cast<sockaddr*>(address.getSockAddrPtrConst()),  // NOLINT
                address.getSockAddrLen());
   if (res < 0) {
-    return tl::make_unexpected(errorFromErrno());
+    return nonstd::make_unexpected(errorFromErrno());
   }
 
   return static_cast<size_t>(res);

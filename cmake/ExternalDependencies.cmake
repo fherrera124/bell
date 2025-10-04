@@ -32,7 +32,7 @@ list(APPEND BELL_LIBS span)
 
 # Include expected polyfill
 add_subdirectory(external/expected)
-list(APPEND BELL_LIBS expected)
+list(APPEND BELL_LIBS expected-lite)
 
 # Include tao-json if not disabled
 if(NOT BELL_DISABLE_TAOJSON)

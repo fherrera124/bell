@@ -58,6 +58,11 @@ class CircularByteBuffer {
    */
   size_t capacity() const;
 
+  /**
+   * @brief Clears the buffer, removing all stored data.
+   */
+  void clear();
+
  private:
   mutable std::mutex accessMutex;
   std::condition_variable condFull;

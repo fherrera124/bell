@@ -163,8 +163,6 @@ bell::Result<Response> DefaultTransport::execute(const Request& req) {
   auto connection = connectionPool->acquire(*req.uri.host, port);
 
   if (connection) {
-    std::cout << "Reusing existing connection to " << *req.uri.host << ":"
-              << port << std::endl;
     socketStream = std::make_shared<net::SocketStream>(*connection);
   } else {
     if (req.uri.scheme == "https") {
@@ -172,13 +170,13 @@ bell::Result<Response> DefaultTransport::execute(const Request& req) {
       auto res = socket->connect(*req.uri.host, port,
                                  req.operationTimeoutMs.value_or(0));
       if (!res) {
-        return tl::make_unexpected(res.error());
+        return nonstd::make_unexpected(res.error());
       }
 
       connectionPool->insert(*req.uri.host, port, std::move(socket));
       auto connection = connectionPool->acquire(*req.uri.host, port);
       if (!connection) {
-        return tl::make_unexpected(connection.error());
+        return nonstd::make_unexpected(connection.error());
       }
       socketStream = std::make_shared<net::SocketStream>(*connection);
     } else {
@@ -188,13 +186,13 @@ bell::Result<Response> DefaultTransport::execute(const Request& req) {
       auto res = socket->connect(*req.uri.host, port,
                                  req.operationTimeoutMs.value_or(0));
       if (!res) {
-        return tl::make_unexpected(res.error());
+        return nonstd::make_unexpected(res.error());
       }
 
       connectionPool->insert(*req.uri.host, port, std::move(socket));
       auto connection = connectionPool->acquire(*req.uri.host, port);
       if (!connection) {
-        return tl::make_unexpected(connection.error());
+        return nonstd::make_unexpected(connection.error());
       }
       socketStream = std::make_shared<net::SocketStream>(*connection);
     }
@@ -217,7 +215,7 @@ bell::Result<Response> DefaultTransport::execute(const Request& req) {
 
   if (!res) {
     std::cout << "Error during request write" << std::endl;
-    return tl::make_unexpected(res.error());
+    return nonstd::make_unexpected(res.error());
   }
 
   // Process a body, if its present
@@ -261,8 +259,6 @@ bell::Result<Response> DefaultTransport::execute(const Request& req) {
   socketStream->flush();
 
   if (socketStream->bad()) {
-    std::cout << "Stream bad after flush" << std::endl;
-
     return bell::make_unexpected_errc<Response>(std::errc::io_error);
   }
 
@@ -272,13 +268,8 @@ bell::Result<Response> DefaultTransport::execute(const Request& req) {
   // Try to read the headers
   res = reader.readHeaders();
   if (!res) {
-    std::cout << "Error during headers read" << std::endl;
-    return tl::make_unexpected(res.error());
+    return nonstd::make_unexpected(res.error());
   }
-
-  // for (const auto& header : reader.getAllHeaders()) {
-  //   std::cout << header.first << ": " << header.second << std::endl;
-  // }
 
   // Move the reader into the response
   return {std::move(reader)};
@@ -288,7 +279,7 @@ bell::Result<Request> Request::create(http::Method method,
                                       const std::string& url) {
   auto parsedUrl = bell::net::parseURI(url);
   if (!parsedUrl) {
-    return tl::make_unexpected(http::Errc::InvalidURL);
+    return nonstd::make_unexpected(http::Errc::InvalidURL);
   }
   return Request({method, *parsedUrl});
 }
@@ -346,7 +337,7 @@ bell::Result<Response> Client::get(const std::string& url,
                                    const Headers& headers) {
   auto req = Request::create(Method::GET, url);
   if (!req) {
-    return tl::make_unexpected(req.error());
+    return nonstd::make_unexpected(req.error());
   }
   req->headers = headers;
   req->operationTimeoutMs = operationTimeoutMs;
@@ -358,7 +349,7 @@ bell::Result<Response> Client::post(const std::string& url,
                                     std::optional<size_t> bodyLength) {
   auto req = Request::create(Method::POST, url);
   if (!req) {
-    return tl::make_unexpected(req.error());
+    return nonstd::make_unexpected(req.error());
   }
   req->headers = headers;
   req->operationTimeoutMs = operationTimeoutMs;
@@ -373,7 +364,7 @@ bell::Result<Response> Client::put(const std::string& url,
                                    std::optional<size_t> bodyLength) {
   auto req = Request::create(Method::PUT, url);
   if (!req) {
-    return tl::make_unexpected(req.error());
+    return nonstd::make_unexpected(req.error());
   }
   req->headers = headers;
   req->operationTimeoutMs = operationTimeoutMs;

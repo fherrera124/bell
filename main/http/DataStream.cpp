@@ -20,7 +20,7 @@ bell::Result<> DataStream::open(bell::HTTPMethod method, const std::string& url,
 
   auto req = Request::create(method, url);
   if (!req) {
-    return tl::make_unexpected(req.error());
+    return nonstd::make_unexpected(req.error());
   }
 
   req->operationTimeoutMs = 3000;
@@ -33,7 +33,7 @@ bell::Result<> DataStream::open(bell::HTTPMethod method, const std::string& url,
   auto response = httpClient->rawRequest(httpRequest);
   if (!response) {
     BELL_LOG(error, LOG_TAG, "HTTP request error: {}", response.error());
-    return tl::make_unexpected(response.error());
+    return nonstd::make_unexpected(response.error());
   }
 
   totalSize = response->contentLength;
@@ -176,7 +176,7 @@ bell::Result<> DataStream::requestNextRange() {
   auto response = httpClient->rawRequest(httpRequest);
   if (!response) {
     BELL_LOG(error, LOG_TAG, "HTTP request error: {}", response.error());
-    return tl::make_unexpected(response.error());
+    return nonstd::make_unexpected(response.error());
   }
 
   activeResponse = *response;

@@ -6,7 +6,7 @@
 #include "bell/Result.h"
 #include "bell/net/IpAddress.h"
 #include "bell/utils/Utils.h"
-#include "tl/expected.hpp"
+#include "nonstd/expected.hpp"
 
 // Platform specific socket includes
 #ifdef _WIN32
@@ -40,11 +40,11 @@ bell::Result<> POSIXSocket::setBlocking(bool blocking) {
 #else
     int flags = fcntl(sockFd, F_GETFL, 0);
     if (flags < 0) {
-      return tl::make_unexpected(errorFromErrno());
+      return nonstd::make_unexpected(errorFromErrno());
     }
     flags = blocking ? (flags & ~O_NONBLOCK) : (flags | O_NONBLOCK);
     if (fcntl(sockFd, F_SETFL, flags) != 0) {
-      return tl::make_unexpected(errorFromErrno());
+      return nonstd::make_unexpected(errorFromErrno());
     }
 #endif
   }
@@ -65,14 +65,14 @@ std::error_code POSIXSocket::lastError() const {
 
 bell::Result<size_t> POSIXSocket::read(std::byte* buf, size_t len) {
   if (!isValid()) {
-    return tl::make_unexpected(
+    return nonstd::make_unexpected(
         std::make_error_code(std::errc::invalid_argument));
   }
 
   // Perform the actual read operation
   ssize_t res = ::recv(sockFd, buf, len, 0);
   if (res < 0) {
-    return tl::make_unexpected(errorFromErrno());
+    return nonstd::make_unexpected(errorFromErrno());
   }
 
   return static_cast<size_t>(res);
@@ -80,14 +80,14 @@ bell::Result<size_t> POSIXSocket::read(std::byte* buf, size_t len) {
 
 bell::Result<size_t> POSIXSocket::write(const std::byte* buf, size_t len) {
   if (!isValid()) {
-    return tl::make_unexpected(
+    return nonstd::make_unexpected(
         std::make_error_code(std::errc::invalid_argument));
   }
 
   // Perform the actual write operation
   ssize_t res = ::send(sockFd, buf, len, MSG_NOSIGNAL);
   if (res < 0) {
-    return tl::make_unexpected(errorFromErrno());
+    return nonstd::make_unexpected(errorFromErrno());
   }
 
   return static_cast<size_t>(res);
@@ -96,7 +96,7 @@ bell::Result<size_t> POSIXSocket::write(const std::byte* buf, size_t len) {
 bell::Result<> POSIXSocket::createFd(int domain, int protocol) {
   this->sockFd = socket(domain, getSockType(), protocol);
   if (sockFd < 0) {
-    return tl::make_unexpected(errorFromErrno());
+    return nonstd::make_unexpected(errorFromErrno());
   }
 
   return {};
@@ -132,7 +132,7 @@ bell::Result<int> POSIXSocket::bind(const std::string& address, uint16_t port,
   auto resolveRes = IpAddress::resolveDomain(address, getSockType());
 
   if (!resolveRes) {
-    return tl::make_unexpected(resolveRes.error());
+    return nonstd::make_unexpected(resolveRes.error());
   }
 
   resolveRes->setPort(port);
@@ -140,21 +140,21 @@ bell::Result<int> POSIXSocket::bind(const std::string& address, uint16_t port,
   auto fdRes = createFd(resolveRes->getFamily(), IPPROTO_IP);
 
   if (!fdRes) {
-    return tl::make_unexpected(fdRes.error());
+    return nonstd::make_unexpected(fdRes.error());
   }
 
   if (reuseAddr) {
     auto optionRes = setOption(SOL_SOCKET, SO_REUSEADDR, 1);
 
     if (!optionRes) {
-      return tl::make_unexpected(optionRes.error());
+      return nonstd::make_unexpected(optionRes.error());
     }
   }
 
   if (::bind(sockFd, resolveRes->getSockAddrPtrConst(),
              resolveRes->getSockAddrLen()) != 0) {
     close();
-    return tl::make_unexpected(errorFromErrno());
+    return nonstd::make_unexpected(errorFromErrno());
   }
 
   socklen_t servSockLen = resolveRes->getSockAddrLen();
@@ -162,7 +162,7 @@ bell::Result<int> POSIXSocket::bind(const std::string& address, uint16_t port,
   // Retrieve assigned port
   if (getsockname(sockFd, resolveRes->getSockAddrPtr(), &servSockLen) != 0) {
     close();
-    return tl::make_unexpected(errorFromErrno());
+    return nonstd::make_unexpected(errorFromErrno());
   }
 
   if (resolveRes->getPort().has_value()) {
@@ -180,7 +180,7 @@ bell::Result<> POSIXSocket::setOptionImpl(int level, int optionName,
   }
 
   if (setsockopt(getFd(), level, optionName, optionValue, optionLen) == -1) {
-    return tl::make_unexpected(errorFromErrno());
+    return nonstd::make_unexpected(errorFromErrno());
   }
 
   return {};
@@ -195,7 +195,7 @@ bell::Result<IpAddress> POSIXSocket::getPeerName() const {
   socklen_t addrLen = sizeof(addr);
 
   if (getpeername(getFd(), &addr, &addrLen) == -1) {
-    return tl::make_unexpected(errorFromErrno());
+    return nonstd::make_unexpected(errorFromErrno());
   }
 
   return IpAddress(&addr);
@@ -209,7 +209,7 @@ bell::Result<> POSIXSocket::getOptionImpl(int level, int optionName,
   }
 
   if (getsockopt(getFd(), level, optionName, optionValue, &optionLen) == -1) {
-    return tl::make_unexpected(errorFromErrno());
+    return nonstd::make_unexpected(errorFromErrno());
   }
 
   return {};
@@ -249,7 +249,7 @@ bell::Result<bool> POSIXSocket::getBlocking() const {
 
   int flags = fcntl(sockFd, F_GETFL, 0);
   if (flags == -1) {
-    return tl::make_unexpected(errorFromErrno());
+    return nonstd::make_unexpected(errorFromErrno());
   }
 
   return !(flags & O_NONBLOCK);

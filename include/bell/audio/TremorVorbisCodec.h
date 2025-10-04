@@ -91,6 +91,7 @@ class TremorVorbisCodec : public Codec {
   vorbis_block block{};
 
   bool infoInitialized = false;
+  std::vector<std::byte> decodedPCMData{};
   int headerPacketCount = 0;
 };
 }  // namespace bell::audio

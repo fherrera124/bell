@@ -4,7 +4,7 @@
 #include "bell/http/Common.h"
 #include "bell/io/MemoryStream.h"
 #include "bell/net/URIParser.h"
-#include "tl/expected.hpp"
+#include "nonstd/expected.hpp"
 
 using namespace bell;
 
@@ -152,7 +152,7 @@ size_t http::Reader::getContentLength() const {
 bell::Result<std::unordered_map<std::string, std::string>>
 http::Reader::getQueryParams() const {
   if (!isValid(Direction::Request)) {
-    return tl::make_unexpected(
+    return nonstd::make_unexpected(
         std::make_error_code(std::errc::operation_not_permitted));
   }
 
@@ -191,7 +191,7 @@ bell::Result<std::string_view> http::Reader::getBodyStringView() {
   if (readContentLength == 0) {
     auto res = readBody();
     if (!res) {
-      return tl::make_unexpected(res.error());
+      return nonstd::make_unexpected(res.error());
     }
   }
 
@@ -212,7 +212,7 @@ bell::Result<std::vector<std::byte>> http::Reader::getBodyBytes() {
   if (readContentLength == 0) {
     auto res = readBody();
     if (!res) {
-      return tl::make_unexpected(res.error());
+      return nonstd::make_unexpected(res.error());
     }
   }
 
@@ -231,7 +231,7 @@ bell::Result<const std::byte*> http::Reader::getBodyBytesPtr() {
   if (readContentLength == 0) {
     auto res = readBody();
     if (!res) {
-      return tl::make_unexpected(res.error());
+      return nonstd::make_unexpected(res.error());
     }
   }
 
@@ -275,7 +275,7 @@ bell::Result<size_t> http::Reader::getBodyBytesLength() {
   if (readContentLength == 0) {
     auto res = readBody();
     if (!res) {
-      return tl::make_unexpected(res.error());
+      return nonstd::make_unexpected(res.error());
     }
   }
 
@@ -328,12 +328,12 @@ bool http::Reader::isValid(Direction expectedDirection) const {
 
 bell::Result<int> http::Reader::getStatusCode() const {
   if (!isValid(Direction::Response)) {
-    return tl::make_unexpected(
+    return nonstd::make_unexpected(
         std::make_error_code(std::errc::operation_not_permitted));
   }
 
   if (!statusCode.has_value()) {
-    return tl::make_unexpected(std::make_error_code(std::errc::no_message));
+    return nonstd::make_unexpected(std::make_error_code(std::errc::no_message));
   }
 
   return statusCode.value();
@@ -341,11 +341,11 @@ bell::Result<int> http::Reader::getStatusCode() const {
 
 bell::Result<http::Method> http::Reader::getMethod() const {
   if (!isValid(Direction::Request)) {
-    return tl::make_unexpected(
+    return nonstd::make_unexpected(
         std::make_error_code(std::errc::operation_not_permitted));
   }
   if (!method.has_value()) {
-    return tl::make_unexpected(std::make_error_code(std::errc::no_message));
+    return nonstd::make_unexpected(std::make_error_code(std::errc::no_message));
   }
 
   return method.value();
@@ -353,11 +353,11 @@ bell::Result<http::Method> http::Reader::getMethod() const {
 
 bell::Result<std::string_view> http::Reader::getStatusMessage() const {
   if (!isValid(Direction::Response)) {
-    return tl::make_unexpected(
+    return nonstd::make_unexpected(
         std::make_error_code(std::errc::operation_not_permitted));
   }
   if (!statusMessage.has_value()) {
-    return tl::make_unexpected(std::make_error_code(std::errc::no_message));
+    return nonstd::make_unexpected(std::make_error_code(std::errc::no_message));
   }
 
   return statusMessage.value();
@@ -365,11 +365,11 @@ bell::Result<std::string_view> http::Reader::getStatusMessage() const {
 
 bell::Result<std::string_view> http::Reader::getPath() const {
   if (!isValid(Direction::Request)) {
-    return tl::make_unexpected(
+    return nonstd::make_unexpected(
         std::make_error_code(std::errc::operation_not_permitted));
   }
   if (!path.has_value()) {
-    return tl::make_unexpected(std::make_error_code(std::errc::no_message));
+    return nonstd::make_unexpected(std::make_error_code(std::errc::no_message));
   }
 
   return path.value();

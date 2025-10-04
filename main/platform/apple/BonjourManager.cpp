@@ -16,7 +16,7 @@
 #include "bell/net/SocketPollListener.h"
 #include "bell/net/UDPSocket.h"
 #include "bell/utils/Task.h"
-#include "tl/expected.hpp"
+#include "nonstd/expected.hpp"
 
 using namespace bell::mdns;
 
@@ -119,7 +119,7 @@ class BonjourBrowser : public Browser {
       auto res = DNSServiceCreateConnection(&ref);
       auto err = translateDnsSdError(res);
       if (err) {
-        return tl::make_unexpected(err);
+        return nonstd::make_unexpected(err);
       }
 
       // Get a socket file descriptor for the browse socket
@@ -156,7 +156,7 @@ class BonjourBrowser : public Browser {
                                 browseReplyShim, this);
     auto err = translateDnsSdError(res);
     if (err) {
-      return tl::make_unexpected(err);
+      return nonstd::make_unexpected(err);
     }
 
     return {};
@@ -328,7 +328,7 @@ class BonjourBrowser : public Browser {
 
     auto err = translateDnsSdError(res);
     if (err) {
-      return tl::make_unexpected(err);
+      return nonstd::make_unexpected(err);
     }
 
     // Add the resolve context to the cached list
@@ -411,7 +411,7 @@ class BonjourBrowser : public Browser {
 
     auto err = translateDnsSdError(res);
     if (err) {
-      return tl::make_unexpected(err);
+      return nonstd::make_unexpected(err);
     }
 
     // Add the resolve context to the cached list
@@ -508,7 +508,7 @@ class BonjourAdvertiser : public Advertiser {
     auto err = translateDnsSdError(res);
 
     if (err) {
-      return tl::make_unexpected(err);
+      return nonstd::make_unexpected(err);
     }
 
     // Get a socket file descriptor for the browse socket
@@ -567,7 +567,7 @@ class BonjourManager : public Manager, public bell::Task {
                         autoResolveService, autoResolveAddresses, resolveIPv6);
     if (!res) {
       // Return an error code indicating service discovery failure
-      return tl::make_unexpected(MdnsErrc::service_discovery_failed);
+      return nonstd::make_unexpected(MdnsErrc::service_discovery_failed);
     }
 
     return {std::move(browser)};
@@ -586,7 +586,7 @@ class BonjourManager : public Manager, public bell::Task {
                               serviceHost, port, txtRecords, interfaceIndex);
 
     if (!res) {
-      return tl::make_unexpected(res.error());
+      return nonstd::make_unexpected(res.error());
     }
 
     return advertiser;

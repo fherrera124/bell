@@ -60,7 +60,7 @@ class POSIXSocket : public Socket {
     auto res = getOptionImpl(level, optionName, &optionValue, optionLen);
 
     if (!res) {
-      return tl::unexpected(res);
+      return nonstd::unexpected<T>(res);
     }
 
     return optionValue;

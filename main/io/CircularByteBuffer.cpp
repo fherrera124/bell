@@ -45,6 +45,14 @@ size_t CircularByteBuffer::write(const std::byte* data, size_t dataLen) {
   return bytesToCopy;
 }
 
+void CircularByteBuffer::clear() {
+  std::scoped_lock lock(accessMutex);
+  headPos = 0;
+  tailPos = 0;
+  currentSize = 0;
+  condFull.notify_all();  // Notify writers that space is available.
+}
+
 size_t CircularByteBuffer::read(std::byte* buffer, size_t dataLen) {
   if (buffer == nullptr || dataLen == 0) {
     return 0;

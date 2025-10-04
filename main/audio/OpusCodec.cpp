@@ -12,7 +12,7 @@
 
 // Own includes
 #include "bell/Logger.h"
-#include "tl/expected.hpp"
+#include "nonstd/expected.hpp"
 
 using namespace bell::audio;
 
@@ -44,7 +44,7 @@ bell::Result<> OpusCodec::setupEncode(const AudioFormat& audioFormat,
                                       const CodecConfig& codecSpecificConfig) {
   // Check if the config is of the correct type
   if (!std::holds_alternative<OpusConfig>(codecSpecificConfig)) {
-    return tl::make_unexpected(Errc::UnsupportedConfig);
+    return nonstd::make_unexpected(Errc::UnsupportedConfig);
   }
   config = std::get<OpusConfig>(codecSpecificConfig);
 
@@ -57,7 +57,7 @@ bell::Result<> OpusCodec::setupEncode(const AudioFormat& audioFormat,
 
   if (audioFormat.getSampleRate() != SampleRate::SR_48000HZ) {
     BELL_LOG(warn, LOG_TAG, "Opus only supports 48kHz sample rate");
-    return tl::make_unexpected(audio::Errc::UnsupportedConfig);
+    return nonstd::make_unexpected(audio::Errc::UnsupportedConfig);
   }
   this->audioFormat = audioFormat;
 
@@ -71,7 +71,7 @@ bell::Result<> OpusCodec::setupEncode(const AudioFormat& audioFormat,
   if (opusError != OPUS_OK) {
     BELL_LOG(error, LOG_TAG, "Failed to create opus encoder: {}",
              opus_strerror(opusError));
-    return tl::make_unexpected(make_opus_error_code(opusError));
+    return nonstd::make_unexpected(make_opus_error_code(opusError));
   }
 
   if (config.samplesPerPacket.has_value()) {
@@ -90,7 +90,7 @@ bell::Result<> OpusCodec::setupEncode(const AudioFormat& audioFormat,
     if (opusError != OPUS_OK) {
       BELL_LOG(error, LOG_TAG, "Failed to set opus frame duration: {}",
                opus_strerror(opusError));
-      return tl::make_unexpected(make_opus_error_code(opusError));
+      return nonstd::make_unexpected(make_opus_error_code(opusError));
     }
   }
 
@@ -101,7 +101,7 @@ bell::Result<> OpusCodec::setupDecode(const AudioFormat& audioFormat,
                                       const CodecConfig& codecSpecificConfig) {
   // Check if the config is of the correct type
   if (!std::holds_alternative<OpusConfig>(codecSpecificConfig)) {
-    return tl::make_unexpected(Errc::UnsupportedConfig);
+    return nonstd::make_unexpected(Errc::UnsupportedConfig);
   }
   config = std::get<OpusConfig>(codecSpecificConfig);
 
@@ -114,7 +114,7 @@ bell::Result<> OpusCodec::setupDecode(const AudioFormat& audioFormat,
 
   if (audioFormat.getSampleRate() != SampleRate::SR_48000HZ) {
     BELL_LOG(warn, LOG_TAG, "Opus only supports 48kHz sample rate");
-    return tl::make_unexpected(audio::Errc::UnsupportedConfig);
+    return nonstd::make_unexpected(audio::Errc::UnsupportedConfig);
   }
   this->audioFormat = audioFormat;
 
@@ -129,7 +129,7 @@ bell::Result<> OpusCodec::setupDecode(const AudioFormat& audioFormat,
     BELL_LOG(error, LOG_TAG, "Failed to create opus decoder: {}",
              opus_strerror(opusError));
     // Opus errors most likely come from unsupported config
-    return tl::make_unexpected(make_opus_error_code(opusError));
+    return nonstd::make_unexpected(make_opus_error_code(opusError));
   }
 
   return {};
@@ -148,11 +148,11 @@ bell::Result<Codec::EncodeResult> OpusCodec::encode(
   if (packetSize < 0) {
     BELL_LOG(info, LOG_TAG, "Could not encode opus packet, err = {}",
              opus_strerror(packetSize));
-    return tl::make_unexpected(make_opus_error_code(packetSize));
+    return nonstd::make_unexpected(make_opus_error_code(packetSize));
   }
 
   if (packetSize == 0) {
-    return tl::make_unexpected(audio::Errc::NotEnoughBytes);
+    return nonstd::make_unexpected(audio::Errc::NotEnoughBytes);
   }
 
   return EncodeResult{
@@ -177,10 +177,10 @@ bell::Result<Codec::DecodeResult> OpusCodec::decode(
   if (pcmLen < 0) {
     BELL_LOG(info, LOG_TAG, "Could not decode opus packet, err = {}",
              opus_strerror(pcmLen));
-    return tl::make_unexpected(make_opus_error_code(pcmLen));
+    return nonstd::make_unexpected(make_opus_error_code(pcmLen));
   }
   if (pcmLen == 0) {
-    return tl::make_unexpected(audio::Errc::NotEnoughBytes);
+    return nonstd::make_unexpected(audio::Errc::NotEnoughBytes);
   }
 
   return DecodeResult{

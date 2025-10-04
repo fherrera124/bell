@@ -20,7 +20,7 @@
 
 // Library includes
 #include "fmt/format.h"
-#include "tl/expected.hpp"
+#include "nonstd/expected.hpp"
 
 // Avahi includes
 #include <avahi-client/client.h>
@@ -160,7 +160,7 @@ class AvahiMDNSBrowser : public Browser {
       int avahiErr = avahi_client_errno(avahiClient);
       BELL_LOG(error, LOG_TAG, "Failed to create Avahi service browser, {}",
                avahi_strerror(avahiErr));
-      return tl::make_unexpected(translateAvahiError(avahiErr));
+      return nonstd::make_unexpected(translateAvahiError(avahiErr));
     }
 
     return {};
@@ -331,7 +331,7 @@ class AvahiMDNSBrowser : public Browser {
 
     if (resolveContext->resolveRef == nullptr) {
       int avahiErr = avahi_client_errno(avahiClient);
-      return tl::make_unexpected(translateAvahiError(avahiErr));
+      return nonstd::make_unexpected(translateAvahiError(avahiErr));
     }
 
     // Add the resolve context to the cached list
@@ -438,7 +438,7 @@ class AvahiMDNSAdvertiser : public Advertiser {
         avahi_entry_group_new(avahiClient, avahiGroupCallback, nullptr);
 
     if (entryGroup == nullptr) {
-      return tl::make_unexpected(MdnsErrc::service_registration_failed);
+      return nonstd::make_unexpected(MdnsErrc::service_registration_failed);
     }
 
     // Construct the TXT data
@@ -468,7 +468,7 @@ class AvahiMDNSAdvertiser : public Advertiser {
     }
 
     if (ret < 0) {
-      return tl::make_unexpected(MdnsErrc::service_registration_failed);
+      return nonstd::make_unexpected(MdnsErrc::service_registration_failed);
     }
 
     return {};
@@ -548,7 +548,7 @@ class AvahiMDNSManager : public Manager, bell::Task {
                                onEvent, autoResolveService, resolveIPv6);
 
     if (!res) {
-      return tl::make_unexpected(res.error());
+      return nonstd::make_unexpected(res.error());
     }
 
     return browser;
@@ -566,7 +566,7 @@ class AvahiMDNSManager : public Manager, bell::Task {
                               serviceHost, port, txtRecords, interfaceIndex);
 
     if (!res) {
-      return tl::make_unexpected(res.error());
+      return nonstd::make_unexpected(res.error());
     }
 
     return advertiser;

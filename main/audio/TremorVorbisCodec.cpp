@@ -29,7 +29,7 @@ bell::Result<> TremorVorbisCodec::setupEncode(
   (void)audioFormat;
   (void)codecSpecificConfig;
   // Libtremor does not support encoding
-  return tl::make_unexpected(audio::Errc::OperationNotSupported);
+  return nonstd::make_unexpected(audio::Errc::OperationNotSupported);
 }
 
 bell::Result<> TremorVorbisCodec::setupDecode(
@@ -37,7 +37,7 @@ bell::Result<> TremorVorbisCodec::setupDecode(
 
   // Check if the config is of the correct type
   if (!std::holds_alternative<TremorConfig>(codecSpecificConfig)) {
-    return tl::make_unexpected(Errc::UnsupportedConfig);
+    return nonstd::make_unexpected(Errc::UnsupportedConfig);
   }
   config = std::get<TremorConfig>(codecSpecificConfig);
 
@@ -81,7 +81,7 @@ bell::Result<Codec::SetupStatus> TremorVorbisCodec::setupDecodeFromHeaders(
   int res = vorbis_synthesis_headerin(&info, &comment, &packet);
   if (res < 0) {
     BELL_LOG(info, LOG_TAG, "Failed to initialize vorbis decoder {}", res);
-    return tl::make_unexpected(make_tremor_error_code(res));
+    return nonstd::make_unexpected(make_tremor_error_code(res));
   }
 
   headerPacketCount++;
@@ -101,7 +101,7 @@ bell::Result<Codec::EncodeResult> TremorVorbisCodec::encode(
     tcb::span<const std::byte> pcmInput) {
   (void)pcmInput;
   // Libtremor does not support encoding
-  return tl::make_unexpected(audio::Errc::OperationNotSupported);
+  return nonstd::make_unexpected(audio::Errc::OperationNotSupported);
 }
 
 bell::Result<Codec::DecodeResult> TremorVorbisCodec::decode(
@@ -116,28 +116,55 @@ bell::Result<Codec::DecodeResult> TremorVorbisCodec::decode(
   packet.e_o_s = 0;
   packet.granulepos = 0;
   packet.packetno = 0;
-
   int res = vorbis_synthesis(&block, &packet);
   if (res < 0) {
-    return tl::make_unexpected(make_tremor_error_code(res));
+    return nonstd::make_unexpected(make_tremor_error_code(res));
   }
 
   res = vorbis_synthesis_blockin(&dspState, &block);
   if (res < 0) {
-    return tl::make_unexpected(make_tremor_error_code(res));
+    return nonstd::make_unexpected(make_tremor_error_code(res));
   }
 
   int32_t** pcm;
   int samples = vorbis_synthesis_pcmout(&dspState, &pcm);
   if (samples > 0) {
+    // Correctly handle the output data
+    const int numChannels = info.channels;
+    const size_t totalSamples = samples * numChannels;
+    const size_t outputBytes = totalSamples * sizeof(int16_t);
+
+    if (decodedPCMData.size() < outputBytes) {
+      decodedPCMData.resize(outputBytes);
+    }
+
+    auto* out = reinterpret_cast<int16_t*>(decodedPCMData.data());
+
+    // Manually interleave the samples from each channel
+    for (int i = 0; i < samples; ++i) {
+      for (int c = 0; c < numChannels; ++c) {
+        // Tremor uses 32-bit values internally but output is 16-bit.
+        // Clamp the values to be safe, although Tremor should not overflow.
+        int32_t val = pcm[c][i];
+        val >>= 9;  // Convert from Tremor's 32-bit to 16-bit range
+        if (val > 32767)
+          val = 32767;
+        if (val < -32768)
+          val = -32768;
+
+        *out++ = static_cast<int16_t>(val);
+      }
+    }
+
+    // Tell libvorbis we have consumed the samples
     vorbis_synthesis_read(&dspState, samples);
 
     return DecodeResult{
-        .pcm = {reinterpret_cast<std::byte*>(pcm[0]),
-                audioFormat.samplesToBytes(samples)},
+        .pcm = {decodedPCMData.data(), outputBytes},
         .consumedInputBytes = encodedInput.size(),
     };
   }
 
-  return tl::make_unexpected(audio::Errc::NotEnoughBytes);
+  // If samples == 0, it might just mean we need more input data
+  return DecodeResult{.pcm = {}, .consumedInputBytes = encodedInput.size()};
 }

@@ -12,7 +12,7 @@
 #include "bell/Logger.h"
 #include "mbedtls/net_sockets.h"
 #include "mbedtls/ssl.h"
-#include "tl/expected.hpp"
+#include "nonstd/expected.hpp"
 
 using namespace bell;
 
@@ -45,7 +45,7 @@ bell::Result<int> transformBioRes(bell::Result<size_t> res, bool reading) {
 
   if (res.error() == std::errc::broken_pipe ||
       res.error() == std::errc::connection_reset) {
-    return tl::make_unexpected(
+    return nonstd::make_unexpected(
         net::make_tls_error_code(MBEDTLS_ERR_NET_CONN_RESET));
   }
 
@@ -110,7 +110,7 @@ bell::Result<> net::TLSSocket::connect(const std::string& host, uint16_t port,
                                         MBEDTLS_SSL_TRANSPORT_STREAM,
                                         MBEDTLS_SSL_PRESET_DEFAULT);
   if (ret != 0) {
-    return tl::make_unexpected(make_tls_error_code(ret));
+    return nonstd::make_unexpected(make_tls_error_code(ret));
   }
   // TODO: Bundle verification & TLS 1.3
   mbedtls_ssl_conf_authmode(&sslConf, MBEDTLS_SSL_VERIFY_NONE);
@@ -119,18 +119,18 @@ bell::Result<> net::TLSSocket::connect(const std::string& host, uint16_t port,
   mbedtls_ssl_conf_rng(&sslConf, mbedtls_ctr_drbg_random, &ctrDrbgCtx);
   ret = mbedtls_ssl_setup(&sslCtx, &sslConf);
   if (ret != 0) {
-    return tl::make_unexpected(make_tls_error_code(ret));
+    return nonstd::make_unexpected(make_tls_error_code(ret));
   }
 
   ret = mbedtls_ssl_set_hostname(&sslCtx, host.c_str());
   if (ret != 0) {
-    return tl::make_unexpected(make_tls_error_code(ret));
+    return nonstd::make_unexpected(make_tls_error_code(ret));
   }
 
   while ((ret = mbedtls_ssl_handshake(&sslCtx)) != 0) {
     if (ret != MBEDTLS_ERR_SSL_WANT_READ && ret != MBEDTLS_ERR_SSL_WANT_WRITE) {
       BELL_LOG(error, LOG_TAG, "Failed to perform TLS handshake {}", ret);
-      return tl::make_unexpected(make_tls_error_code(ret));
+      return nonstd::make_unexpected(make_tls_error_code(ret));
     }
   }
 
@@ -228,7 +228,7 @@ bell::Result<size_t> net::TLSSocket::read(std::byte* buf, size_t len) {
   int res = mbedtls_ssl_read(&sslCtx, reinterpret_cast<uint8_t*>(buf), len);
 
   if (res < 0) {
-    return tl::make_unexpected(mbedtlsToCommonErrc(res));
+    return nonstd::make_unexpected(mbedtlsToCommonErrc(res));
   }
 
   return static_cast<size_t>(res);
@@ -239,7 +239,7 @@ bell::Result<size_t> net::TLSSocket::write(const std::byte* buf, size_t len) {
       mbedtls_ssl_write(&sslCtx, reinterpret_cast<const uint8_t*>(buf), len);
 
   if (res < 0) {
-    return tl::make_unexpected(mbedtlsToCommonErrc(res));
+    return nonstd::make_unexpected(mbedtlsToCommonErrc(res));
   }
 
   return static_cast<size_t>(res);

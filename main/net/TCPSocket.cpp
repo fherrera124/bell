@@ -40,7 +40,7 @@ bell::Result<> TCPSocket::connect(const std::string& host, uint16_t port,
   if (!resolveRes) {
     BELL_LOG(error, LOG_TAG, "Could not resolve {}. Error {}", host.c_str(),
              resolveRes.error());
-    return tl::make_unexpected(resolveRes.error());
+    return nonstd::make_unexpected(resolveRes.error());
   }
 
   resolveRes->setPort(port);
@@ -57,7 +57,7 @@ bell::Result<> TCPSocket::connect(const std::string& host, uint16_t port,
   if (!isBlockingRes) {
     BELL_LOG(error, LOG_TAG, "Could not get socket flags. Error {}",
              isBlockingRes.error());
-    return tl::make_unexpected(isBlockingRes.error());
+    return nonstd::make_unexpected(isBlockingRes.error());
   }
 
   // Cache the isBlocking value
@@ -76,7 +76,7 @@ bell::Result<> TCPSocket::connect(const std::string& host, uint16_t port,
     // Connection failed immediately
     close();
 
-    return tl::make_unexpected(errorFromErrno());
+    return nonstd::make_unexpected(errorFromErrno());
   }
 
   if (timeoutMs > 0) {
@@ -95,13 +95,13 @@ bell::Result<> TCPSocket::connect(const std::string& host, uint16_t port,
           return make_unexpected_errc(std::errc::timed_out);
         }
 
-        return tl::make_unexpected(errorFromErrno());
+        return nonstd::make_unexpected(errorFromErrno());
       }
 
       // Check for connection success or error
       auto errCode = lastError();
       if (errCode) {
-        return tl::make_unexpected(errCode);
+        return nonstd::make_unexpected(errCode);
       }
 
       // Success
@@ -124,7 +124,7 @@ bell::Result<> TCPSocket::listen(int backlog) {
   }
 
   if (::listen(sockFd, backlog) != 0) {
-    return tl::make_unexpected(errorFromErrno());
+    return nonstd::make_unexpected(errorFromErrno());
   }
 
   return {};
@@ -139,7 +139,7 @@ bell::Result<TCPSocket> TCPSocket::accept() {
       sockFd, reinterpret_cast<struct sockaddr*>(&clientAddr), &addrLen);
 
   if (clientFd < 0) {
-    return tl::make_unexpected(errorFromErrno());
+    return nonstd::make_unexpected(errorFromErrno());
   }
 
   return TCPSocket(clientFd);

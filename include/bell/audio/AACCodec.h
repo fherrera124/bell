@@ -173,7 +173,7 @@ class AACCodec : public Codec {
   bell::Result<SetupStatus> setupDecodeFromHeaders(
       tcb::span<const std::byte> encodedInput) override {
     (void)encodedInput;
-    return tl::make_unexpected(Errc::OperationNotSupported);
+    return nonstd::make_unexpected(Errc::OperationNotSupported);
   };
   bell::Result<EncodeResult> encode(
       tcb::span<const std::byte> pcmInput) override;

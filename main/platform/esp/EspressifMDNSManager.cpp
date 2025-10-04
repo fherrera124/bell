@@ -321,7 +321,7 @@ class EspressifMDNAdvertiser : public Advertiser {
                                 txtItems.size());
 
     if (res != ESP_OK) {
-      return tl::make_unexpected(
+      return nonstd::make_unexpected(
           bell::mdns::MdnsErrc::service_registration_failed);
     }
 
@@ -356,7 +356,7 @@ class EspressifMDNSManager : public Manager {
     auto res = browser->browse(serviceType, onEvent);
 
     if (!res) {
-      return tl::make_unexpected(res.error());
+      return nonstd::make_unexpected(res.error());
     }
 
     return browser;
@@ -373,7 +373,7 @@ class EspressifMDNSManager : public Manager {
         advertiser->advertise(serviceName, serviceType, port, txtRecords);
 
     if (!res) {
-      return tl::make_unexpected(res.error());
+      return nonstd::make_unexpected(res.error());
     }
 
     return advertiser;
