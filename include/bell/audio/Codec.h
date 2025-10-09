@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <optional>
 #include <variant>
+#include <vector>
 
 // Own headers
 #include "bell/Result.h"
