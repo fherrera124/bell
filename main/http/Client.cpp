@@ -65,6 +65,9 @@ void ConnectionPool::insert(const std::string& host, int port,
 void ConnectionPool::PoolDeleter::operator()(bell::Socket* s) const noexcept {
   if (!s)
     return;
+  if (!s->isValid())
+    return;
+
   // Try to reinsert back into the pool; if pool is gone, delete the socket.
   auto p = pool.lock();
   if (p) {
@@ -214,7 +217,7 @@ bell::Result<Response> DefaultTransport::execute(const Request& req) {
                                  req.contentLength.value_or(0));
 
   if (!res) {
-    std::cout << "Error during request write" << std::endl;
+    socketStream->close();
     return nonstd::make_unexpected(res.error());
   }
 
@@ -259,6 +262,7 @@ bell::Result<Response> DefaultTransport::execute(const Request& req) {
   socketStream->flush();
 
   if (socketStream->bad()) {
+    socketStream->close();
     return bell::make_unexpected_errc<Response>(std::errc::io_error);
   }
 
@@ -268,6 +272,7 @@ bell::Result<Response> DefaultTransport::execute(const Request& req) {
   // Try to read the headers
   res = reader.readHeaders();
   if (!res) {
+    socketStream->close();
     return nonstd::make_unexpected(res.error());
   }
 

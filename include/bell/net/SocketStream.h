@@ -51,6 +51,8 @@ class SocketStream : public std::iostream {
   bool isOpen() { return socket->isValid(); }
 
   SocketBuffer* rdbuf() { return &socketBuf; }
+
+  void close() { socket->close(); }
 };
 }  // namespace bell::net
 
