@@ -18,12 +18,23 @@ void SocketPollListener::registerSocket(const std::shared_ptr<Socket>& socket,
     throw std::invalid_argument("Invalid socket");
   }
 
-  if (handlers.find(socket->getFd()) == handlers.end()) {
-    // Create a new handler for the socket
-    handlers[socket->getFd()] = {.socketPtr = socket, .callbacks = {}};
+  int fd = socket->getFd();
+  auto it = handlers.find(fd);
+
+  if (it != handlers.end() && it->second.markedForRemoval) {
+    handlers.erase(it);
+    it = handlers.end();  // Invalidate iterator
   }
 
-  handlers[socket->getFd()].callbacks[polledEvent] = onEvent;
+  if (it == handlers.end()) {
+    handlers[fd] = {.socketPtr = socket, .callbacks = {}};
+  } else {
+
+    handlers[fd].socketPtr = socket;
+  }
+
+  handlers[fd].callbacks[polledEvent] = onEvent;
+  handlers[fd].markedForRemoval = false;
 
   updateFdList();
 }
@@ -72,8 +83,8 @@ void SocketPollListener::unregisterSocket(const std::shared_ptr<Socket>& socket,
   std::scoped_lock lock(pollMutex);
   if (socket->isValid() && handlers.contains(socket->getFd())) {
     if (polledEvent == Event::All) {
-      // Remove all events for the socket
-      handlers.erase(socket->getFd());
+      // Will be cleaned up on the next poll cycle
+      handlers[socket->getFd()].markedForRemoval = true;
     } else {
       // Remove the specific event for the socket
       handlers[socket->getFd()].callbacks.erase(polledEvent);
@@ -126,6 +137,7 @@ void SocketPollListener::poll(int timeoutMs) {
   for (auto& pfd : fdsCopy) {
     if (pfd.revents != 0) {  // If there are any events
       auto it = handlers.find(pfd.fd);
+
       if (it != handlers.end()) {
         auto socketPtr = it->second.socketPtr.lock();
 
@@ -163,6 +175,10 @@ void SocketPollListener::poll(int timeoutMs) {
             it->second.callbacks[Event::Hangup](*socketPtr);
           }
 
+          it->second.markedForRemoval = true;
+        }
+
+        if (it->second.markedForRemoval) {
           // Remove the handler
           handlers.erase(it->first);
 

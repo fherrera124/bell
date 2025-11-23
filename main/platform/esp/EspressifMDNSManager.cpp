@@ -65,7 +65,7 @@ class BrowseExecutor : public bell::Task {
   void taskLoop() override {
     // Run the mDNS browse loop
     // Call the registered callbacks
-    std::scoped_lock lock(browseMutex);
+    std::unique_lock lock(browseMutex);
     for (const auto& [regType, callback] : browseCallbacks) {
       mdns_result_t* result = nullptr;
 
@@ -87,6 +87,7 @@ class BrowseExecutor : public bell::Task {
     }
 
     if (browseCallbacks.empty()) {
+      lock.unlock();
       // Sleep for a while to avoid busy waiting
       bell::utils::sleepMs(1000);
     }

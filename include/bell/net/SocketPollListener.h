@@ -51,6 +51,9 @@ class SocketPollListener {
 
     // Registered callbacks for events
     std::unordered_map<Event, EventCallback> callbacks;
+
+    // Flag indicating if the socket is marked for removal after the callbacks exit
+    bool markedForRemoval = false;
   };
 
   // keeps reference to socket we're listening to events from
