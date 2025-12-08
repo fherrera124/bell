@@ -2,10 +2,15 @@
 
 #include <unistd.h>  // for usleep
 
+#ifdef ESP_PLATFORM
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#endif
+
 using namespace bell;
 
 timeval bell::utils::millisecondsToTimeval(uint32_t milliseconds) {
-  struct timeval tv {};
+  struct timeval tv{};
   tv.tv_sec = milliseconds / 1000;
   tv.tv_usec = static_cast<int32_t>(milliseconds % 1000) * 1000;
   return tv;
@@ -16,5 +21,9 @@ uint32_t bell::utils::timevalToMilliseconds(const timeval& tv) {
 }
 
 void bell::utils::sleepMs(uint32_t milliseconds) {
+#ifdef ESP_PLATFORM
+  vTaskDelay(milliseconds / portTICK_PERIOD_MS);
+#else
   usleep(milliseconds * 1000);
+#endif
 }
