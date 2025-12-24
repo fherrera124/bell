@@ -2,6 +2,7 @@
 
 // Standard includes
 #include <mutex>
+#include "bell/utils/Utils.h"
 
 // IQmathLib
 #include <IQmathLib.h>
@@ -57,53 +58,78 @@ float BiquadTransform::calculateHeadroom() {
 void BiquadTransform::process(DataSlots& sampleSlots) {
   std::scoped_lock lock(accessMutex);
 
-  if (stages.empty()) {
+  const size_t numStages = stages.size();
+  if (numStages == 0) {
     return;  // No stages to process
   }
 
-  auto& input = sampleSlots.primarySlot->at(this->channels[0]);
+  int32_t* data = (*sampleSlots.primarySlot)[this->channels[0]];
+  if (data == nullptr) {
+    return;  // Invalid channel
+  }
 
-  // Direct form 1 biquad filter, with basic noise shaping
-  // Based on robert bristow-johnson code from https://dsp.stackexchange.com/questions/21792/best-implementation-of-a-real-time-fixed-point-iir-filter-with-constant-coeffic
-  for (auto stageItr = stages.begin(); stageItr != stages.end(); ++stageItr) {
-    if (stageItr != stages.begin()) {
-      // For inputs, use the output of the previous stage
-      stageItr->x1 = std::prev(stageItr)->y1;
-      stageItr->x2 = std::prev(stageItr)->y2;
-    }
+  const size_t numSamples = sampleSlots.numSamples;
 
-    int64_t accumulator = stageItr->savedFractional;
-    for (size_t i = 0; i < sampleSlots.numSamples; i++) {
+  // Direct form 1 biquad filter with basic noise shaping
+  // Process each stage sequentially (stage-major order is faster for IIR filters)
+  // Based on Robert Bristow-Johnson code
+  for (size_t stageIdx = 0; stageIdx < numStages; ++stageIdx) {
+    auto& stage = stages[stageIdx];
+
+    // Pre-load state into local variables for better register allocation
+    int32_t x1 = stage.x1;
+    int32_t x2 = stage.x2;
+    int32_t y1 = stage.y1;
+    int32_t y2 = stage.y2;
+
+    // Pre-load coefficients into local variables
+    const int32_t b0 = stage.b0;
+    const int32_t b1 = stage.b1;
+    const int32_t b2 = stage.b2;
+    const int32_t a1 = stage.a1;
+    const int32_t a2 = stage.a2;
+
+    int64_t acc = stage.savedFractional;
+
+    for (size_t i = 0; i < numSamples; i++) {
+      int32_t x0 = data[i];
+
       // IQ30 * IQ28 = IQ58
-      accumulator += (int64_t)stageItr->b0 * input[i];
-      accumulator += (int64_t)stageItr->b1 * stageItr->x1;
-      accumulator += (int64_t)stageItr->b2 * stageItr->x2;
-      accumulator += (int64_t)stageItr->a1 * stageItr->y1;
-      accumulator += (int64_t)stageItr->a2 * stageItr->y2;
+      // Hardware MAC instructions will be used with -O2/-O3
+      acc += (int64_t)b0 * x0;
+      acc += (int64_t)b1 * x1;
+      acc += (int64_t)b2 * x2;
+      acc += (int64_t)a1 * y1;
+      acc += (int64_t)a2 * y2;
 
-      // Clip values
-      if (accumulator > 0x07FFFFFFFFFFFFFFLL) {
-        accumulator = 0x07FFFFFFFFFFFFFFLL;
-      } else if (accumulator < -0x0800000000000000LL) {
-        accumulator = -0x0800000000000000LL;
+      // Saturation to prevent wrapping
+      if (acc > 0x07FFFFFFFFFFFFFFLL) {
+        acc = 0x07FFFFFFFFFFFFFFLL;
+      } else if (acc < -0x0800000000000000LL) {
+        acc = -0x0800000000000000LL;
       }
 
-      // point of quantization, always rounding down
-      int32_t y = (int32_t)(accumulator >> 28);
+      // Quantization: IQ58 -> IQ30
+      int32_t y0 = static_cast<int32_t>(acc >> 28);
 
-      // bump the states over
-      stageItr->x2 = stageItr->x1;
-      stageItr->x1 = input[i];
-      stageItr->y2 = stageItr->y1;
-      stageItr->y1 = y;
+      // Shift state variables (compiler will optimize this)
+      x2 = x1;
+      x1 = x0;
+      y2 = y1;
+      y1 = y0;
 
-      // keep the fractional bits that were dropped for
-      accumulator &= 0x000000000FFFFFFFLL;
+      // Keep fractional bits for noise shaping
+      acc &= 0x0FFFFFFFLL;
 
-      input[i] = y;
+      // Write output
+      data[i] = y0;
     }
 
-    // Narrowing is fine, as we've previously masked the fractional bits
-    stageItr->savedFractional = static_cast<int32_t>(accumulator);
+    // Store state back to memory
+    stage.x1 = x1;
+    stage.x2 = x2;
+    stage.y1 = y1;
+    stage.y2 = y2;
+    stage.savedFractional = static_cast<int32_t>(acc);
   }
 }

@@ -1,6 +1,8 @@
 // Own header
 #include "bell/mdns/Manager.h"
 
+#ifndef BELL_DISABLE_MDNS
+
 // Standard includes
 #include <mutex>
 #include <set>
@@ -399,3 +401,5 @@ class EspressifMDNSManager : public Manager {
 Manager* bell::mdns::getDefaultManager() {
   return EspressifMDNSManager::getDefaultManager();
 }
+
+#endif

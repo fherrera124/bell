@@ -34,8 +34,6 @@ class MixerTransform : public Transform {
   // Mixer config
   std::vector<std::vector<int>> mixerMapping;
 
-  using ChannelData = std::array<int32_t, DataSlots::maxSamples>;
-
   // Calculates the input and output size
   // Currently unused
   int sourceChannels = 0;

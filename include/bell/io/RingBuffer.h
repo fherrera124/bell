@@ -4,7 +4,6 @@
 #include <cassert>
 #include <cstddef>
 #include <memory>
-#include <new>
 #include <optional>
 
 namespace bell::io {
@@ -128,9 +127,7 @@ class RingBuffer {
   }
 
  private:
-  // Get the cache line size for current platform
-  static constexpr size_t cacheLineSize =
-      std::hardware_destructive_interference_size;
+  static constexpr size_t cacheLineSize = 64;
 
   const size_t capacityValue;
   const size_t mask;

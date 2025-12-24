@@ -37,12 +37,22 @@ class Engine {
 
  private:
   std::shared_ptr<TransformPipeline> activePipeline;
-  DataSlots innerDataSlots{
-      .numSamples = 0,
-      .sampleFormat = audio::Format(0, audio::SampleFormat::S16,
-                                    audio::SampleRate::SR_44100HZ),
-  };
+  DataSlots innerDataSlots;
   std::mutex accessMutex;
+
+#ifdef BELL_DSP_ENABLE_PROFILING
+  // Profiling state (only compiled when profiling is enabled)
+  struct ProfilingStats {
+    uint64_t inputConversionCycles = 0;
+    uint64_t pipelineProcessingCycles = 0;
+    uint64_t outputConversionCycles = 0;
+    uint64_t totalCycles = 0;
+    uint64_t callCount = 0;
+  };
+  ProfilingStats stats{};
+  uint64_t lastLogTime = 0;
+  static constexpr uint64_t LOG_INTERVAL_MS = 5000;  // Log every 5 seconds
+#endif
 };
 }  // namespace bell::dsp
 

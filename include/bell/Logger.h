@@ -1,10 +1,14 @@
 #pragma once
 
 // Standard includes
+#include <algorithm>
 #include <array>
+#include <atomic>
 #include <memory>
 #include <mutex>
+#include <shared_mutex>
 #include <string>
+#include <string_view>
 #include <vector>
 
 // Library includes
@@ -20,177 +24,159 @@ inline auto format_as(std::error_code err) {
 
 namespace bell {
 
-// List of available levels for the BELL_LOG macro
-enum class LogLevel { DEBUG, INFO, WARN, ERROR };
+enum class LogLevel { debug, info, warn, error };
 
 class LoggerBackend {
  public:
   LoggerBackend() = default;
   virtual ~LoggerBackend() = default;
 
-  /**
-   * @brief Implement this function to log a message to the underlying logger
-   *
-   * @param level log level
-   * @param filename Filename of the caller, cleaned up to only include the basename
-   * @param line Line number of the caller
-   * @param tag Optional tag to include in the log message
-   * @param message Formatted log message
-   */
-  virtual void log(LogLevel level, const std::string& filename, int line,
-                   const std::string& tag, const std::string& message) = 0;
+  // Use string_view to avoid allocations for filename and tag
+  virtual void log(LogLevel level, std::string_view filename, int line,
+                   std::string_view tag, std::string_view message) = 0;
 
-  /**
-   * @brief Set the minimum log level to be logged. Default is LogLevel::DEBUG
-   *
-   * @param level log level
-   */
-  inline void setLogLevel(LogLevel level) {
-    std::scoped_lock lock(loggerMutex);
-    logLevel = level;
+  void setLogLevel(LogLevel level) {
+    logLevel.store(level, std::memory_order_relaxed);
+  }
+
+  LogLevel getLogLevel() const {
+    return logLevel.load(std::memory_order_relaxed);
   }
 
  protected:
-  LogLevel logLevel = LogLevel::DEBUG;
-  std::mutex loggerMutex;
+  std::atomic<LogLevel> logLevel{LogLevel::debug};
 };
 
 class BaseLogger {
  private:
-  // List of registered logger backends, eg stdout, file, etc
   std::vector<std::unique_ptr<LoggerBackend>> registeredBackends;
 
-  // Mutex to protect the list of registered loggers
-  std::mutex loggerMutex;
+  // Use shared_mutex: allow multiple loggers (readers) at once,
+  // block only when adding backends (writer)
+  mutable std::shared_mutex loggerMutex;
+
+  // Keep track of the lowest active level globally
+  std::atomic<LogLevel> globalMinLevel{LogLevel::debug};
+
+  void updateGlobalMinLevel() {
+    // Must be called under lock
+    LogLevel min = LogLevel::error;
+    for (const auto& b : registeredBackends) {
+      if (b->getLogLevel() < min)
+        min = b->getLogLevel();
+    }
+    globalMinLevel.store(min, std::memory_order_relaxed);
+  }
 
  public:
   BaseLogger() = default;
   ~BaseLogger() = default;
 
-  // Return a reference to the singleton logger
   static BaseLogger& instance() {
     static BaseLogger logger;
     return logger;
   }
 
-  /**
-   * @brief Register a logger backend to be used for logging
-   *
-   * @param logger Pointer to the logger backend
-   */
-  inline void registerBackend(std::unique_ptr<LoggerBackend> logger) {
-    std::scoped_lock lock(loggerMutex);
-    registeredBackends.push_back(std::move(logger));
+  // Fast path check to be used by the Macro
+  inline bool shouldLog(LogLevel level) const {
+    return level >= globalMinLevel.load(std::memory_order_relaxed);
   }
 
-  /**
-   * @brief Set the minimum log level to be logged in all backends. Default is LogLevel::DEBUG
-   *
-   * @param level log level
-   */
-  inline void setLogLevel(LogLevel level) {
+  void registerBackend(std::unique_ptr<LoggerBackend> logger) {
+    std::unique_lock lock(loggerMutex);
+    // Update the global min level if this new logger is more verbose
+    if (logger->getLogLevel() < globalMinLevel.load()) {
+      globalMinLevel.store(logger->getLogLevel());
+    }
+    registeredBackends.push_back(std::move(logger));
+    updateGlobalMinLevel();
+  }
+
+  void setLogLevel(LogLevel level) {
+    std::unique_lock lock(loggerMutex);
     for (auto& backend : registeredBackends) {
       backend->setLogLevel(level);
     }
+    updateGlobalMinLevel();
   }
 
-  template <typename... Args>
-  inline void debug(const std::string& filename, int line,
-                    const std::string& tag, const std::string& format,
-                    Args&&... args) {
-    return log(LogLevel::DEBUG, filename, line, tag, format,
-               std::forward<Args>(args)...);
+  // Helper to extract basename without allocation
+  static constexpr std::string_view getBasename(std::string_view path) {
+    auto lastSlash = path.find_last_of("/\\");
+    if (lastSlash == std::string_view::npos)
+      return path;
+    return path.substr(lastSlash + 1);
   }
 
+  // Generic log entry point
   template <typename... Args>
-  inline void error(const std::string& filename, int line,
-                    const std::string& tag, const std::string& format,
-                    Args&&... args) {
-    return log(LogLevel::ERROR, filename, line, tag, format,
-               std::forward<Args>(args)...);
-  }
+  void log(LogLevel level, std::string_view filename, int line,
+           std::string_view tag, fmt::format_string<Args...> format,
+           Args&&... args) {
+    std::string msg;
+    try {
+      msg = fmt::format(format, std::forward<Args>(args)...);
+    } catch (const std::exception& e) {
+      msg = fmt::format("LOGGING ERROR: {}", e.what());
+    }
 
-  template <typename... Args>
-  inline void info(const std::string& filename, int line,
-                   const std::string& tag, const std::string& format,
-                   Args&&... args) {
-    return log(LogLevel::INFO, filename, line, tag, format,
-               std::forward<Args>(args)...);
-  }
+    auto basename = getBasename(filename);
+    std::shared_lock lock(loggerMutex);
 
-  template <typename... Args>
-  inline void warn(const std::string& filename, int line,
-                   const std::string& tag, const std::string& format,
-                   Args&&... args) {
-    return log(LogLevel::WARN, filename, line, tag, format,
-               std::forward<Args>(args)...);
-  }
-
-  template <typename... Args>
-  inline void log(LogLevel level, const std::string& filename, int line,
-                  const std::string& tag, const std::string& format,
-                  Args&&... args) {
-    const std::string msg =
-        fmt::format(fmt::runtime(format), std::forward<Args>(args)...);
-#ifdef _WIN32
-    const std::string basenameStr = filename.substr(filename.rfind('\\') + 1);
-#else
-    const std::string basenameStr = filename.substr(filename.rfind('/') + 1);
-#endif
-
-    std::scoped_lock lock(loggerMutex);
-    // Log to all registered backends
-    for (auto& backend : registeredBackends) {
-      backend->log(level, basenameStr, line, tag, msg);
+    for (const auto& backend : registeredBackends) {
+      // 4. Double check backend specific level
+      if (level >= backend->getLogLevel()) {
+        backend->log(level, basename, line, tag, msg);
+      }
     }
   }
 };
 
-/**
- * @brief Logger backend that logs to stdout, with color coding for different log levels. Used as the default logger.
- */
 class StdoutLoggerBackend : public bell::LoggerBackend {
  public:
   StdoutLoggerBackend(bool includeTags, bool logFullTimestamp);
 
-  void log(LogLevel level, const std::string& filename, int line,
-           const std::string& tag, const std::string& message) override;
+  void log(LogLevel level, std::string_view filename, int line,
+           std::string_view tag, std::string_view message) override;
 
  private:
   bool includeTags;
   bool logFullTimestamp;
-
-  static constexpr const char* colorReset = "\033[0m";
-
   static constexpr std::array<uint8_t, 15> allColors = {
       31, 32, 33, 34, 35, 36, 37, 90, 91, 92, 93, 94, 95, 96, 97};
 };
 
 /**
- * @brief Registers the Stdout logger
- *
- * @param includeTags whether to include the tags as part of the log message
- * @param logFullTimestamp whether to format the timestamp as local time since start, or full system time
+ * @brief Registers the Stdout logger (Helper function)
  */
-void registerDefaultLogger(bool includeTags = false,
-                           bool logFullTimestamp = false,
-                           LogLevel level = LogLevel::DEBUG);
+inline void registerDefaultLogger(bool includeTags = false,
+                                  bool logFullTimestamp = false,
+                                  LogLevel level = LogLevel::debug) {
+  auto backend =
+      std::make_unique<StdoutLoggerBackend>(includeTags, logFullTimestamp);
+  backend->setLogLevel(level);
+  BaseLogger::instance().registerBackend(std::move(backend));
+}
 
 /**
- * @brief Registers a logger implementation. Multiple loggers can be used at the same time.
+ * @brief Registers a logger implementation.
  */
-void registerLoggerBackend(std::unique_ptr<bell::LoggerBackend> logger);
+inline void registerLoggerBackend(std::unique_ptr<LoggerBackend> backend) {
+  BaseLogger::instance().registerBackend(std::move(backend));
+}
 
 /**
- * @brief Set the minimum log level to be logged. Default is LogLevel::DEBUG
- *
- * @remark This can also be set per logger backend
- * @param level log level
+ * @brief Set the minimum log level globally
  */
-void setLogLevel(LogLevel level);
+inline void setLogLevel(LogLevel level) {
+  BaseLogger::instance().setLogLevel(level);
+}
 }  // namespace bell
 
-#define BELL_LOG(type, ...)                                               \
-  do {                                                                    \
-    bell::BaseLogger::instance().type(__FILE__, __LINE__, ##__VA_ARGS__); \
+#define BELL_LOG(type_name, tag, ...)                                        \
+  do {                                                                       \
+    if (bell::BaseLogger::instance().shouldLog(bell::LogLevel::type_name)) { \
+      bell::BaseLogger::instance().log(bell::LogLevel::type_name, __FILE__,  \
+                                       __LINE__, tag, __VA_ARGS__);          \
+    }                                                                        \
   } while (0)

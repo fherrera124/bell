@@ -1,92 +1,79 @@
 #include "bell/Logger.h"
 
+// Needed for thread-safe time handling
+#include <chrono>
+
 using namespace bell;
 
 StdoutLoggerBackend::StdoutLoggerBackend(bool includeTags,
                                          bool logFullTimestamp)
     : includeTags(includeTags), logFullTimestamp(logFullTimestamp) {}
 
-void StdoutLoggerBackend::log(LogLevel level, const std::string& filename,
-                              int line, const std::string& tag,
-                              const std::string& message) {
-  std::scoped_lock lock(loggerMutex);
-  if (level < logLevel) {
-    return;  // Skip this log message
+void StdoutLoggerBackend::log(LogLevel level, std::string_view filename,
+                              int line, std::string_view tag,
+                              std::string_view message) {
+  if (level < logLevel.load(std::memory_order_relaxed)) {
+    return;
   }
+
+  fmt::memory_buffer out;
 
   auto now = std::chrono::system_clock::now();
-  std::time_t nowTime = std::chrono::system_clock::to_time_t(now);
-  int nowMs = (std::chrono::duration_cast<std::chrono::milliseconds>(
-                   now.time_since_epoch()) %
-               1000)
-                  .count();
+  auto tNow = std::chrono::system_clock::to_time_t(now);
+  auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                now.time_since_epoch()) %
+            1000;
 
   if (logFullTimestamp) {
-    fmt::print("[{:%Y-%m-%d %H:%M:%S}.{:03}] ", *std::localtime(&nowTime),
-               nowMs);
+    // Format: YYYY-MM-DD HH:MM:SS.ms
+    fmt::format_to(std::back_inserter(out), "[{:%Y-%m-%d %H:%M:%S}.{:03}] ",
+                   fmt::localtime(tNow), ms.count());
   } else {
-    fmt::print("[{:%H:%M:%S}.{:03}] ", *std::localtime(&nowTime), nowMs);
+    // Format: HH:MM:SS.ms
+    fmt::format_to(std::back_inserter(out), "[{:%H:%M:%S}.{:03}] ",
+                   fmt::localtime(tNow), ms.count());
   }
 
-  // Print the log level indicator
   switch (level) {
-    case LogLevel::DEBUG:
-      fmt::print(fg(fmt::color::dark_gray), "D ");
+    case LogLevel::debug:
+      fmt::format_to(std::back_inserter(out), fg(fmt::color::dark_gray), "D ");
       break;
-    case LogLevel::INFO:
-      fmt::print(fg(fmt::color::blue), "I ");
+    case LogLevel::info:
+      fmt::format_to(std::back_inserter(out), fg(fmt::color::blue), "I ");
       break;
-    case LogLevel::WARN:
-      fmt::print(fg(fmt::color::yellow), "W ");
+    case LogLevel::warn:
+      fmt::format_to(std::back_inserter(out), fg(fmt::color::yellow), "W ");
       break;
-    case LogLevel::ERROR:
-      fmt::print(fg(fmt::color::red), "E ");
+    case LogLevel::error:
+      fmt::format_to(std::back_inserter(out), fg(fmt::color::red), "E ");
       break;
   }
 
-  // Print the tag if requested
-  if (includeTags) {
-    fmt::print("[{}] ", tag);
+  if (includeTags && !tag.empty()) {
+    fmt::format_to(std::back_inserter(out), "[{}] ", tag);
   }
 
-  // Calculate a color based on the filename
+  // Get color for a filename
   unsigned long hash = 5381;
   for (char const& c : filename) {
     hash = ((hash << 5) + hash) + c;  // hash * 33 + c
   }
 
-  fmt::print("\033[0;{}m", allColors[hash % allColors.size()]);
-  fmt::print("{}", filename);
-  fmt::print(colorReset);
+  // Apply calculated color to filename
+  uint8_t colorCode = allColors[hash % allColors.size()];
 
-  // Print the line number
-  fmt::print(":{}: ", line);
+  fmt::format_to(std::back_inserter(out), "\033[0;{}m{}:\033[0m{}: ", colorCode,
+                 filename, line);
 
-  // Print the message
-  if (level == LogLevel::ERROR) {
-    fmt::print(fg(fmt::color::red), "{}\n", message);
-  } else if (level == LogLevel::WARN) {
-    fmt::print(fg(fmt::color::yellow), "{}\n", message);
+  if (level == LogLevel::error) {
+    fmt::format_to(std::back_inserter(out), fg(fmt::color::red), "{}\n",
+                   message);
+  } else if (level == LogLevel::warn) {
+    fmt::format_to(std::back_inserter(out), fg(fmt::color::yellow), "{}\n",
+                   message);
   } else {
-    fmt::print("{}\n", message);
+    fmt::format_to(std::back_inserter(out), "{}\n", message);
   }
-}
 
-void bell::registerLoggerBackend(std::unique_ptr<bell::LoggerBackend> logger) {
-  BaseLogger::instance().registerBackend(std::move(logger));
-}
-
-void bell::registerDefaultLogger(bool includeTags, bool logFullTimestamp,
-                                 LogLevel logLevel) {
-  auto logger = std::make_unique<bell::StdoutLoggerBackend>(includeTags,
-                                                            logFullTimestamp);
-  logger->setLogLevel(logLevel);  // Set the default log level
-
-  // Register the stdout logger
-  registerLoggerBackend(std::move(logger));
-}
-
-void bell::setLogLevel(LogLevel level) {
-  // Set the log level for all backends
-  BaseLogger::instance().setLogLevel(level);
+  fmt::print(stdout, "{}", fmt::to_string(out));
 }

@@ -14,44 +14,107 @@
 
 namespace bell::dsp {
 // Holds the audio samples that are passed between the transforms in the pipeline.
-struct DataSlots {
-  // Maximum number of samples that can be stored in the slots.
-  static const int maxSamples = 1024;
-  static const int maxChannels = 8;
+// Uses a slab allocator design for cache-friendly, contiguous memory layout.
+class DataSlots {
+ public:
+  static constexpr size_t MAX_CHANNELS = 8;
+  static constexpr size_t MAX_SAMPLES = 1024;
 
-  // Per-channel sample storage.
-  using ChannelMap = std::unordered_map<int, std::array<int32_t, maxSamples>>;
+  // A single buffer holding audio data with slab allocation
+  struct Slot {
+    // Contiguous block of memory for ALL channels
+    // Layout: [ Ch0_Samples... | Ch1_Samples... | Ch2_Samples... ]
+    std::vector<int32_t> storage;
 
-  // Internal storage for the audio samples.
-  ChannelMap slotA{};
-  ChannelMap slotB{};
+    // Fast pointers into 'storage' for each channel
+    std::array<int32_t*, MAX_CHANNELS> channels;
 
-  // Pointers to the primary and secondary slots.
-  ChannelMap* primarySlot = &slotA;
-  ChannelMap* secondarySlot = &slotB;
+    size_t numChannels = 0;
+    size_t samplesPerChannel = 0;
 
-  /**
-   * @brief Swaps data between the primary and secondary slot.
-   */
+    Slot() {
+      // Initialize pointers to nullptr
+      channels.fill(nullptr);
+    }
+
+    // Fast access to a channel's data
+    inline int32_t* operator[](size_t channelIdx) { return channels[channelIdx]; }
+    inline const int32_t* operator[](size_t channelIdx) const {
+      return channels[channelIdx];
+    }
+
+    // Configure the slot for a specific number of channels and samples
+    void configure(size_t channels, size_t samples) {
+      if (channels > MAX_CHANNELS) {
+        channels = MAX_CHANNELS;
+      }
+      if (samples > MAX_SAMPLES) {
+        samples = MAX_SAMPLES;
+      }
+
+      // Only reallocate if size changed
+      size_t requiredSize = channels * samples;
+      if (storage.size() != requiredSize) {
+        storage.resize(requiredSize);
+      }
+
+      numChannels = channels;
+      samplesPerChannel = samples;
+
+      // Set up channel pointers to point into the contiguous block
+      for (size_t i = 0; i < channels; i++) {
+        this->channels[i] = &storage[i * samples];
+      }
+      // Null out unused channel pointers
+      for (size_t i = channels; i < MAX_CHANNELS; i++) {
+        this->channels[i] = nullptr;
+      }
+    }
+
+    // Helper for raw data access (for memcpy/memset)
+    int32_t* data() { return storage.data(); }
+    const int32_t* data() const { return storage.data(); }
+  };
+
+  // Actual Data Members
+  Slot slotA;
+  Slot slotB;
+
+  // Pointers to the active/inactive slots (Ping-Pong)
+  Slot* primarySlot;
+  Slot* secondarySlot;
+
+  audio::Format sampleFormat;
+  size_t numSamples = 0;
+
+  DataSlots() {
+    primarySlot = &slotA;
+    secondarySlot = &slotB;
+  }
+
+  // High-speed swap for pipeline stages
   inline void swapSlots() { std::swap(primarySlot, secondarySlot); }
 
   /**
-   * @brief Makes sure that the given channel exists in the slots.
-   *
-   * @param channel channel index
+   * @brief Configure the data slots for a specific audio format.
+   * 
+   * Allocates memory only when needed. Call this when the audio format changes.
+   * 
+   * @param samples Number of samples per channel
+   * @param format Audio format (determines number of channels)
    */
-  inline void ensureChannel(int channel) const {
-    if (primarySlot->find(channel) == primarySlot->end()) {
-      primarySlot->emplace(channel, std::array<int32_t, maxSamples>{});
-      secondarySlot->emplace(channel, std::array<int32_t, maxSamples>{});
+  void configure(size_t samples, const audio::Format& format) {
+    if (samples > MAX_SAMPLES) {
+      samples = MAX_SAMPLES;
     }
+
+    numSamples = samples;
+    sampleFormat = format;
+
+    size_t channels = format.getNumChannels();
+    slotA.configure(channels, samples);
+    slotB.configure(channels, samples);
   }
-
-  // Number of samples stored in the slots.
-  size_t numSamples = 0;
-
-  // Format of the samples stored in the slots.
-  audio::Format sampleFormat;
 };
 
 // Base class for audio transforms, which process audio samples. For example, a transform could be an biquad filter, a reverb, or a compressor.
@@ -108,6 +171,17 @@ class TransformPipeline {
   std::mutex accessMutex;
   std::optional<audio::SampleRate> lastSampleRate{};
   std::vector<std::shared_ptr<Transform>> transforms{};
+
+#ifdef BELL_DSP_ENABLE_PROFILING
+  // Profiling state (only compiled when profiling is enabled)
+  struct TransformStats {
+    uint64_t totalCycles = 0;
+    uint64_t callCount = 0;
+  };
+  std::vector<TransformStats> transformStats{};
+  uint64_t lastLogTime = 0;
+  static constexpr uint64_t LOG_INTERVAL_MS = 5000;  // Log every 5 seconds
+#endif
 };
 }  // namespace bell::dsp
 

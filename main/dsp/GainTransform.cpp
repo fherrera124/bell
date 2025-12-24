@@ -6,6 +6,7 @@
 
 // IQmathLib
 #include "IQmathLib.h"
+#include "bell/utils/Utils.h"
 
 using namespace bell::dsp;
 
@@ -22,11 +23,15 @@ float GainTransform::calculateHeadroom() {
 void GainTransform::process(DataSlots& sampleSlots) {
   std::scoped_lock lock(accessMutex);
 
-  for (uint32_t i = 0; i < sampleSlots.numSamples; i++) {
-    // Apply gain to all channels
-    for (auto& channel : channels) {
-      sampleSlots.primarySlot->at(channel)[i] =
-          _IQ30mpy(sampleSlots.primarySlot->at(channel)[i], this->gainFactor);
+  // Apply gain to all channels
+  for (auto& channel : channels) {
+    int32_t* channelData = (*sampleSlots.primarySlot)[channel];
+    if (channelData == nullptr) {
+      continue;  // Skip invalid channels
+    }
+
+    for (uint32_t i = 0; i < sampleSlots.numSamples; i++) {
+      channelData[i] = _IQ30mpy(channelData[i], this->gainFactor);
     }
   }
 }

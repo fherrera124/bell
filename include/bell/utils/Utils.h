@@ -3,6 +3,15 @@
 #include <sys/time.h>
 #include <cstdint>
 
+// Define an IRAM attribute macro for ESP platforms
+// Does nothing on other platforms
+#ifdef ESP_PLATFORM
+#include "esp_attr.h"
+#define BELL_IRAM_ATTR IRAM_ATTR
+#else
+#define BELL_IRAM_ATTR
+#endif
+
 // Contains various utility functions
 namespace bell::utils {
 // @brief Constructs a timeval struct from milliseconds
