@@ -2,7 +2,6 @@
 
 // Standard includes
 #include <mutex>
-#include "bell/utils/Utils.h"
 
 // IQmathLib
 #include <IQmathLib.h>
@@ -95,7 +94,6 @@ void BiquadTransform::process(DataSlots& sampleSlots) {
       int32_t x0 = data[i];
 
       // IQ30 * IQ28 = IQ58
-      // Hardware MAC instructions will be used with -O2/-O3
       acc += (int64_t)b0 * x0;
       acc += (int64_t)b1 * x1;
       acc += (int64_t)b2 * x2;
@@ -112,7 +110,6 @@ void BiquadTransform::process(DataSlots& sampleSlots) {
       // Quantization: IQ58 -> IQ30
       int32_t y0 = static_cast<int32_t>(acc >> 28);
 
-      // Shift state variables (compiler will optimize this)
       x2 = x1;
       x1 = x0;
       y2 = y1;

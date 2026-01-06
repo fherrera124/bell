@@ -6,7 +6,6 @@
 
 // IQmathLib
 #include "IQmathLib.h"
-#include "bell/utils/Utils.h"
 
 using namespace bell::dsp;
 

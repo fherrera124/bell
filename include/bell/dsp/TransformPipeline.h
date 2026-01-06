@@ -11,6 +11,7 @@
 
 // bell includes
 #include "bell/audio/Common.h"
+#include "bell/dsp/InternalMemoryAllocator.h"
 
 namespace bell::dsp {
 // Holds the audio samples that are passed between the transforms in the pipeline.
@@ -24,7 +25,8 @@ class DataSlots {
   struct Slot {
     // Contiguous block of memory for ALL channels
     // Layout: [ Ch0_Samples... | Ch1_Samples... | Ch2_Samples... ]
-    std::vector<int32_t> storage;
+    // Use custom allocator to force internal DRAM on ESP32 for better performance
+    std::vector<int32_t, InternalMemoryAllocator<int32_t>> storage;
 
     // Fast pointers into 'storage' for each channel
     std::array<int32_t*, MAX_CHANNELS> channels;
@@ -32,7 +34,11 @@ class DataSlots {
     size_t numChannels = 0;
     size_t samplesPerChannel = 0;
 
-    Slot() {
+    Slot() 
+#ifdef ESP_PLATFORM
+      : storage(InternalMemoryAllocator<int32_t>(getInternalMemoryResource()))
+#endif
+    {
       // Initialize pointers to nullptr
       channels.fill(nullptr);
     }

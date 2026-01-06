@@ -7,7 +7,6 @@
 #include "bell/utils/ClockCounter.h"
 #endif
 
-#include "bell/utils/Utils.h"
 
 using namespace bell::dsp;
 
@@ -141,7 +140,6 @@ DataSlots* Engine::process(const std::byte* inputBuffer, size_t inputBufferLen,
 
   switch (format.getSampleFormat()) {
     case audio::SampleFormat::S16: {
-      // Optimization: Use cache-friendly sequential writes
       if (numChannels == 2) {
         // SIMD-lite optimization for stereo: write 32-bit word with both L+R samples
         auto* outputAs32 = reinterpret_cast<uint32_t*>(outputData16);
