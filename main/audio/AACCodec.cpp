@@ -167,6 +167,8 @@ bell::Result<> AACCodec::setupDecode(const AudioFormat& audioFormat,
     return nonstd::make_unexpected(Errc::UnsupportedConfig);
   }
 
+  this->config = std::get<AACConfig>(codecSpecificConfig);
+
   // Ensure default frame length is set
   this->samplesPerFrame = config.samplesPerPacket.value_or(960);
   this->audioFormat = audioFormat;
@@ -221,8 +223,9 @@ bell::Result<> AACCodec::setupDecode(const AudioFormat& audioFormat,
     return nonstd::make_unexpected(make_fdk_aacdec_error_code(err));
   }
 
-  const size_t expectedOutputSize =
-      audioFormat.samplesToBytes(this->samplesPerFrame);
+  // Size buffer for worst case to prevent overflow
+  const size_t maxFrameSize = this->samplesPerFrame * 2;
+  const size_t expectedOutputSize = audioFormat.samplesToBytes(maxFrameSize);
 
   if (tmpBuffer.size() < expectedOutputSize) {
     tmpBuffer.resize(expectedOutputSize);
