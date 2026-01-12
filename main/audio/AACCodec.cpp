@@ -274,7 +274,8 @@ bell::Result<Codec::EncodeResult> AACCodec::encode(
 
   if (err == AACENC_OK) {
     return EncodeResult{
-        .packets = {{.data = {tmpBuffer.data(), tmpBuffer.size()}}},
+        .packets = {{.data = {tmpBuffer.data(),
+                              static_cast<size_t>(oargs.numOutBytes)}}},
         .consumedInputBytes = audioFormat.samplesToBytes(oargs.numInSamples),
     };
   }
