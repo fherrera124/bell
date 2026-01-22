@@ -65,25 +65,24 @@ bell::Result<> LC3plusCodec::setupEncode(
   int channels = audioFormat.getNumChannels();
 
   // Determine frame duration
-  uint32_t samplesPerPacket =
-      config.samplesPerPacket.value_or(getDefaultSamplesPerPacket(sampleRate));
-  dt_us = samplesToFrameDuration(samplesPerPacket, sampleRate);
+  uint32_t samplesPerPacket = config.samplesPerPacket.value_or(480);
+  dtUs = audioFormat.samplesToMs(samplesPerPacket) * 1000;
 
-  if (!LC3_CHECK_DT_US(dt_us)) {
-    BELL_LOG(error, LOG_TAG, "Invalid frame duration: {} us", dt_us);
+  if (!LC3_CHECK_DT_US(dtUs)) {
+    BELL_LOG(error, LOG_TAG, "Invalid frame duration: {} us", dtUs);
     return nonstd::make_unexpected(audio::Errc::UnsupportedConfig);
   }
 
   // Get frame samples
-  frame_samples = lc3_hr_frame_samples(hrmode, dt_us, sampleRate);
-  if (frame_samples < 0) {
+  frameSamples = lc3_hr_frame_samples(hrmode, dtUs, sampleRate);
+  if (frameSamples < 0) {
     BELL_LOG(error, LOG_TAG, "Failed to get frame samples");
     return nonstd::make_unexpected(audio::Errc::UnsupportedConfig);
   }
 
   // Calculate target frame size in bytes
   int bitrate = config.bitrate.value_or((sampleRate >= 48000) ? 128000 : 96000);
-  nbytes = lc3_hr_frame_bytes(hrmode, dt_us, sampleRate, bitrate);
+  nbytes = lc3_hr_frame_bytes(hrmode, dtUs, sampleRate, bitrate);
   if (nbytes < 0) {
     BELL_LOG(error, LOG_TAG, "Failed to calculate frame bytes for bitrate {}",
              bitrate);
@@ -93,10 +92,10 @@ bell::Result<> LC3plusCodec::setupEncode(
   BELL_LOG(info, LOG_TAG,
            "LC3 encoder setup: {}Hz, {} channels, {}us frame, {} bytes/frame, "
            "{} samples/frame",
-           sampleRate, channels, dt_us, nbytes, frame_samples);
+           sampleRate, channels, dtUs, nbytes, frameSamples);
 
   // Allocate encoder memory
-  unsigned encoderSize = lc3_hr_encoder_size(hrmode, dt_us, sampleRate);
+  unsigned encoderSize = lc3_hr_encoder_size(hrmode, dtUs, sampleRate);
   if (encoderSize == 0) {
     BELL_LOG(error, LOG_TAG, "Failed to get encoder size");
     return nonstd::make_unexpected(audio::Errc::UnsupportedConfig);
@@ -106,7 +105,7 @@ bell::Result<> LC3plusCodec::setupEncode(
 
   // Setup encoder (sr_pcm_hz = 0 means no resampling)
   encoder =
-      lc3_hr_setup_encoder(hrmode, dt_us, sampleRate, 0, encoderMem.data());
+      lc3_hr_setup_encoder(hrmode, dtUs, sampleRate, 0, encoderMem.data());
   if (!encoder) {
     BELL_LOG(error, LOG_TAG, "Failed to setup LC3 encoder");
     return nonstd::make_unexpected(audio::Errc::UnsupportedConfig);
@@ -147,8 +146,7 @@ bell::Result<> LC3plusCodec::setupDecode(
 
   // Determine frame duration
   uint32_t samplesPerPacket = config.samplesPerPacket.value_or(480);
-  audioFormat.samplesToMs(samplesPerPacket) * 1000;
-  dtUs = samplesToFrameDuration(samplesPerPacket, sampleRate);
+  dtUs = audioFormat.samplesToMs(samplesPerPacket) * 1000;
 
   if (!LC3_CHECK_DT_US(dtUs)) {
     BELL_LOG(error, LOG_TAG, "Invalid frame duration: {} us", dtUs);
@@ -177,7 +175,7 @@ bell::Result<> LC3plusCodec::setupDecode(
            sampleRate, channels, dtUs, nbytes, frameSamples);
 
   // Allocate decoder memory
-  unsigned decoderSize = lc3_hr_decoder_size(hrmode, dtUs, frameSamples);
+  unsigned decoderSize = lc3_hr_decoder_size(hrmode, dtUs, sampleRate);
   if (decoderSize == 0) {
     BELL_LOG(error, LOG_TAG, "Failed to get decoder size");
     return nonstd::make_unexpected(audio::Errc::UnsupportedConfig);
@@ -259,7 +257,7 @@ bell::Result<Codec::EncodeResult> LC3plusCodec::encode(
   int bytesPerSample = 2;  // 16-bit samples
 
   // Check if we have enough input data
-  size_t expectedBytes = frame_samples * channels * bytesPerSample;
+  size_t expectedBytes = frameSamples * channels * bytesPerSample;
   if (pcmInput.size() < expectedBytes) {
     return nonstd::make_unexpected(audio::Errc::NotEnoughBytes);
   }
@@ -312,7 +310,7 @@ bell::Result<Codec::DecodeResult> LC3plusCodec::decode(
   // Decode each channel separately
   for (int ch = 0; ch < channels; ch++) {
     const uint8_t* channelInput =
-        reinterpret_cast<const uint8_t*>(&encodedInput.at(ch * nbytes));
+        reinterpret_cast<const uint8_t*>(encodedInput.data() + (ch * nbytes));
 
     int result = lc3_decode(decoder,
                             channelInput,  // Input bitstream for this channel
