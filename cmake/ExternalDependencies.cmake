@@ -96,7 +96,7 @@ if(NOT BELL_DISABLE_CODECS AND BELL_CODEC_OPUS)
 
     target_compile_options(opus PRIVATE -O2 -Wno-unused-parameter -Wno-parentheses-equality -Wno-cast-align -Wno-unused-but-set-variable -Wno-nonnull -Wno-stringop-overread)
 
-    list(APPEND BELL_LIBS opus)
+    list(APPEND BELL_LIBS opus opus-resample)
 endif()
 
 # Audio codec - AAC-LC
@@ -109,6 +109,12 @@ endif()
 if(NOT BELL_DISABLE_CODECS AND BELL_CODEC_TREMOR)
     add_subdirectory(external/tremor)
     list(APPEND BELL_LIBS vorbisidec)
+endif()
+
+# Audio codec - LC3
+if(NOT BELL_DISABLE_CODECS AND BELL_CODEC_LC3PLUS)
+    add_subdirectory(external/liblc3)
+    list(APPEND BELL_LIBS lc3)
 endif()
 
 # Audio backends

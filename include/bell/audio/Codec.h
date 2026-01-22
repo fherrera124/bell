@@ -2,6 +2,7 @@
 
 // Standard includes
 #include <cstddef>
+#include <memory_resource>
 #include <optional>
 #include <variant>
 #include <vector>
@@ -56,7 +57,20 @@ struct AACConfig {
 
 struct TremorConfig {};
 
-using CodecConfig = std::variant<OpusConfig, AACConfig, TremorConfig>;
+struct LC3plusConfig {
+  // Samples per packet (optional). Defaults to 480 (10ms at 48000)
+  std::optional<uint32_t> samplesPerPacket;
+
+  // Bitrate in bits per second (for encoder)
+  std::optional<int> bitrate;
+
+  // Memory resource for encoder/decoder allocations
+  // If nullptr, uses new_delete_resource() (standard heap)
+  std::pmr::memory_resource* memoryResource = std::pmr::new_delete_resource();
+};
+
+using CodecConfig =
+    std::variant<OpusConfig, AACConfig, TremorConfig, LC3plusConfig>;
 
 /**
  * Base class for audio codecs

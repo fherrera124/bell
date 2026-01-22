@@ -12,6 +12,7 @@ option(BELL_CODEC_AAC "Support fdk-aac codec" ON)
 option(BELL_CODEC_MP3 "Support libhelix-mp3 codec" ON)
 option(BELL_CODEC_TREMOR "Support tremor Vorbis codec" ON)
 option(BELL_CODEC_OPUS "Support Opus codec" ON)
+option(BELL_CODEC_LC3PLUS "Support LC3plus codec" ON)
 
 # Vorbis
 set(BELL_EXTERNAL_VORBIS "" CACHE STRING "External Vorbis library target name, optional")
