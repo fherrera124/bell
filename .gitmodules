@@ -19,3 +19,6 @@
 [submodule "external/trompeloeil"]
 	path = external/trompeloeil
 	url = git@github.com:rollbear/trompeloeil.git
+[submodule "external/hqlc"]
+	path = external/hqlc
+	url = git@github.com:feelfreelinux/hqlc.git

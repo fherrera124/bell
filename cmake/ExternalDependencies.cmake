@@ -117,6 +117,12 @@ if(NOT BELL_DISABLE_CODECS AND BELL_CODEC_LC3PLUS)
     list(APPEND BELL_LIBS lc3)
 endif()
 
+# Audio codec - HQLC
+if(NOT BELL_DISABLE_CODECS AND BELL_CODEC_HQLC)
+    add_subdirectory(external/hqlc)
+    list(APPEND BELL_LIBS hqlc)
+endif()
+
 # Audio backends
 if(BELL_BACKEND_PORTAUDIO)
     find_package(Portaudio REQUIRED)

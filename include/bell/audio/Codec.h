@@ -69,8 +69,20 @@ struct LC3plusConfig {
   std::pmr::memory_resource* memoryResource = std::pmr::new_delete_resource();
 };
 
-using CodecConfig =
-    std::variant<OpusConfig, AACConfig, TremorConfig, LC3plusConfig>;
+struct HQLCConfig {
+  // Defaults to 128000
+  std::optional<uint32_t> bitrate;
+
+  // Fixed quantizer gain, overrides the bitrate if set
+  std::optional<float> fixedGain;
+
+  // Memory resource for encoder/decoder allocations
+  // If nullptr, uses new_delete_resource() (standard heap)
+  std::pmr::memory_resource* memoryResource = std::pmr::new_delete_resource();
+};
+
+using CodecConfig = std::variant<OpusConfig, AACConfig, TremorConfig,
+                                 LC3plusConfig, HQLCConfig>;
 
 /**
  * Base class for audio codecs
@@ -159,4 +171,5 @@ using AudioCodec = audio::Codec;
 using OpusConfig = audio::OpusConfig;
 using AACConfig = audio::AACConfig;
 using TremorConfig = audio::TremorConfig;
+using HQLCConfig = audio::HQLCConfig;
 }  // namespace bell

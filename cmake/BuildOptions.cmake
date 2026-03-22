@@ -13,6 +13,7 @@ option(BELL_CODEC_MP3 "Support libhelix-mp3 codec" ON)
 option(BELL_CODEC_TREMOR "Support tremor Vorbis codec" ON)
 option(BELL_CODEC_OPUS "Support Opus codec" ON)
 option(BELL_CODEC_LC3PLUS "Support LC3plus codec" ON)
+option(BELL_CODEC_HQLC "Support HQLC codec" ON)
 
 # Vorbis
 set(BELL_EXTERNAL_VORBIS "" CACHE STRING "External Vorbis library target name, optional")
@@ -49,6 +50,8 @@ if(NOT BELL_DISABLE_CODECS)
     message(STATUS "  * Tremor (vorbis) audio codec: ${BELL_CODEC_TREMOR}")
     message(STATUS "    Use Vorbis float version: ${BELL_VORBIS_FLOAT}")
     message(STATUS "  * Opus audio codec: ${BELL_CODEC_OPUS}")
+    message(STATUS "  * LC3plus audio codec: ${BELL_CODEC_LC3PLUS}")
+    message(STATUS "  * HQLC audio codec: ${BELL_CODEC_HQLC}")
 endif()
 
 message(STATUS " Enable PortAudio backend: ${BELL_PORTAUDIO_BACKEND}")
