@@ -31,20 +31,28 @@ class Task {
   Task(const Task&) = delete;
   Task& operator=(const Task&) = delete;
 
-  // @brief Attempts to stop execution of the task
-  void stopTask() {
-    // Attempt to stop the task
-    taskRunning = false;
-    std::scoped_lock lock(taskRunningMutex);
-  }
+  /**
+   * @brief Stop the task, blocking until it has fully exited.
+   *
+   * Sets taskRunning to false, calls wakeTask() to let the derived class
+   * unblock any condition variables / semaphores it may be waiting on, and
+   * then waits for the OS thread (pthread_join on POSIX, completion
+   * semaphore on ESP) to confirm the task has finished.
+   *
+   * This is the key guarantee: after stopTask() returns, there is no
+   * OS thread left that could still access this object -- making it safe
+   * for a derived class destructor to proceed with member teardown.
+   */
+  void stopTask();
 
  protected:
   // Default task runner implementation, can be overridden by derived classes
   virtual void runTask() {
-    // Set the taskRunning flag
+    // The taskRunning flag is initialized by startTask() *before* the OS
+    // thread is created. Don't overwrite it here -- if stopTask() was
+    // called before we actually started running, taskRunning is already
+    // false and we should exit immediately instead of starting work.
     std::scoped_lock lock(taskRunningMutex);
-    taskRunning = true;
-
     while (taskRunning) {
       taskLoop();
     }
@@ -55,6 +63,16 @@ class Task {
    * @remark This method should be implemented by the derived class to perform the task's work, unless a custom runTask method is provided.
    */
   virtual void taskLoop(){};
+
+  /**
+   * @brief Hook called by stopTask() to wake the task if it's blocked.
+   *
+   * The default implementation does nothing. Override to signal any
+   * condition variables, semaphores, or event groups the task may be
+   * waiting on, so the taskLoop / runTask can observe the cleared
+   * taskRunning flag and exit promptly.
+   */
+  virtual void wakeTask() {}
 
   // @brief Starts the task's execution. This method is implemented per-platform.
   bool startTask();

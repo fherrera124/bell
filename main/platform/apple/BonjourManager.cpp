@@ -132,7 +132,7 @@ class BonjourBrowser : public Browser {
       wrappedDnsSdSocket = std::make_shared<bell::UDPSocket>(sock);
 
       // Register the socket with the poller
-      socketPoll->registerSocket(
+      dnsSdRegistration = socketPoll->watch(
           wrappedDnsSdSocket, bell::PollEvent::Readable,
           [this](auto& /**/) { DNSServiceProcessResult(ref); });
     }
@@ -426,7 +426,7 @@ class BonjourBrowser : public Browser {
 
     if (wrappedDnsSdSocket) {
       // Unregister the dns-sd socket from the event poll
-      socketPoll->unregisterSocket(wrappedDnsSdSocket);
+      dnsSdRegistration.reset();
 
       // Take the FD, so destructor of bell::UDPSocket does not close the FD automatically
       (void)wrappedDnsSdSocket->takeFd();
@@ -445,6 +445,7 @@ class BonjourBrowser : public Browser {
 
   // Wrapper for the dns-sd socket
   std::shared_ptr<bell::UDPSocket> wrappedDnsSdSocket = nullptr;
+  bell::SocketPollListener::Registration dnsSdRegistration;
 
   // DNS service reference
   DNSServiceRef ref = nullptr;
@@ -521,7 +522,7 @@ class BonjourAdvertiser : public Advertiser {
     wrappedDnsSdSocket = std::make_shared<bell::UDPSocket>(sock);
 
     // Register the socket with the poller
-    socketPoll->registerSocket(
+    dnsSdRegistration = socketPoll->watch(
         wrappedDnsSdSocket, bell::PollEvent::Readable,
         [this](auto& /**/) { DNSServiceProcessResult(ref); });
 
@@ -531,7 +532,7 @@ class BonjourAdvertiser : public Advertiser {
   void stopAdvertising() override {
     if (ref) {
       // Unregister the dns-sd socket from the event poll
-      socketPoll->unregisterSocket(wrappedDnsSdSocket);
+      dnsSdRegistration.reset();
 
       // Take the FD, so destructor of bell::UDPSocket does not close the FD automatically
       (void)wrappedDnsSdSocket->takeFd();
@@ -544,6 +545,7 @@ class BonjourAdvertiser : public Advertiser {
  private:
   std::shared_ptr<bell::SocketPollListener> socketPoll;
   std::shared_ptr<bell::UDPSocket> wrappedDnsSdSocket = nullptr;
+  bell::SocketPollListener::Registration dnsSdRegistration;
   DNSServiceRef ref = nullptr;
 };
 
@@ -606,8 +608,11 @@ class BonjourManager : public Manager, public bell::Task {
   std::shared_ptr<bell::SocketPollListener> socketPoll;
 
   void taskLoop() override {
-    // Run the socket poll
-    socketPoll->poll();
+    // Finite timeout (vs. blocking forever) is what makes this work
+    // without a wake fd: registrations added between iterations are
+    // picked up on the next poll() call. Discovery isn't latency-
+    // critical, 1s is plenty.
+    socketPoll->poll(std::chrono::seconds(1));
   }
 };
 

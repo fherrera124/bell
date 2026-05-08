@@ -1,10 +1,12 @@
 #pragma once
 
-// Standard includes
 #include <sys/poll.h>
+#include <chrono>
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <unordered_map>
 #include <vector>
 
@@ -13,56 +15,90 @@
 namespace bell::net {
 class SocketPollListener {
  public:
-  // Default constructor
-  SocketPollListener() = default;
-
-  enum class Event {
-    Readable = POLLIN,    // Readable
-    Writeable = POLLOUT,  // Writable
-    Error = POLLERR,      // Error
-    Hangup = POLLHUP,     // Hangup
-    Priority = POLLPRI,   // Priority
-    All = 0xFFFF          // All events, used for unregistering
+  enum class Event : int {
+    Readable = POLLIN,
+    Writeable = POLLOUT,
+    Error = POLLERR,
+    Hangup = POLLHUP,
+    Priority = POLLPRI,
   };
 
   using EventCallback = std::function<void(Socket&)>;
 
   /**
-   * @brief Registers a socket with the poll listener.
-   *
-   * @param socket Pointer to the socket to register
-   * @param polledEvent Event to poll for
-   * @param onEvent Callback function to be called when the event occurs
+   * @brief RAII registration handle. Destructor removes the (fd, event)
+   * subscription from the listener and releases the socket reference.
    */
-  void registerSocket(const std::shared_ptr<Socket>& socket, Event polledEvent,
-                      const EventCallback& onEvent = {});
+  class Registration {
+   public:
+    Registration() = default;
+    Registration(const Registration&) = delete;
+    Registration& operator=(const Registration&) = delete;
+    Registration(Registration&& other) noexcept;
+    Registration& operator=(Registration&& other) noexcept;
+    ~Registration() { reset(); }
+    void reset();
+    bool valid() const { return listener_ != nullptr; }
 
-  // Polls the registered sockets for events
-  void poll(int timeoutMs = 100);
-
-  // Unregisters a socket from the poll listener
-  void unregisterSocket(const std::shared_ptr<Socket>& socket,
-                        Event polledEvent = Event::All);
-
- private:
-  struct SocketCallbacks {
-    // Weak pointer to the registered socket
-    std::weak_ptr<Socket> socketPtr;
-
-    // Registered callbacks for events
-    std::unordered_map<Event, EventCallback> callbacks;
-
-    // Flag indicating if the socket is marked for removal after the callbacks exit
-    bool markedForRemoval = false;
+   private:
+    friend class SocketPollListener;
+    Registration(SocketPollListener* l, std::shared_ptr<Socket> s, Event e)
+        : listener_(l), socket_(std::move(s)), event_(e) {}
+    SocketPollListener* listener_ = nullptr;
+    std::shared_ptr<Socket> socket_;
+    Event event_{};
   };
 
-  // keeps reference to socket we're listening to events from
-  std::unordered_map<int, SocketCallbacks> handlers;
-  std::vector<pollfd> fds;
-  std::recursive_mutex pollMutex;
 
-  // Updates the file descriptor list for polling, based on the registered sockets
-  void updateFdList();
+  // When registerWakeSocket is set to true, an UDP socket used to wake up the poll early is registered
+  SocketPollListener(bool registerWakeSocket = false);
+  ~SocketPollListener();
+  SocketPollListener(const SocketPollListener&) = delete;
+  SocketPollListener& operator=(const SocketPollListener&) = delete;
+
+  /**
+   * @brief Start watching a socket for a given event.
+   *
+   * The returned Registration owns the subscription; destroying it removes
+   * the (fd, event) entry. The Registration also holds a shared_ptr to the
+   * socket, keeping it alive for the duration of the subscription.
+   */
+  [[nodiscard]] Registration watch(std::shared_ptr<Socket> socket,
+                                   Event polledEvent, EventCallback onEvent);
+
+  /**
+   * @brief Poll all registered sockets.
+   *
+   * @param timeout nullopt = block until IO or wake(); Some(d) = block up to d.
+   */
+  void poll(std::optional<std::chrono::milliseconds> timeout = std::nullopt);
+
+  /// Interrupt a blocking poll() from another thread. Zero-latency:
+  /// sends a byte to a loopback UDP self-socket that poll() also
+  /// watches for POLLIN.
+  void wake();
+
+ private:
+  struct Handler {
+    std::shared_ptr<Socket> socket;
+    std::unordered_map<Event, EventCallback> callbacks;
+  };
+
+  // Caller must hold pollMutex.
+  void updateFdListLocked();
+  void drainWakeFd();
+  void unregister(int fd, Event event);
+
+  std::unordered_map<int, Handler> handlers;
+  std::vector<pollfd> fds;
+  std::mutex pollMutex;
+
+  // Loopback UDP socket used as a cross-thread wake channel. Bound to
+  // 127.0.0.1:wakePort_ at construction; wake() sendto's a byte at its
+  // own address, poll() drains it. One fd, zero latency, portable
+  // across POSIX and lwIP (ESP-IDF).
+  int wakeFd_ = -1;
+  uint16_t wakePort_ = 0;  // host byte order
 };
 }  // namespace bell::net
 

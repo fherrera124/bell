@@ -76,8 +76,7 @@ void http::Server::acceptConnection() {
   auto acceptedSock = listenSocket.accept();
 
   if (acceptedSock) {
-
-    auto setBlockingRes = acceptedSock->setBlocking(false);
+    auto setBlockingRes = acceptedSock->setBlocking(true);
     if (!setBlockingRes) {
       BELL_LOG(error, LOG_TAG, "Error setBlocking on accepted socket: {}",
                setBlockingRes.error());

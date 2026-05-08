@@ -70,7 +70,7 @@ struct LC3plusConfig {
 };
 
 struct HQLCConfig {
-  // Defaults to 128000
+  // Defaults to 196000
   std::optional<uint32_t> bitrate;
 
   // Fixed quantizer gain, overrides the bitrate if set

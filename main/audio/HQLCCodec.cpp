@@ -104,7 +104,7 @@ bell::Result<> HQLCCodec::setupEncode(const AudioFormat& audioFormat,
     encCfg.gain = config.fixedGain.value();
   } else {
     encCfg.mode = HQLC_MODE_RC;
-    encCfg.bitrate = config.bitrate.value_or(128000);
+    encCfg.bitrate = config.bitrate.value_or(196000);
   }
 
   if (encoder) {

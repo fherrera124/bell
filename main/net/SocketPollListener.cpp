@@ -1,190 +1,219 @@
 #include "bell/net/SocketPollListener.h"
 
-// Standar includes
+#include <arpa/inet.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <netinet/in.h>
 #include <sys/poll.h>
+#include <sys/socket.h>
+#include <unistd.h>
 #include <cstring>
 
-#include "bell/utils/Utils.h"
-#include "fmt/format.h"
+#include "bell/Logger.h"
 
 using namespace bell::net;
 
-void SocketPollListener::registerSocket(const std::shared_ptr<Socket>& socket,
-                                        Event polledEvent,
-                                        const EventCallback& onEvent) {
-  std::scoped_lock lock(pollMutex);
+static constexpr auto LOG_TAG = "SocketPollListener";
 
+SocketPollListener::SocketPollListener(bool registerWakeSocket) {
+
+  if (registerWakeSocket) {
+    // Only register wake socket when requested
+    wakeFd_ = ::socket(AF_INET, SOCK_DGRAM, 0);
+    if (wakeFd_ < 0) {
+      BELL_LOG(error, LOG_TAG, "wake socket create failed: {}",
+               strerror(errno));
+      return;
+    }
+
+    sockaddr_in bindAddr{};
+    bindAddr.sin_family = AF_INET;
+    bindAddr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    bindAddr.sin_port = 0;  // kernel-assigned ephemeral port
+    if (::bind(wakeFd_, reinterpret_cast<const sockaddr*>(&bindAddr),
+               sizeof(bindAddr)) < 0) {
+      BELL_LOG(error, LOG_TAG, "wake socket bind failed: {}", strerror(errno));
+      ::close(wakeFd_);
+      wakeFd_ = -1;
+      return;
+    }
+
+    sockaddr_in boundAddr{};
+    socklen_t addrLen = sizeof(boundAddr);
+    if (::getsockname(wakeFd_, reinterpret_cast<sockaddr*>(&boundAddr),
+                      &addrLen) < 0) {
+      BELL_LOG(error, LOG_TAG, "wake socket getsockname failed: {}",
+               strerror(errno));
+      ::close(wakeFd_);
+      wakeFd_ = -1;
+      return;
+    }
+    wakePort_ = ntohs(boundAddr.sin_port);
+  }
+
+  ::fcntl(wakeFd_, F_SETFL, O_NONBLOCK);
+
+  std::scoped_lock lock(pollMutex);
+  updateFdListLocked();  // Seed fds so poll() watches wakeFd_ immediately.
+}
+
+SocketPollListener::~SocketPollListener() {
+  if (wakeFd_ >= 0)
+    ::close(wakeFd_);
+}
+
+void SocketPollListener::wake() {
+  if (wakeFd_ < 0)
+    return;
+
+  sockaddr_in dst{};
+  dst.sin_family = AF_INET;
+  dst.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+  dst.sin_port = htons(wakePort_);
+
+  char byte = 1;
+  // Non-blocking. If the kernel's receive queue is already full, poll
+  // will wake on the existing data anyway — dropping this byte is fine.
+  (void)::sendto(wakeFd_, &byte, 1, 0, reinterpret_cast<const sockaddr*>(&dst),
+                 sizeof(dst));
+}
+
+void SocketPollListener::drainWakeFd() {
+  if (wakeFd_ < 0)
+    return;
+  char buf[64];
+  while (::recv(wakeFd_, buf, sizeof(buf), 0) > 0) {}
+}
+
+SocketPollListener::Registration::Registration(Registration&& other) noexcept
+    : listener_(other.listener_),
+      socket_(std::move(other.socket_)),
+      event_(other.event_) {
+  other.listener_ = nullptr;
+}
+
+SocketPollListener::Registration& SocketPollListener::Registration::operator=(
+    Registration&& other) noexcept {
+  if (this != &other) {
+    reset();
+    listener_ = other.listener_;
+    socket_ = std::move(other.socket_);
+    event_ = other.event_;
+    other.listener_ = nullptr;
+  }
+  return *this;
+}
+
+void SocketPollListener::Registration::reset() {
+  if (listener_ != nullptr && socket_) {
+    listener_->unregister(socket_->getFd(), event_);
+  }
+  listener_ = nullptr;
+  socket_.reset();
+}
+
+SocketPollListener::Registration SocketPollListener::watch(
+    std::shared_ptr<Socket> socket, Event polledEvent, EventCallback onEvent) {
   if (!socket || !socket->isValid()) {
     throw std::invalid_argument("Invalid socket");
   }
 
-  int fd = socket->getFd();
-  auto it = handlers.find(fd);
-
-  if (it != handlers.end() && it->second.markedForRemoval) {
-    handlers.erase(it);
-    it = handlers.end();  // Invalidate iterator
+  {
+    std::scoped_lock lock(pollMutex);
+    int fd = socket->getFd();
+    auto& handler = handlers[fd];
+    if (!handler.socket)
+      handler.socket = socket;
+    handler.callbacks[polledEvent] = std::move(onEvent);
+    updateFdListLocked();
   }
 
-  if (it == handlers.end()) {
-    handlers[fd] = {.socketPtr = socket, .callbacks = {}};
-  } else {
+  // Wake any currently-blocked poll so it re-reads fds and includes the
+  // new watch immediately.
+  wake();
 
-    handlers[fd].socketPtr = socket;
-  }
-
-  handlers[fd].callbacks[polledEvent] = onEvent;
-  handlers[fd].markedForRemoval = false;
-
-  updateFdList();
+  return Registration{this, std::move(socket), polledEvent};
 }
 
-void SocketPollListener::updateFdList() {
+void SocketPollListener::unregister(int fd, Event event) {
   std::scoped_lock lock(pollMutex);
+  auto it = handlers.find(fd);
+  if (it == handlers.end())
+    return;
+  it->second.callbacks.erase(event);
+  if (it->second.callbacks.empty()) {
+    handlers.erase(it);
+  }
+  updateFdListLocked();
+}
 
+void SocketPollListener::updateFdListLocked() {
   fds.clear();
-
-  for (const auto& handler : handlers) {
+  for (const auto& [fd, handler] : handlers) {
     pollfd pfd{};
-    pfd.fd = handler.first;
-
+    pfd.fd = fd;
     pfd.events = 0;
-
-    for (const auto& callback : handler.second.callbacks) {
-      switch (callback.first) {
-        case Event::Readable:
-          pfd.events |= POLLIN;
-          break;
-        case Event::Writeable:
-          pfd.events |= POLLOUT;
-          break;
-        case Event::Error:
-          pfd.events |= POLLERR;
-          break;
-        case Event::Hangup:
-          pfd.events |= POLLHUP;
-          break;
-        case Event::Priority:
-          pfd.events |= POLLPRI;
-          break;
-        case Event::All:
-          pfd.events |= (POLLIN | POLLOUT | POLLERR | POLLHUP | POLLPRI);
-          break;
-      }
+    for (const auto& [event, _] : handler.callbacks) {
+      pfd.events |= static_cast<short>(event);
     }
-
-    // Add the file descriptor to the list
+    fds.push_back(pfd);
+  }
+  if (wakeFd_ >= 0) {
+    pollfd pfd{};
+    pfd.fd = wakeFd_;
+    pfd.events = POLLIN;
     fds.push_back(pfd);
   }
 }
 
-void SocketPollListener::unregisterSocket(const std::shared_ptr<Socket>& socket,
-                                          Event polledEvent) {
-  std::scoped_lock lock(pollMutex);
-  if (socket->isValid() && handlers.contains(socket->getFd())) {
-    if (polledEvent == Event::All) {
-      // Will be cleaned up on the next poll cycle
-      handlers[socket->getFd()].markedForRemoval = true;
-    } else {
-      // Remove the specific event for the socket
-      handlers[socket->getFd()].callbacks.erase(polledEvent);
-    }
-  }
-
-  updateFdList();
-}
-
-void SocketPollListener::poll(int timeoutMs) {
-  std::vector<pollfd> fdsCopy{};
-
+void SocketPollListener::poll(
+    std::optional<std::chrono::milliseconds> timeout) {
+  std::vector<pollfd> fdsCopy;
   {
     std::scoped_lock lock(pollMutex);
+    fdsCopy.assign(fds.begin(), fds.end());
+  }
 
-    bool rebuildFdList = false;
+  int timeoutMs = timeout ? static_cast<int>(timeout->count()) : -1;
+  int pollResult = ::poll(fdsCopy.data(), fdsCopy.size(), timeoutMs);
 
-    // Erase all FDS with expired weakptr
-    for (auto it = handlers.begin(); it != handlers.end();) {
-      if (it->second.socketPtr.expired() ||
-          !it->second.socketPtr.lock()->isValid()) {
-        rebuildFdList = true;
-        it = handlers.erase(it);
-      } else {
-        ++it;
+  if (pollResult < 0) {
+    if (errno != EINTR) {
+      BELL_LOG(debug, LOG_TAG, "poll failed err={}", strerror(errno));
+    }
+    return;
+  }
+
+  for (const auto& pfd : fdsCopy) {
+    if (pfd.revents == 0)
+      continue;
+    if (pfd.fd == wakeFd_) {
+      drainWakeFd();
+      continue;
+    }
+
+    std::shared_ptr<Socket> socket;
+    std::vector<std::pair<Event, EventCallback>> toInvoke;
+    {
+      std::scoped_lock lock(pollMutex);
+      auto it = handlers.find(pfd.fd);
+      if (it == handlers.end())
+        continue;
+      socket = it->second.socket;
+      for (const auto& [ev, cb] : it->second.callbacks) {
+        if (pfd.revents & static_cast<short>(ev)) {
+          toInvoke.emplace_back(ev, cb);
+        }
       }
     }
 
-    if (rebuildFdList) {
-      updateFdList();
-    }
-
-    fdsCopy.reserve(fds.size());
-    std::copy(fds.begin(), fds.end(), std::back_inserter(fdsCopy));
-  }
-
-  if (fdsCopy.empty()) {
-    bell::utils::sleepMs(timeoutMs);
-    return;
-  }
-
-  int pollResult = ::poll(fdsCopy.data(), fdsCopy.size(), timeoutMs);
-
-  if (pollResult < 0) {  // Handle polling error
-    throw std::runtime_error(
-        fmt::format("poll failed err={}", strerror(errno)));
-    return;
-  }
-
-  for (auto& pfd : fdsCopy) {
-    if (pfd.revents != 0) {  // If there are any events
-      auto it = handlers.find(pfd.fd);
-
-      if (it != handlers.end()) {
-        auto socketPtr = it->second.socketPtr.lock();
-
-        if (!socketPtr) {
-          continue;
-        }
-
-        if ((pfd.revents & POLLIN) &&
-            it->second.callbacks.contains(Event::Readable)) {
-          // Call the readable callback
-          it->second.callbacks[Event::Readable](*socketPtr);
-        }
-
-        if ((pfd.revents & POLLOUT) &&
-            it->second.callbacks.contains(Event::Writeable)) {
-          // Call the writeable callback
-          it->second.callbacks[Event::Writeable](*socketPtr);
-        }
-
-        if ((pfd.revents & POLLPRI) &&
-            it->second.callbacks.contains(Event::Priority)) {
-          // Call the priority callback
-          it->second.callbacks[Event::Priority](*socketPtr);
-        }
-
-        if ((pfd.revents & POLLERR) &&
-            it->second.callbacks.contains(Event::Error)) {
-          // Call the writeable callback
-          it->second.callbacks[Event::Error](*socketPtr);
-        }
-
-        if (pfd.revents & POLLHUP) {
-          if (it->second.callbacks.contains(Event::Hangup)) {
-            // Call the hangup callback
-            it->second.callbacks[Event::Hangup](*socketPtr);
-          }
-
-          it->second.markedForRemoval = true;
-        }
-
-        if (it->second.markedForRemoval) {
-          // Remove the handler
-          handlers.erase(it->first);
-
-          // Rebuild the file descriptor list
-          updateFdList();
-        }
+    for (auto& [ev, cb] : toInvoke) {
+      try {
+        cb(*socket);
+      } catch (const std::exception& e) {
+        BELL_LOG(error, LOG_TAG, "callback threw: {}", e.what());
+      } catch (...) {
+        BELL_LOG(error, LOG_TAG, "callback threw unknown");
       }
     }
   }

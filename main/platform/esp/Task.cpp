@@ -2,6 +2,7 @@
 
 // Library includes
 #include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
 #include <freertos/task.h>
 #include <freertos/timers.h>
 #include "sdkconfig.h"
@@ -27,8 +28,15 @@ class Task::Impl {
     }
   }
   ~Impl() {
+    // Ensure the task is stopped (no-op if it wasn't started or has already
+    // been stopped). Must happen before we free the stack memory below.
     if (taskPtr != nullptr) {
-      taskPtr->stopTask();
+      stopTask(taskPtr);
+    }
+
+    if (doneSem != nullptr) {
+      vSemaphoreDelete(doneSem);
+      doneSem = nullptr;
     }
 
     if (xStack) {
@@ -49,31 +57,40 @@ class Task::Impl {
   Impl(const Impl&) = delete;
   Impl& operator=(const Impl&) = delete;
 
-  // Task entry point
-  void taskEntryPoint() {
-    if (taskPtr != nullptr) {
-      taskPtr->runTask();
+  // Task entry point shim, used to call the member method. Signals the
+  // completion semaphore before self-deleting so stopTask() can confirm the
+  // task has fully exited its run body.
+  static void taskEntryPointShim(void* ctx) {
+    auto* impl = static_cast<Task::Impl*>(ctx);
+    SemaphoreHandle_t localDoneSem = impl->doneSem;
+    if (impl->taskPtr != nullptr) {
+      impl->taskPtr->runTask();
     }
-  }
-
-  // Task entry point shim, used to call the mmber method
-  static void taskEntryPointShim(void* task) {
-    Task::Impl* taskPtr = static_cast<Task::Impl*>(task);
-    taskPtr->taskEntryPoint();
-
+    // Signal completion before self-deletion. After this give, stopTask()
+    // may return and impl/taskPtr may be destroyed -- do not touch them.
+    xSemaphoreGive(localDoneSem);
     vTaskDelete(NULL);
   }
 
   bool startTask(Task* task) {
     taskPtr = task;
+    if (doneSem == nullptr) {
+      doneSem = xSemaphoreCreateBinary();
+      if (doneSem == nullptr) {
+        return false;
+      }
+    }
+
+    // Set taskRunning BEFORE creating the task; if a stopTask() beats the
+    // scheduler, the taskLoop body will exit on its first iteration.
+    task->taskRunning = true;
+
     if (espStackOnPsram) {
-      // Create the task with previously allocated stack on PSRAM
       xTaskHandle = xTaskCreateStaticPinnedToCore(
           taskEntryPointShim, this->taskName.c_str(), this->stackSize, this,
           this->espPriority + CONFIG_PTHREAD_TASK_PRIO_DEFAULT, xStack,
           xTaskBuffer, getFreeRTOSTaskCore());
     } else {
-      // Create the task with default stack allocation
       if (xTaskCreatePinnedToCore(
               taskEntryPointShim, this->taskName.c_str(), this->stackSize, this,
               this->espPriority + CONFIG_PTHREAD_TASK_PRIO_DEFAULT,
@@ -82,7 +99,23 @@ class Task::Impl {
       }
     }
 
-    return xTaskHandle != nullptr;
+    if (xTaskHandle == nullptr) {
+      task->taskRunning = false;
+      return false;
+    }
+    taskStarted = true;
+    return true;
+  }
+
+  void stopTask(Task* task) {
+    task->taskRunning = false;
+    task->wakeTask();
+    if (taskStarted && doneSem != nullptr) {
+      // Wait for the task's run body to complete. The semaphore is given
+      // by taskEntryPointShim just before self-delete.
+      xSemaphoreTake(doneSem, portMAX_DELAY);
+      taskStarted = false;
+    }
   }
 
  private:
@@ -92,10 +125,12 @@ class Task::Impl {
   int espPriority;
   std::string taskName;
 
-  StaticTask_t* xTaskBuffer;
-  StackType_t* xStack;
-  TaskHandle_t xTaskHandle;
+  StaticTask_t* xTaskBuffer = nullptr;
+  StackType_t* xStack = nullptr;
+  TaskHandle_t xTaskHandle = nullptr;
   Task* taskPtr = nullptr;
+  SemaphoreHandle_t doneSem = nullptr;
+  bool taskStarted = false;
 
   // Returns the FreeRTOS task core
   BaseType_t getFreeRTOSTaskCore() {
@@ -118,8 +153,15 @@ Task::Task(const std::string& taskName, int stackSize, int espPriority,
     : pImpl(std::make_unique<Impl>(taskName, stackSize, espPriority,
                                    espTaskCore, espStackOnPsram)) {}
 
-Task::~Task() {}
+Task::~Task() {
+  // Safety net; derived destructors should already have stopped the task.
+  stopTask();
+}
 
 bool Task::startTask() {
   return pImpl->startTask(this);
+}
+
+void Task::stopTask() {
+  pImpl->stopTask(this);
 }

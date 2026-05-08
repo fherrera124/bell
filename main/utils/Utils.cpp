@@ -5,6 +5,9 @@
 #ifdef ESP_PLATFORM
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#else
+#include <functional>
+#include <thread>
 #endif
 
 using namespace bell;
@@ -25,5 +28,16 @@ void bell::utils::sleepMs(uint32_t milliseconds) {
   vTaskDelay(milliseconds / portTICK_PERIOD_MS);
 #else
   usleep(milliseconds * 1000);
+#endif
+}
+
+uint64_t bell::utils::currentThreadId() {
+#ifdef ESP_PLATFORM
+  // xTaskGetCurrentTaskHandle is a pointer to the active task's TCB, which
+  // is a stable per-task identity regardless of how the task was created.
+  return reinterpret_cast<uintptr_t>(xTaskGetCurrentTaskHandle());
+#else
+  return static_cast<uint64_t>(
+      std::hash<std::thread::id>{}(std::this_thread::get_id()));
 #endif
 }

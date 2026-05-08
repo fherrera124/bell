@@ -3,6 +3,9 @@
 // Needed for thread-safe time handling
 #include <chrono>
 
+// fmt::localtime + chrono formatters
+#include <fmt/chrono.h>
+
 using namespace bell;
 
 StdoutLoggerBackend::StdoutLoggerBackend(bool includeTags,
