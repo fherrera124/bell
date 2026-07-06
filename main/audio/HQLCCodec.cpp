@@ -154,9 +154,11 @@ bell::Result<> HQLCCodec::setupEncode(const AudioFormat& audioFormat,
       encodeOutputBufferSize, alignof(std::max_align_t)));
 
   BELL_LOG(info, LOG_TAG,
-           "HQLC encoder setup: {}Hz, {} channels, mode={}, pcmFormat={}",
+           "HQLC encoder setup: {}Hz, {} channels, mode={}, pcmFormat={}, enc "
+           "size = {}, scratch size = {}",
            sampleRate, channels, config.fixedGain.has_value() ? "fixed" : "rc",
-           pcmFormat == HQLC_PCM16 ? "S16" : "S24");
+           pcmFormat == HQLC_PCM16 ? "S16" : "S24", encodeOutputBufferSize,
+           encoderScratchSize);
 
   return {};
 }
@@ -316,4 +318,11 @@ bell::Result<Codec::DecodeResult> HQLCCodec::decode(
       .pcm = {decodeOutputBuffer, decodeOutputBufferSize},
       .consumedInputBytes = encodedInput.size(),
   };
+}
+
+void HQLCCodec::resetDecoderState() {
+  // Should reset MDCT state internally
+  if (decoder) {
+    hqlc_decoder_reset(decoder);
+  }
 }

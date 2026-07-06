@@ -7,8 +7,13 @@
 
 // MbedTLS includes
 #include "bell/net/TCPSocket.h"
+#include "mbedtls/build_info.h"  // MBEDTLS_VERSION_MAJOR
+#if MBEDTLS_VERSION_MAJOR < 4
 #include "mbedtls/ctr_drbg.h"
 #include "mbedtls/entropy.h"
+#else
+#include "psa/crypto.h"
+#endif
 #include "mbedtls/error.h"
 #include "mbedtls/ssl.h"
 
@@ -60,8 +65,10 @@ class TLSSocket : public Socket {
     this->innerSocket = std::move(sock.innerSocket);
     this->sslCtx = sock.sslCtx;
     this->sslConf = sock.sslConf;
+#if MBEDTLS_VERSION_MAJOR < 4
     this->ctrDrbgCtx = sock.ctrDrbgCtx;
     this->entropyCtx = sock.entropyCtx;
+#endif
   }
 
   TLSSocket& operator=(TLSSocket&& sock) noexcept {
@@ -69,8 +76,10 @@ class TLSSocket : public Socket {
       this->innerSocket = std::move(sock.innerSocket);
       this->sslCtx = sock.sslCtx;
       this->sslConf = sock.sslConf;
+#if MBEDTLS_VERSION_MAJOR < 4
       this->ctrDrbgCtx = sock.ctrDrbgCtx;
       this->entropyCtx = sock.entropyCtx;
+#endif
     }
     return *this;
   }
@@ -115,8 +124,10 @@ class TLSSocket : public Socket {
   const char* LOG_TAG = "TLSSocket";
 
   // MbedTLS structures
+#if MBEDTLS_VERSION_MAJOR < 4
   mbedtls_entropy_context entropyCtx{};
   mbedtls_ctr_drbg_context ctrDrbgCtx{};
+#endif
   mbedtls_ssl_context sslCtx{};
   mbedtls_ssl_config sslConf{};
 

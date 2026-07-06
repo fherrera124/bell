@@ -486,7 +486,41 @@ class BonjourAdvertiser : public Advertiser {
       uint16_t port,
       const std::unordered_map<std::string, std::string>& txtRecords,
       int interfaceIndex) {
+    // Remember the registration parameters so update() can re-register under a new name
+    this->serviceType = serviceType;
+    this->serviceDomain = serviceDomain;
+    this->serviceHost = serviceHost;
+    this->port = port;
+    this->interfaceIndex = interfaceIndex;
 
+    return doRegister(serviceName, txtRecords);
+  }
+
+  bell::Result<> update(
+      const std::string& serviceName,
+      const std::unordered_map<std::string, std::string>& txtRecords) override {
+    stopAdvertising();
+    return doRegister(serviceName, txtRecords);
+  }
+
+  void stopAdvertising() override {
+    if (ref) {
+      // Unregister the dns-sd socket from the event poll
+      dnsSdRegistration.reset();
+
+      // Take the FD, so destructor of bell::UDPSocket does not close the FD automatically
+      (void)wrappedDnsSdSocket->takeFd();
+
+      // Unregister dns-sd event
+      DNSServiceRefDeallocate(ref);
+      ref = nullptr;
+    }
+  }
+
+ private:
+  bell::Result<> doRegister(
+      const std::string& serviceName,
+      const std::unordered_map<std::string, std::string>& txtRecords) {
     TXTRecordRef txtRecord;
 
     TXTRecordCreate(&txtRecord, 0, nullptr);
@@ -529,24 +563,16 @@ class BonjourAdvertiser : public Advertiser {
     return {};
   }
 
-  void stopAdvertising() override {
-    if (ref) {
-      // Unregister the dns-sd socket from the event poll
-      dnsSdRegistration.reset();
-
-      // Take the FD, so destructor of bell::UDPSocket does not close the FD automatically
-      (void)wrappedDnsSdSocket->takeFd();
-
-      // Unregister dns-sd event
-      DNSServiceRefDeallocate(ref);
-    }
-  }
-
- private:
   std::shared_ptr<bell::SocketPollListener> socketPoll;
   std::shared_ptr<bell::UDPSocket> wrappedDnsSdSocket = nullptr;
   bell::SocketPollListener::Registration dnsSdRegistration;
   DNSServiceRef ref = nullptr;
+
+  std::string serviceType;
+  std::string serviceDomain;
+  std::string serviceHost;
+  uint16_t port = 0;
+  int interfaceIndex = 0;
 };
 
 class BonjourManager : public Manager, public bell::Task {

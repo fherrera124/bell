@@ -108,9 +108,9 @@ class MQTTClient {
   // Use std::less<> so we can use string_view for lookup
   std::map<std::string, PublishHandler, std::less<>> topicCallbacks;
 
-  // mqtt lib internals
   struct mqtt_client client {};
-  std::array<uint8_t, 2048> sendbuf{};
+
+  std::array<uint8_t, 8192> sendbuf{};
   std::array<uint8_t, 1024> recvbuf{};
   mqtt_callbacks_context callbacksContext{};
 };

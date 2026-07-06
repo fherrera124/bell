@@ -1,5 +1,10 @@
 #pragma once
 
+#include <string>
+#include <unordered_map>
+
+#include "bell/Result.h"
+
 namespace bell::mdns {
 /**
  * @brief Abstract base class for a handle representing a registered mDNS service.
@@ -17,5 +22,13 @@ class Advertiser {
    * @brief Stop advertising the service. Automatically called on destruction.
    */
   virtual void stopAdvertising() = 0;
+
+  /**
+   * @brief Update the advertised instance name and TXT records in place,
+   * re-announcing the service so browsers observe the change.
+   */
+  virtual bell::Result<> update(
+      const std::string& serviceName,
+      const std::unordered_map<std::string, std::string>& txtRecords) = 0;
 };
 }  // namespace bell::mdns

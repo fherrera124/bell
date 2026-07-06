@@ -49,6 +49,10 @@ if(NOT BELL_DISABLE_MQTT)
     list(APPEND BELL_LIBS mqtt)
 endif()
 
+# Include miniz (gzip/deflate). Single-file amalgamation, public domain.
+add_subdirectory(external/miniz)
+list(APPEND BELL_LIBS miniz)
+
 if(NOT BELL_DISABLE_MBEDTLS)
     # Include mbedtls
     if(BELL_EXTERNAL_MBEDTLS)
@@ -132,7 +136,7 @@ endif()
 
 # Espressif-specific dependencies
 if(ESP_PLATFORM)
-    list(APPEND BELL_LIBS idf::mbedtls idf::pthread idf::driver idf::lwip idf::newlib)
+    list(APPEND BELL_LIBS idf::mbedtls idf::pthread idf::driver idf::lwip )
 
     if(IDF_VERSION_MAJOR LESS_EQUAL 4)
         if(NOT BELL_DISABLE_MDNS)

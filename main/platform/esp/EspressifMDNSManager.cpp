@@ -331,6 +331,41 @@ class EspressifMDNAdvertiser : public Advertiser {
     return {};
   }
 
+  bell::Result<> update(
+      const std::string& serviceName,
+      const std::unordered_map<std::string, std::string>& txtRecords) override {
+    if (regService.empty()) {
+      return nonstd::make_unexpected(
+          bell::mdns::MdnsErrc::service_registration_failed);
+    }
+
+    // Rename the existing service rather than adding a new one
+    auto res = mdns_service_instance_name_set(
+        regService.c_str(), regProto.c_str(), serviceName.c_str());
+    if (res != ESP_OK) {
+      return nonstd::make_unexpected(
+          bell::mdns::MdnsErrc::service_registration_failed);
+    }
+
+    std::vector<mdns_txt_item_t> items;
+    items.reserve(txtRecords.size());
+    for (const auto& data : txtRecords) {
+      mdns_txt_item_t item;
+      item.key = data.first.c_str();
+      item.value = data.second.c_str();
+      items.push_back(item);
+    }
+
+    res = mdns_service_txt_set(regService.c_str(), regProto.c_str(),
+                               items.data(), items.size());
+    if (res != ESP_OK) {
+      return nonstd::make_unexpected(
+          bell::mdns::MdnsErrc::service_registration_failed);
+    }
+
+    return {};
+  }
+
   void stopAdvertising() override {
     if (!regService.empty()) {
       (void)mdns_service_remove(regService.c_str(), regProto.c_str());

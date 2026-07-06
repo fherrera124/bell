@@ -4,7 +4,11 @@
 #include <string_view>
 
 // Local includes
+#include <mbedtls/build_info.h>  // MBEDTLS_VERSION_MAJOR
 #include <mbedtls/md.h>
+#if MBEDTLS_VERSION_MAJOR >= 4
+#include <psa/crypto.h>
+#endif
 
 namespace bell::utils {
 class DigestCrypto {
@@ -127,6 +131,12 @@ class DigestCrypto {
  private:
   mbedtls_md_context_t ctx{};
   mbedtls_md_type_t digestType;
+
+#if MBEDTLS_VERSION_MAJOR >= 4
+  // HMAC state for the PSA MAC path (see hmac()/hmacFinish())
+  psa_mac_operation_t macOp = PSA_MAC_OPERATION_INIT;
+  mbedtls_svc_key_id_t hmacKey{};
+#endif
 
   // Flag indicating if the context is initialized for HMAC.
   bool hmacInitialized = false;

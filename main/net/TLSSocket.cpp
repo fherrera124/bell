@@ -17,8 +17,10 @@
 using namespace bell;
 
 namespace {
+#if MBEDTLS_VERSION_MAJOR < 4
 // Personalization string used to seed the entropy context
 const char* socketPers = "bell-tls";
+#endif
 
 // Transform MbedTLS error codes to std::error_code, while attempting to map the errors to common errc values
 std::error_code mbedtlsToCommonErrc(int mbedtlsErr) {
@@ -65,19 +67,24 @@ net::TLSSocket::~TLSSocket() {
   // Free the MbedTLS structures
   mbedtls_ssl_free(&sslCtx);
   mbedtls_ssl_config_free(&sslConf);
+#if MBEDTLS_VERSION_MAJOR < 4
   mbedtls_ctr_drbg_free(&ctrDrbgCtx);
   mbedtls_entropy_free(&entropyCtx);
+#endif
 }
 
 net::TLSSocket::TLSSocket() {
   // Initialize the MbedTLS structures
+#if MBEDTLS_VERSION_MAJOR < 4
   mbedtls_entropy_init(&entropyCtx);
   mbedtls_ctr_drbg_init(&ctrDrbgCtx);
+#endif
   mbedtls_ssl_init(&sslCtx);
   mbedtls_ssl_config_init(&sslConf);
 
   // TODO: Attach a bundle here
 
+#if MBEDTLS_VERSION_MAJOR < 4
   // Seed the ctr_drbg context
   int ret = mbedtls_ctr_drbg_seed(
       &ctrDrbgCtx, mbedtls_entropy_func, &entropyCtx,
@@ -87,6 +94,15 @@ net::TLSSocket::TLSSocket() {
     auto err = make_tls_error_code(ret);
     throw std::system_error(err);
   }
+#else
+  // Mbed TLS 4.0 draws randomness from the PSA subsystem, which must be
+  // initialized before the handshake. psa_crypto_init() is idempotent; ESP-IDF
+  // seeds PSA during boot, but host builds rely on this call.
+  psa_status_t status = psa_crypto_init();
+  if (status != PSA_SUCCESS) {
+    throw std::system_error(make_tls_error_code(status));
+  }
+#endif
 }
 
 std::error_code net::TLSSocket::lastError() const {
@@ -116,7 +132,9 @@ bell::Result<> net::TLSSocket::connect(const std::string& host, uint16_t port,
   mbedtls_ssl_conf_authmode(&sslConf, MBEDTLS_SSL_VERIFY_NONE);
   mbedtls_ssl_conf_max_tls_version(&sslConf, MBEDTLS_SSL_VERSION_TLS1_2);
 
+#if MBEDTLS_VERSION_MAJOR < 4
   mbedtls_ssl_conf_rng(&sslConf, mbedtls_ctr_drbg_random, &ctrDrbgCtx);
+#endif
   ret = mbedtls_ssl_setup(&sslCtx, &sslConf);
   if (ret != 0) {
     return nonstd::make_unexpected(make_tls_error_code(ret));

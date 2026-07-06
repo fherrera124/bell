@@ -162,6 +162,15 @@ class Codec {
    */
   virtual bell::Result<DecodeResult> decode(
       tcb::span<const std::byte> encodedInput) = 0;
+
+  /**
+   * @brief Resets any inter-frame decoder state after a gap in the encoded input stream
+   *
+   * Called when the encoded stream is discontinuous so that stateful decoders
+   * can clear carry-over state (e.g. MDCT overlap-add history) before the next
+   * frame. Default is a no-op for stateless decoders.
+   */
+  virtual void resetDecoderState() {}
 };
 }  // namespace bell::audio
 

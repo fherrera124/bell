@@ -66,6 +66,7 @@ class HQLCCodec : public Codec {
       tcb::span<const std::byte> pcmInput) override;
   bell::Result<DecodeResult> decode(
       tcb::span<const std::byte> encodedInput) override;
+  void resetDecoderState() override;
 
   audio::Format getAudioFormat() const override { return audioFormat; }
 

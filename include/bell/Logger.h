@@ -92,6 +92,22 @@ class BaseLogger {
     updateGlobalMinLevel();
   }
 
+  // Drop a previously registered backend by raw pointer
+  void unregisterBackend(LoggerBackend* ptr) {
+    if (!ptr)
+      return;
+    std::unique_lock lock(loggerMutex);
+    auto it =
+        std::remove_if(registeredBackends.begin(), registeredBackends.end(),
+                       [ptr](const std::unique_ptr<LoggerBackend>& up) {
+                         return up.get() == ptr;
+                       });
+    if (it == registeredBackends.end())
+      return;
+    registeredBackends.erase(it, registeredBackends.end());
+    updateGlobalMinLevel();
+  }
+
   void setLogLevel(LogLevel level) {
     std::unique_lock lock(loggerMutex);
     for (auto& backend : registeredBackends) {
@@ -124,7 +140,6 @@ class BaseLogger {
     std::shared_lock lock(loggerMutex);
 
     for (const auto& backend : registeredBackends) {
-      // 4. Double check backend specific level
       if (level >= backend->getLogLevel()) {
         backend->log(level, basename, line, tag, msg);
       }
@@ -163,6 +178,14 @@ inline void registerDefaultLogger(bool includeTags = false,
  */
 inline void registerLoggerBackend(std::unique_ptr<LoggerBackend> backend) {
   BaseLogger::instance().registerBackend(std::move(backend));
+}
+
+/**
+ * @brief Drops a backend previously registered via registerLoggerBackend or a
+ * helper like registerSyslogBackend.
+ */
+inline void unregisterLoggerBackend(LoggerBackend* backend) {
+  BaseLogger::instance().unregisterBackend(backend);
 }
 
 /**

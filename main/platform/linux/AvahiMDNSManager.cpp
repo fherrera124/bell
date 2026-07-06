@@ -432,7 +432,34 @@ class AvahiMDNSAdvertiser : public Advertiser {
       uint16_t port,
       const std::unordered_map<std::string, std::string>& txtRecords,
       int interfaceIndex) {
+    // Remember the registration parameters so update() can re-register under a new name, renaming requires a fresh entry group.
+    this->serviceType = serviceType;
+    this->serviceDomain = serviceDomain;
+    this->serviceHost = serviceHost;
+    this->port = port;
+    this->interfaceIndex = interfaceIndex;
 
+    return doRegister(serviceName, txtRecords);
+  }
+
+  bell::Result<> update(
+      const std::string& serviceName,
+      const std::unordered_map<std::string, std::string>& txtRecords) override {
+    stopAdvertising();
+    return doRegister(serviceName, txtRecords);
+  }
+
+  void stopAdvertising() override {
+    if (entryGroup != nullptr) {
+      avahi_entry_group_free(entryGroup);
+      entryGroup = nullptr;
+    }
+  }
+
+ private:
+  bell::Result<> doRegister(
+      const std::string& serviceName,
+      const std::unordered_map<std::string, std::string>& txtRecords) {
     // Create a new Avahi entry group
     entryGroup =
         avahi_entry_group_new(avahiClient, avahiGroupCallback, nullptr);
@@ -474,16 +501,14 @@ class AvahiMDNSAdvertiser : public Advertiser {
     return {};
   }
 
-  void stopAdvertising() override {
-    if (entryGroup != nullptr) {
-      avahi_entry_group_free(entryGroup);
-      entryGroup = nullptr;
-    }
-  }
-
- private:
   AvahiClient* avahiClient = nullptr;
   AvahiEntryGroup* entryGroup = nullptr;
+
+  std::string serviceType;
+  std::string serviceDomain;
+  std::string serviceHost;
+  uint16_t port = 0;
+  int interfaceIndex = 0;
 
   // Callback for Avahi entry group state changes, used for debugging
   static void avahiGroupCallback(AvahiEntryGroup* group,

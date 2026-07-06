@@ -1,6 +1,10 @@
 #include "bell/utils/DigestCrypto.h"
 #include "fmt/format.h"
 
+#if MBEDTLS_VERSION_MAJOR >= 4
+#include <mbedtls/psa_util.h>  // mbedtls_md_psa_alg_from_type
+#endif
+
 using namespace bell;
 
 utils::DigestCrypto::DigestCrypto(mbedtls_md_type_t type, bool hmac) {
@@ -12,7 +16,12 @@ utils::DigestCrypto::DigestCrypto(mbedtls_md_type_t type, bool hmac) {
 
   // Initialize the context
   mbedtls_md_init(&ctx);
+#if MBEDTLS_VERSION_MAJOR >= 4
+  (void)hmac;
+  auto result = mbedtls_md_setup(&ctx, mbedtls_md_info_from_type(type), 0);
+#else
   auto result = mbedtls_md_setup(&ctx, mbedtls_md_info_from_type(type), hmac);
+#endif
   if (result != 0) {
     throw std::runtime_error(fmt::format(
         "Failed to setup digest context, mbedtls error: {}", result));
@@ -24,6 +33,11 @@ utils::DigestCrypto::DigestCrypto(mbedtls_md_type_t type, bool hmac) {
 utils::DigestCrypto::~DigestCrypto() {
   // Free the context
   mbedtls_md_free(&ctx);
+#if MBEDTLS_VERSION_MAJOR >= 4
+  // Tear down any in-flight PSA MAC operation and imported HMAC key.
+  psa_mac_abort(&macOp);
+  psa_destroy_key(hmacKey);
+#endif
 }
 
 void utils::DigestCrypto::reset() {
@@ -34,6 +48,7 @@ void utils::DigestCrypto::reset() {
         "Failed to reset digest context, mbedtls error: {}", result));
   }
 
+#if MBEDTLS_VERSION_MAJOR < 4
   if (hmacInitialized) {
     // Reset the HMAC context
     result = mbedtls_md_hmac_reset(&ctx);
@@ -42,6 +57,8 @@ void utils::DigestCrypto::reset() {
           "Failed to reset HMAC context, mbedtls error: {}", result));
     }
   }
+#endif
+  // On Mbed TLS 4.0 the HMAC operation is restarted on next call in hmac()
 }
 
 void utils::DigestCrypto::update(const std::byte* bytes, size_t length) {
@@ -60,6 +77,34 @@ void utils::DigestCrypto::updateString(std::string_view str) {
 }
 
 void utils::DigestCrypto::hmac(const std::byte* key, size_t keyLength) {
+#if MBEDTLS_VERSION_MAJOR >= 4
+  // Restart from clean state
+  psa_mac_abort(&macOp);
+  psa_destroy_key(hmacKey);
+  hmacKey = mbedtls_svc_key_id_t{};
+
+  psa_algorithm_t alg = PSA_ALG_HMAC(mbedtls_md_psa_alg_from_type(digestType));
+
+  psa_key_attributes_t attr = PSA_KEY_ATTRIBUTES_INIT;
+  psa_set_key_usage_flags(&attr, PSA_KEY_USAGE_SIGN_MESSAGE);
+  psa_set_key_algorithm(&attr, alg);
+  psa_set_key_type(&attr, PSA_KEY_TYPE_HMAC);
+
+  psa_status_t status = psa_import_key(
+      &attr, reinterpret_cast<const uint8_t*>(key), keyLength, &hmacKey);
+  if (status != PSA_SUCCESS) {
+    throw std::runtime_error(
+        fmt::format("Failed to import HMAC key, PSA error: {}", status));
+  }
+
+  status = psa_mac_sign_setup(&macOp, hmacKey, alg);
+  if (status != PSA_SUCCESS) {
+    psa_destroy_key(hmacKey);
+    hmacKey = mbedtls_svc_key_id_t{};
+    throw std::runtime_error(
+        fmt::format("Failed to start HMAC operation, PSA error: {}", status));
+  }
+#else
   // Initialize the HMAC context
   auto result = mbedtls_md_hmac_starts(
       &ctx, reinterpret_cast<const uint8_t*>(key), keyLength);
@@ -67,11 +112,20 @@ void utils::DigestCrypto::hmac(const std::byte* key, size_t keyLength) {
     throw std::runtime_error(fmt::format(
         "Failed to initialize HMAC context, mbedtls error: {}", result));
   }
+#endif
 
   hmacInitialized = true;
 }
 
 void utils::DigestCrypto::hmacUpdate(const std::byte* bytes, size_t length) {
+#if MBEDTLS_VERSION_MAJOR >= 4
+  psa_status_t status =
+      psa_mac_update(&macOp, reinterpret_cast<const uint8_t*>(bytes), length);
+  if (status != PSA_SUCCESS) {
+    throw std::runtime_error(
+        fmt::format("Failed to update HMAC operation, PSA error: {}", status));
+  }
+#else
   // Update the HMAC context with the specified bytes
   auto result = mbedtls_md_hmac_update(
       &ctx, reinterpret_cast<const uint8_t*>(bytes), length);
@@ -79,6 +133,7 @@ void utils::DigestCrypto::hmacUpdate(const std::byte* bytes, size_t length) {
     throw std::runtime_error(fmt::format(
         "Failed to update HMAC context, mbedtls error: {}", result));
   }
+#endif
 }
 
 void utils::DigestCrypto::hmacUpdateString(const std::string_view& key) {
@@ -96,6 +151,20 @@ void utils::DigestCrypto::finish(std::byte* output) {
 }
 
 void utils::DigestCrypto::hmacFinish(std::byte* output) {
+#if MBEDTLS_VERSION_MAJOR >= 4
+  size_t macLength = 0;
+  psa_status_t status = psa_mac_sign_finish(
+      &macOp, reinterpret_cast<uint8_t*>(output), getDigestSize(), &macLength);
+  // The imported key is single-use per HMAC computation; drop it regardless of
+  // the outcome (psa_mac_sign_finish already released the operation on success).
+  psa_destroy_key(hmacKey);
+  hmacKey = mbedtls_svc_key_id_t{};
+  hmacInitialized = false;
+  if (status != PSA_SUCCESS) {
+    throw std::runtime_error(
+        fmt::format("Failed to finish HMAC operation, PSA error: {}", status));
+  }
+#else
   // Finalize the HMAC context and store the result in the output array
   auto result =
       mbedtls_md_hmac_finish(&ctx, reinterpret_cast<uint8_t*>(output));
@@ -103,6 +172,7 @@ void utils::DigestCrypto::hmacFinish(std::byte* output) {
     throw std::runtime_error(fmt::format(
         "Failed to finish HMAC computation, mbedtls error: {}", result));
   }
+#endif
 }
 
 size_t utils::DigestCrypto::getDigestSize() {

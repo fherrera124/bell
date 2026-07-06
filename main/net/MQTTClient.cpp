@@ -1,5 +1,8 @@
 #include "bell/net/MQTTClient.h"
 
+#include <cerrno>
+#include <system_error>
+
 // Bell includes
 #include "bell/Logger.h"
 #include "bell/net/TCPSocket.h"
@@ -15,12 +18,18 @@ void publishCallbackShim(void** state,
   client->cPublishCallback(publishResponse);
 }
 
+bool wouldBlock(const std::error_code& ec) {
+  return ec.value() == EAGAIN || ec.value() == EWOULDBLOCK;
+}
+
 // Read callback for the MQTT lib
 ssize_t mqttPalRead(void* context, uint8_t* buf, size_t len) {
   auto* socket = static_cast<net::Socket*>(context);
   auto res = socket->read(reinterpret_cast<std::byte*>(buf), len);
 
   if (!res) {
+    if (wouldBlock(res.error()))
+      return 0;  // no data available yet — not an error
     BELL_LOG(error, "mqtt_pal", "Failed to read from socket: {}", res.error());
     return -1;
   }
@@ -33,6 +42,8 @@ ssize_t mqttPalWrite(void* context, const uint8_t* buf, size_t len) {
   auto* socket = static_cast<net::Socket*>(context);
   auto res = socket->write(reinterpret_cast<const std::byte*>(buf), len);
   if (!res) {
+    if (wouldBlock(res.error()))
+      return 0;  // send buffer full — retry on the next sync
     BELL_LOG(error, "mqtt_pal", "Failed to write to socket: {}", res.error());
     return -1;
   }
