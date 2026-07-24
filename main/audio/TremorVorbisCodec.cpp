@@ -1,6 +1,7 @@
 #include "bell/audio/TremorVorbisCodec.h"
 
 // Standard includes
+#include <algorithm>
 #include <cassert>
 #include <cstddef>
 #include <unordered_map>
@@ -129,38 +130,26 @@ bell::Result<Codec::DecodeResult> TremorVorbisCodec::decode(
   int32_t** pcm;
   int samples = vorbis_synthesis_pcmout(&dspState, &pcm);
   if (samples > 0) {
-    // Correctly handle the output data
-    const int numChannels = info.channels;
-    const size_t totalSamples = samples * numChannels;
-    const size_t outputBytes = totalSamples * sizeof(int16_t);
-
-    if (decodedPCMData.size() < outputBytes) {
-      decodedPCMData.resize(outputBytes);
-    }
-
-    auto* out = reinterpret_cast<int16_t*>(decodedPCMData.data());
-
-    // Manually interleave the samples from each channel
-    for (int i = 0; i < samples; ++i) {
-      for (int c = 0; c < numChannels; ++c) {
-        // Tremor uses 32-bit values internally but output is 16-bit.
-        // Clamp the values to be safe, although Tremor should not overflow.
-        int32_t val = pcm[c][i];
-        val >>= 9;  // Convert from Tremor's 32-bit to 16-bit range
-        if (val > 32767)
-          val = 32767;
-        if (val < -32768)
-          val = -32768;
-
-        *out++ = static_cast<int16_t>(val);
+    // Interleave + fixed-point-to-S16 scale/clip, ported directly from
+    // libtremor's own ov_read() (vorbisfile.c) - tremor's pcm[ch] arrays
+    // hold ogg_int32_t fixed-point samples, not ready-to-use int16_t.
+    int channels = audioFormat.getNumChannels();
+    pcmScratch.resize(static_cast<size_t>(samples) * channels);
+    for (int ch = 0; ch < channels; ch++) {
+      const int32_t* src = pcm[ch];
+      int16_t* dest = pcmScratch.data() + ch;
+      for (int j = 0; j < samples; j++) {
+        *dest = static_cast<int16_t>(
+            std::clamp<int32_t>(src[j] >> 9, -32768, 32767));
+        dest += channels;
       }
     }
 
-    // Tell libvorbis we have consumed the samples
     vorbis_synthesis_read(&dspState, samples);
 
     return DecodeResult{
-        .pcm = {decodedPCMData.data(), outputBytes},
+        .pcm = {reinterpret_cast<std::byte*>(pcmScratch.data()),
+                pcmScratch.size() * sizeof(int16_t)},
         .consumedInputBytes = encodedInput.size(),
     };
   }
