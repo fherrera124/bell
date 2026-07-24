@@ -4,6 +4,7 @@
 #include <netinet/tcp.h>
 
 // Own includes
+#include "bell/Logger.h"
 #include "bell/Result.h"
 #include "bell/http/Common.h"
 #include "bell/http/Writer.h"
@@ -13,6 +14,7 @@
 
 using namespace bell::http;
 namespace {
+const char* LOG_TAG = "HTTPClient";
 // Default connection pool with a size of 8, shared across all DefaultTransport instances
 std::shared_ptr<ConnectionPool> defaultConnectionPoll =
     std::make_shared<ConnectionPool>(8);
@@ -217,6 +219,7 @@ bell::Result<Response> DefaultTransport::execute(const Request& req) {
                                  req.contentLength.value_or(0));
 
   if (!res) {
+    BELL_LOG(error, LOG_TAG, "Error during request write: {}", res.error());
     socketStream->close();
     return nonstd::make_unexpected(res.error());
   }
@@ -262,6 +265,7 @@ bell::Result<Response> DefaultTransport::execute(const Request& req) {
   socketStream->flush();
 
   if (socketStream->bad()) {
+    BELL_LOG(error, LOG_TAG, "Stream bad after flush");
     socketStream->close();
     return bell::make_unexpected_errc<Response>(std::errc::io_error);
   }
@@ -272,6 +276,7 @@ bell::Result<Response> DefaultTransport::execute(const Request& req) {
   // Try to read the headers
   res = reader.readHeaders();
   if (!res) {
+    BELL_LOG(error, LOG_TAG, "Error during headers read: {}", res.error());
     socketStream->close();
     return nonstd::make_unexpected(res.error());
   }
