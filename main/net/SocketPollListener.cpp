@@ -122,8 +122,18 @@ SocketPollListener::Registration SocketPollListener::watch(
     std::scoped_lock lock(pollMutex);
     int fd = socket->getFd();
     auto& handler = handlers[fd];
-    if (!handler.socket)
+    if (handler.socket != socket) {
+      // Either a genuinely new fd, or a stale entry left behind by a
+      // caller that dropped one Registration for this fd (eg. Writeable)
+      // while still holding another (eg. Readable) - the map slot stays
+      // non-empty, so a plain "insert if absent" would silently keep
+      // dispatching to a closed socket if the OS hands this fd to a new
+      // one before the caller drops its last Registration too. Starting
+      // the entry fresh whenever the tracked socket doesn't match is safe
+      // regardless of how many Registrations a caller holds for this fd.
+      handler = Handler{};
       handler.socket = socket;
+    }
     handler.callbacks[polledEvent] = std::move(onEvent);
     updateFdListLocked();
   }
