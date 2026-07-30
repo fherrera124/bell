@@ -59,7 +59,9 @@ class CircularByteBuffer {
   size_t capacity() const;
 
   /**
-   * @brief Clears the buffer, removing all stored data.
+   * @brief Discards everything currently queued, resetting the buffer to
+   * empty. Safe to call from a different thread than the one calling
+   * read()/write() - wakes any writer currently blocked on a full buffer.
    */
   void clear();
 
