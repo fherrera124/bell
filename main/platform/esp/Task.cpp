@@ -72,6 +72,10 @@ class Task::Impl {
     vTaskDelete(NULL);
   }
 
+  size_t getStackHighWaterMarkWords() const {
+    return xTaskHandle ? uxTaskGetStackHighWaterMark(xTaskHandle) : 0;
+  }
+
   bool startTask(Task* task) {
     taskPtr = task;
     if (doneSem == nullptr) {
@@ -164,4 +168,8 @@ bool Task::startTask() {
 
 void Task::stopTask() {
   pImpl->stopTask(this);
+}
+
+size_t Task::getStackHighWaterMarkWords() const {
+  return pImpl->getStackHighWaterMarkWords();
 }
