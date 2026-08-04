@@ -20,13 +20,6 @@ file(GLOB BELL_SOURCES
     "main/dsp/*.cpp" # bell::dsp
 )
 
-# main/audio/*.cpp is intentionally NOT globbed as a whole: every file in
-# there #includes its one third-party codec/container/backend library's
-# header directly (aacdecoder_lib.h, opus.h, ivorbiscodec.h, lc3_cpp.h,
-# hqlc's own header, ogg/ogg.h, portaudio.h) - compiling any of them while
-# that dependency is disabled (and so never add_subdirectory'd in
-# ExternalDependencies.cmake) fails with a missing-header error, not a
-# silently-skipped file.
 if(NOT BELL_DISABLE_CODECS)
     if(BELL_CODEC_AAC)
         list(APPEND BELL_SOURCES "main/audio/AACCodec.cpp")
