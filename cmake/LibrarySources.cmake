@@ -20,6 +20,10 @@ file(GLOB BELL_SOURCES
     "main/dsp/*.cpp" # bell::dsp
 )
 
+if(BELL_DISABLE_MQTT)
+    list(REMOVE_ITEM BELL_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/main/net/MQTTClient.cpp")
+endif()
+
 if(NOT BELL_DISABLE_CODECS)
     if(BELL_CODEC_AAC)
         list(APPEND BELL_SOURCES "main/audio/AACCodec.cpp")
