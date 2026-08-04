@@ -50,8 +50,11 @@ if(NOT BELL_DISABLE_MQTT)
 endif()
 
 # Include miniz (gzip/deflate). Single-file amalgamation, public domain.
-add_subdirectory(external/miniz)
-list(APPEND BELL_LIBS miniz)
+# Only HQLC currently needs it - nothing else in bell references mz_* at all.
+if(NOT BELL_DISABLE_CODECS AND BELL_CODEC_HQLC)
+    add_subdirectory(external/miniz)
+    list(APPEND BELL_LIBS miniz)
+endif()
 
 if(NOT BELL_DISABLE_MBEDTLS)
     # Include mbedtls
