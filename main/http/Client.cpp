@@ -15,6 +15,15 @@ const char* LOG_TAG = "HTTPClient";
 // Default connection pool with a size of 8, shared across all DefaultTransport instances
 std::shared_ptr<ConnectionPool> defaultConnectionPoll =
     std::make_shared<ConnectionPool>(8);
+
+// Fallback used wherever a Request reaches us with no operationTimeoutMs set
+// (rawRequest() callers that skip Client::get/post/put's own default). Both
+// TCPSocket/TLSSocket connect() and Socket::setReceiveTimeout/setSendTimeout
+// treat timeoutMs=0 as "block forever" (SO_RCVTIMEO/SO_SNDTIMEO=0) - without
+// this, an unset timeout silently means an unbounded hang instead of a
+// bounded one. Matches the hard cap the old SocketBuffer would-block retry
+// loop used to enforce independently of the caller's own timeout.
+constexpr int kDefaultOperationTimeoutMs = 5000;
 }  // namespace
 
 ConnectionPool::ConnectionPool(size_t maxConnections)
@@ -168,13 +177,13 @@ bell::Result<std::shared_ptr<bell::net::Socket>> connectFresh(
 
   if (scheme == "https") {
     auto tlsSocket = std::make_unique<bell::net::TLSSocket>();
-    connectRes =
-        tlsSocket->connect(host, port, operationTimeoutMs.value_or(0));
+    connectRes = tlsSocket->connect(
+        host, port, operationTimeoutMs.value_or(kDefaultOperationTimeoutMs));
     socket = std::move(tlsSocket);
   } else {
     auto tcpSocket = std::make_unique<bell::net::TCPSocket>();
-    connectRes =
-        tcpSocket->connect(host, port, operationTimeoutMs.value_or(0));
+    connectRes = tcpSocket->connect(
+        host, port, operationTimeoutMs.value_or(kDefaultOperationTimeoutMs));
     socket = std::move(tcpSocket);
   }
 
@@ -231,8 +240,10 @@ bell::Result<Response> DefaultTransport::execute(const Request& req) {
     // xsputn()) - a peer that stops draining its receive window (rather than
     // stopping outright) would otherwise leave a blocking write() unbounded
     // too.
-    (void)connection->setReceiveTimeout(req.operationTimeoutMs.value_or(0));
-    (void)connection->setSendTimeout(req.operationTimeoutMs.value_or(0));
+    (void)connection->setReceiveTimeout(
+        req.operationTimeoutMs.value_or(kDefaultOperationTimeoutMs));
+    (void)connection->setSendTimeout(
+        req.operationTimeoutMs.value_or(kDefaultOperationTimeoutMs));
 
     auto socketStream = std::make_shared<net::SocketStream>(connection);
 
