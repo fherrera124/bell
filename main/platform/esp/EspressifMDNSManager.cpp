@@ -4,8 +4,18 @@
 #ifndef BELL_DISABLE_MDNS
 
 // Standard includes
+#include <array>
+#include <atomic>
+#include <condition_variable>
+#include <deque>
+#include <exception>
+#include <functional>
 #include <mutex>
+#include <new>
+#include <optional>
 #include <set>
+#include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -17,90 +27,208 @@
 
 // Library includes
 #include "bell/utils/Task.h"
-#include "bell/utils/Utils.h"
-#include "fmt/format.h"
 
 // Espressif includes
+#include "esp_log.h"
 #include "mdns.h"
 
 using namespace bell::mdns;
 
-class BrowseExecutor : public bell::Task {
+namespace {
+
+constexpr const char* dispatcherLogTag = "EspressifMdnsBrowseDispatcher";
+constexpr size_t maxQueuedBrowseResults = 64;
+
+void logBrowseDrop(const char* reason) {
+  static std::atomic<uint32_t> drops{0};
+  const uint32_t total = drops.fetch_add(1, std::memory_order_relaxed) + 1;
+  if (total == 1 || (total % 64) == 0) {
+    ESP_LOGW(dispatcherLogTag, "Dropped %lu mDNS browse update(s), reason=%s",
+             static_cast<unsigned long>(total), reason);
+  }
+}
+
+// Copy of a single browser result
+struct BrowseResult {
+  std::string serviceType;  // "_service._proto", matches the browse regType
+  std::string instanceName;
+  std::string hostname;
+  uint16_t port = 0;
+  uint32_t ttl = 0;
+  int netifIndex = 0;
+  std::unordered_map<std::string, std::string> txtRecords;
+  std::optional<bell::net::IpAddress> ipv4;
+};
+
+BrowseResult snapshotResult(mdns_result_t* r) {
+  BrowseResult out;
+  if (r->service_type) {
+    out.serviceType = r->service_type;
+  }
+  if (r->proto) {
+    if (!out.serviceType.empty()) {
+      out.serviceType += ".";
+    }
+    out.serviceType += r->proto;
+  }
+  if (r->instance_name) {
+    out.instanceName = r->instance_name;
+  }
+  if (r->hostname) {
+    out.hostname = r->hostname;
+  }
+  out.port = r->port;
+  out.ttl = r->ttl;
+  if (r->esp_netif) {
+    out.netifIndex = esp_netif_get_netif_impl_index(r->esp_netif);
+  }
+
+  for (size_t x = 0; x < r->txt_count; x++) {
+    if (!r->txt[x].key) {
+      continue;
+    }
+    const char* value = r->txt[x].value ? r->txt[x].value : "";
+    out.txtRecords.insert({std::string(r->txt[x].key),
+                           std::string(value, value + r->txt_value_len[x])});
+  }
+
+  for (mdns_ip_addr_t* a = r->addr; a; a = a->next) {
+    if (a->addr.type == IPADDR_TYPE_V4) {
+      std::array<char, IP4ADDR_STRLEN_MAX> strCharData{};
+      esp_ip4addr_ntoa(&a->addr.u_addr.ip4, strCharData.data(),
+                       IP4ADDR_STRLEN_MAX);
+      out.ipv4 = bell::net::IpAddress::fromString(strCharData.data());
+    }
+    // TODO: Implement IPv6 support
+  }
+
+  return out;
+}
+
+}  // namespace
+
+// Hands browse updates from the mdns service task to a bell-owned task, so
+// user callbacks run with the same threading and stack guarantees the query
+// executor used to provide.
+class BrowseDispatcher : public bell::Task {
  public:
-  // Constructor
-  BrowseExecutor()
-      : bell::Task("mdns_browse_executor", 1024 * 8, 0,
-                   bell::utils::TaskCore::Core0) {
-    startTask();
+  BrowseDispatcher()
+      : bell::Task("mdns_browse_dispatch", 1024 * 8, 1,
+                   bell::utils::TaskCore::Core0, /*espStackOnPsram=*/true) {
+    if (startTask()) {
+      activeDispatcher = this;
+    } else {
+      ESP_LOGE(dispatcherLogTag, "Failed to start mDNS browse dispatcher task");
+    }
   }
 
-  // Destructor
-  ~BrowseExecutor() { stopTask(); }
-
-  using BrowseCallback = std::function<void(mdns_result_t*)>;
-
-  // Register a callback for a specific service type
-  void registerCallback(const std::string& regType,
-                        const BrowseCallback& callback) {
-    std::scoped_lock lock(browseMutex);
-    browseCallbacks[regType] = callback;
+  ~BrowseDispatcher() {
+    if (activeDispatcher == this) {
+      activeDispatcher = nullptr;
+    }
+    stopTask();
   }
 
-  // Unregister a callback for a specific service type
-  void unregisterCallback(const std::string& regType) {
-    std::scoped_lock lock(browseMutex);
-    browseCallbacks.erase(regType);
+  using ResultHandler = std::function<void(const BrowseResult&)>;
+
+  void registerHandler(const std::string& regType, ResultHandler handler) {
+    std::scoped_lock lock(dispatchMutex);
+    handlers[regType] = std::move(handler);
+  }
+
+  // Blocks until an in-flight dispatch has finished, so after return no
+  // handler for this type can still be running
+  void unregisterHandler(const std::string& regType) {
+    std::scoped_lock lock(dispatchMutex);
+    handlers.erase(regType);
+  }
+
+  // Called from the mdns service task. Keep this bounded and quick: if this
+  // queue grows without limit, normal C++ heap allocations here can starve the
+  // mDNS task and make the component's action queue stop draining.
+  void enqueue(BrowseResult&& result) {
+    {
+      std::scoped_lock lock(queueMutex);
+      if (queue.size() >= maxQueuedBrowseResults) {
+        queue.pop_front();
+        logBrowseDrop("dispatcher backlog");
+      }
+      queue.push_back(std::move(result));
+    }
+    queueCv.notify_one();
+  }
+
+  // Single process-wide instance; the component's notifier callback carries
+  // no user context, so it reaches the dispatcher through this pointer
+  static inline BrowseDispatcher* activeDispatcher = nullptr;
+
+ protected:
+  void wakeTask() override {
+    {
+      std::scoped_lock lock(queueMutex);
+      wakeSignal = true;
+    }
+    queueCv.notify_one();
+  }
+
+  void taskLoop() override {
+    BrowseResult result;
+    {
+      std::unique_lock lock(queueMutex);
+      queueCv.wait(lock, [this] { return wakeSignal || !queue.empty(); });
+      if (queue.empty()) {
+        // stopTask() wake; runTask() observes the cleared running flag
+        wakeSignal = false;
+        return;
+      }
+      result = std::move(queue.front());
+      queue.pop_front();
+    }
+
+    std::scoped_lock lock(dispatchMutex);
+    auto it = handlers.find(result.serviceType);
+    if (it != handlers.end()) {
+      it->second(result);
+    }
   }
 
  private:
-  const char* LOG_TAG = "MdnsBrowseExecutor";
+  std::mutex queueMutex;
+  std::condition_variable queueCv;
+  bool wakeSignal = false;
+  std::deque<BrowseResult> queue;
 
-  // Maximum number of results to query
-  static const int maxResultsPerQuery = 32;
-
-  // Mutex for thread safety
-  std::mutex browseMutex;
-
-  // Map of registered callbacks
-  std::unordered_map<std::string, BrowseCallback> browseCallbacks;
-
-  void taskLoop() override {
-    // Run the mDNS browse loop
-    // Call the registered callbacks
-    std::unique_lock lock(browseMutex);
-    for (const auto& [regType, callback] : browseCallbacks) {
-      mdns_result_t* result = nullptr;
-
-      std::string regService = regType.substr(0, regType.find_first_of('.'));
-      std::string regProto = regType.substr(regType.find_first_of('.') + 1);
-
-      auto res = mdns_query_ptr(regService.c_str(), regProto.c_str(), 5000,
-                                maxResultsPerQuery, &result);
-      if (res != ESP_OK) {
-        BELL_LOG(error, LOG_TAG, "Failed to query mDNS service: {}", res);
-        continue;
-      }
-
-      if (result != nullptr) {
-        // Call the callback with the result
-        callback(result);
-        mdns_query_results_free(result);
-      }
-    }
-
-    if (browseCallbacks.empty()) {
-      lock.unlock();
-      // Sleep for a while to avoid busy waiting
-      bell::utils::sleepMs(1000);
-    }
-  }
+  std::mutex dispatchMutex;
+  std::unordered_map<std::string, ResultHandler> handlers;
 };
+
+namespace {
+
+// One result per call, next points to the sibling
+void browseNotifier(mdns_result_t* result) {
+  auto* dispatcher = BrowseDispatcher::activeDispatcher;
+  if (!dispatcher || !result) {
+    return;
+  }
+
+  try {
+    dispatcher->enqueue(snapshotResult(result));
+  } catch (const std::bad_alloc&) {
+    logBrowseDrop("out of memory");
+  } catch (const std::exception& e) {
+    logBrowseDrop(e.what());
+  } catch (...) {
+    logBrowseDrop("unknown exception");
+  }
+}
+
+}  // namespace
 
 class EspressifMdnsBrowser : public Browser {
  public:
   // Constructor
-  EspressifMdnsBrowser(std::shared_ptr<BrowseExecutor> browseExecutor)
-      : browseExecutor(std::move(browseExecutor)) {}
+  EspressifMdnsBrowser(std::shared_ptr<BrowseDispatcher> dispatcher)
+      : dispatcher(std::move(dispatcher)) {}
 
   ~EspressifMdnsBrowser() { stopDiscovery(); }
 
@@ -114,8 +242,18 @@ class EspressifMdnsBrowser : public Browser {
     this->regProto = regType.substr(regType.find_first_of('.') + 1);
     this->onEvent = onEvent;
 
-    browseExecutor->registerCallback(
-        regType, [this](mdns_result_t* result) { this->parseResults(result); });
+    // Handler registered first so no result of the fresh browse is missed
+    dispatcher->registerHandler(
+        regType, [this](const BrowseResult& r) { this->handleResult(r); });
+
+    if (!mdns_browse_new(regService.c_str(), regProto.c_str(),
+                         browseNotifier)) {
+      BELL_LOG(error, LOG_TAG, "Failed to start mDNS browse for {}", regType);
+      dispatcher->unregisterHandler(regType);
+      this->regType.clear();
+      return nonstd::make_unexpected(
+          bell::mdns::MdnsErrc::service_discovery_failed);
+    }
 
     return {};
   }
@@ -138,7 +276,9 @@ class EspressifMdnsBrowser : public Browser {
 
   void stopDiscovery() override {
     if (!regType.empty()) {
-      browseExecutor->unregisterCallback(regType);
+      // Unregister first
+      dispatcher->unregisterHandler(regType);
+      (void)mdns_browse_delete(regService.c_str(), regProto.c_str());
       regType.clear();
     }
   }
@@ -149,8 +289,8 @@ class EspressifMdnsBrowser : public Browser {
   // Pointer to the event callback
   DiscoveryEventCallback onEvent = {};
 
-  // Pointer to the browse executor
-  std::shared_ptr<BrowseExecutor> browseExecutor;
+  // Pointer to the browse dispatcher
+  std::shared_ptr<BrowseDispatcher> dispatcher;
 
   // Service type and protocol
   std::string regService;
@@ -160,134 +300,106 @@ class EspressifMdnsBrowser : public Browser {
   // Set of discovered services
   std::set<ServiceRecord> recordsCache{};
 
-  // Parse the results from the mDNS query, and notify the event callback
-  void parseResults(mdns_result_t* results) {
-    mdns_result_t* r = results;
-    mdns_ip_addr_t* a = nullptr;
+  // Fold one browse update into the cache and emit the resulting events
+  void handleResult(const BrowseResult& result) {
+    if (!onEvent) {
+      return;
+    }
 
-    while (r) {
+    ServiceRecord service(result.instanceName, result.serviceType, "",
+                          result.netifIndex);
 
-      // Reconstruct the service type and protocol
-      std::string serviceType = fmt::format("{}.{}", r->service_type, r->proto);
+    if (!result.hostname.empty()) {
+      // Service is resolved
+      service.hostname = result.hostname;
+      service.port = result.port;
+      service.txtRecords = result.txtRecords;
+      service.serviceResolved = true;
+    }
 
-      ServiceRecord service(r->instance_name, serviceType, "",
-                            esp_netif_get_netif_impl_index(r->esp_netif));
+    service.ipv4 = result.ipv4;
 
-      if (r->hostname) {
-        // Service is resolved
-        service.hostname = r->hostname;
-        service.port = r->port;
-
-        // Parse TXT records
-        for (int x = 0; x < r->txt_count; x++) {
-          service.txtRecords.insert(
-              {std::string(r->txt[x].key),
-               std::string(&r->txt[x].value[0],
-                           &r->txt[x].value[r->txt_value_len[x]])});
-        }
-
-        service.serviceResolved = true;
-      }
-
-      a = r->addr;
-      while (a) {
-        if (a->addr.type == IPADDR_TYPE_V4) {
-          std::array<char, IP4ADDR_STRLEN_MAX> strCharData{};
-          esp_ip4addr_ntoa(&a->addr.u_addr.ip4, strCharData.data(),
-                           IP4ADDR_STRLEN_MAX);
-          service.ipv4 = bell::net::IpAddress::fromString(strCharData.data());
-        } else if (a->addr.type == IPADDR_TYPE_V6) {
-          // TODO: Implement IPv6 support
-        }
-        a = a->next;
-      }
-
-      if (!service.ipv4) {
-        // Ugly fix for espressif mdns sometimes missing an address when two instances of the same service are registered
-        for (auto& it : recordsCache) {
-          if (it.hostname == service.hostname && it.ipv4.has_value()) {
-            service.ipv4 = it.ipv4;
-            break;
-          }
+    if (!service.ipv4) {
+      // Ugly fix for espressif mdns sometimes missing an address when two instances of the same service are registered
+      for (auto& it : recordsCache) {
+        if (it.hostname == service.hostname && it.ipv4.has_value()) {
+          service.ipv4 = it.ipv4;
+          break;
         }
       }
+    }
 
-      bool freshRecord = false;
+    bool freshRecord = false;
 
-      if (recordsCache.find(service) == recordsCache.end()) {
-        if (r->ttl == 0) {
-          // Service is already removed
-          r = r->next;
-          continue;
-        }
-
-        // New service, notify the event callback
-        DiscoveryEvent event{
-            .type = EventType::Added,
-            .service = service,
-            .error = {},
-        };
-        onEvent(event);
-
-        // Insert the service into the cache
-        recordsCache.insert(service);
-
-        freshRecord = true;
+    if (recordsCache.find(service) == recordsCache.end()) {
+      if (result.ttl == 0) {
+        // Goodbye for a service that was never surfaced
+        return;
       }
 
-      auto it = recordsCache.find(service);
+      // New service, notify the event callback
+      DiscoveryEvent event{
+          .type = EventType::Added,
+          .service = service,
+          .error = {},
+      };
+      onEvent(event);
 
-      if (r->ttl == 0) {
-        // Service is being removed
-        DiscoveryEvent event{
-            .type = EventType::Removed,
-            .service = service,
-            .error = {},
-        };
-        onEvent(event);
+      // Insert the service into the cache
+      recordsCache.insert(service);
 
-        // Remove the service from the cache
-        recordsCache.erase(it);
-        r = r->next;
-        continue;
-      }
+      freshRecord = true;
+    }
 
-      bool serviceUpdated = false;
-      if ((!it->serviceResolved && service.serviceResolved) ||
-          (it->serviceResolved && freshRecord)) {
-        // Service is resolved, notify the event callback
-        DiscoveryEvent event{
-            .type = EventType::Resolved,
-            .service = service,
-            .error = {},
-        };
-        onEvent(event);
+    auto it = recordsCache.find(service);
 
-        // Update the service in the cache
-        serviceUpdated = true;
-      }
+    if (result.ttl == 0) {
+      // Service is being removed
+      DiscoveryEvent event{
+          .type = EventType::Removed,
+          .service = service,
+          .error = {},
+      };
+      onEvent(event);
 
-      if ((!it->ipv4.has_value() && service.ipv4.has_value()) ||
-          (it->ipv4.has_value() && freshRecord)) {
-        // Address is resolved, notify the event callback
-        DiscoveryEvent event{
-            .type = EventType::AddressResolved,
-            .service = service,
-            .error = {},
-        };
-        onEvent(event);
+      // Remove the service from the cache
+      recordsCache.erase(it);
+      return;
+    }
 
-        // Update the service in the cache
-        serviceUpdated = true;
-      }
+    bool serviceUpdated = false;
+    if ((!it->serviceResolved && service.serviceResolved) ||
+        (it->serviceResolved && freshRecord)) {
+      // Service is resolved, notify the event callback
+      DiscoveryEvent event{
+          .type = EventType::Resolved,
+          .service = service,
+          .error = {},
+      };
+      onEvent(event);
 
-      if (serviceUpdated && !freshRecord) {
-        // Update the service in the cache
-        recordsCache.erase(it);
-        recordsCache.insert(service);
-      }
+      // Update the service in the cache
+      serviceUpdated = true;
+    }
 
-      r = r->next;
+    if ((!it->ipv4.has_value() && service.ipv4.has_value()) ||
+        (it->ipv4.has_value() && freshRecord)) {
+      // Address is resolved, notify the event callback
+      DiscoveryEvent event{
+          .type = EventType::AddressResolved,
+          .service = service,
+          .error = {},
+      };
+      onEvent(event);
+
+      // Update the service in the cache
+      serviceUpdated = true;
+    }
+
+    if (serviceUpdated && !freshRecord) {
+      // Update the service in the cache
+      recordsCache.erase(it);
+      recordsCache.insert(service);
     }
   }
 };
@@ -390,7 +502,7 @@ class EspressifMDNSManager : public Manager {
       int /*interfaceIndex*/, const Browser::DiscoveryEventCallback& onEvent,
       bool /*autoResolveService */, bool /*autoResolveAddresses */,
       bool /*resolveIPv6*/) override {
-    auto browser = std::make_unique<EspressifMdnsBrowser>(browseExecutor);
+    auto browser = std::make_unique<EspressifMdnsBrowser>(browseDispatcher);
     auto res = browser->browse(serviceType, onEvent);
 
     if (!res) {
@@ -428,9 +540,9 @@ class EspressifMDNSManager : public Manager {
   }
 
  private:
-  // Pointer to the browse executor
-  std::shared_ptr<BrowseExecutor> browseExecutor =
-      std::make_shared<BrowseExecutor>();
+  // Pointer to the browse dispatcher
+  std::shared_ptr<BrowseDispatcher> browseDispatcher =
+      std::make_shared<BrowseDispatcher>();
 };
 
 Manager* bell::mdns::getDefaultManager() {

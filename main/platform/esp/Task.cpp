@@ -86,6 +86,10 @@ class Task::Impl {
     task->taskRunning = true;
 
     if (espStackOnPsram) {
+      if (xStack == nullptr || xTaskBuffer == nullptr) {
+        task->taskRunning = false;
+        return false;
+      }
       xTaskHandle = xTaskCreateStaticPinnedToCore(
           taskEntryPointShim, this->taskName.c_str(), this->stackSize, this,
           this->espPriority + CONFIG_PTHREAD_TASK_PRIO_DEFAULT, xStack,
