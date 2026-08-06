@@ -115,6 +115,19 @@ bell::Result<> TCPSocket::connect(const std::string& host, uint16_t port,
     }
   }
 
+  // Disable Nagle's algorithm. Without this, small writes (WebSocket
+  // pings/frames, Mercury requests, HTTPS request lines) sit in the send
+  // buffer waiting for either a full segment or an ACK of the previous one -
+  // on ESP32/lwIP this stacks with the peer's delayed-ACK timer and turns
+  // into tens to hundreds of ms of added latency per write, which is exactly
+  // why ESP-IDF's own MQTT component sets this unconditionally. Applied
+  // centrally here (not per call site) so every TCP-based connection in this
+  // codebase (ApConnection, DealerClient's TLSSocket, the HTTP client's
+  // plain/TLS sockets) inherits it through this same connect().
+  int noDelay = 1;
+  setsockopt(sockFd, IPPROTO_TCP, TCP_NODELAY,
+             reinterpret_cast<const char*>(&noDelay), sizeof(noDelay));
+
   // OS-level TCP keepalive - catches a peer that goes silent at the network
   // level (WiFi AP drops the association, a NAT/router mapping expires,
   // etc.) without ever sending a FIN/RST, which otherwise leaves the socket

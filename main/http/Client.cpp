@@ -1,8 +1,5 @@
 #include "bell/http/Client.h"
 
-// System includes
-#include <netinet/tcp.h>
-
 // Own includes
 #include "bell/Logger.h"
 #include "bell/Result.h"
@@ -176,7 +173,6 @@ bell::Result<std::shared_ptr<bell::net::Socket>> connectFresh(
     socket = std::move(tlsSocket);
   } else {
     auto tcpSocket = std::make_unique<bell::net::TCPSocket>();
-    (void)tcpSocket->setOption(IPPROTO_TCP, TCP_NODELAY, 1);
     connectRes =
         tcpSocket->connect(host, port, operationTimeoutMs.value_or(0));
     socket = std::move(tcpSocket);
