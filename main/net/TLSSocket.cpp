@@ -132,23 +132,34 @@ bell::Result<> net::TLSSocket::connect(const std::string& host, uint16_t port,
   mbedtls_ssl_conf_authmode(&sslConf, MBEDTLS_SSL_VERIFY_NONE);
   mbedtls_ssl_conf_max_tls_version(&sslConf, MBEDTLS_SSL_VERSION_TLS1_2);
 
-  // mbedtls_ssl_conf_read_timeout()'s own doc comment: default is "no
-  // timeout" for mbedtls_ssl_read(), and that only even applies to blocking
-  // I/O (timeoutMs > 0 here, see setBlocking() above) if a non-null
-  // f_recv_timeout was set via mbedtls_ssl_set_bio() - which it is
-  // (setupBioCallbacks()'s recvTimeoutFunc). Without this, a blocking-mode
-  // read that never gets a response (peer stalls mid-response, a CDN edge
-  // that stops responding, etc.) blocks forever - a real hardware hang
-  // reproduced via AudioDecoderImpl::openStream()'s CDN fetch (uses
+  // Bounds every blocking read/write on this connection, including the
+  // handshake below - which runs before any caller gets a chance to call
+  // setReceiveTimeout()/setSendTimeout() itself. Without this, a
+  // blocking-mode read that never gets a response (peer stalls mid-response,
+  // a CDN edge that stops responding, etc.) blocks forever - a real hardware
+  // hang reproduced via AudioDecoderImpl::openStream()'s CDN fetch (uses
   // operationTimeoutMs=3000, i.e. blocking mode): it ran synchronously on
   // EventLoop's own dispatch task, so the hang didn't just stall this one
   // request, it permanently froze all future dealer/queue processing too,
   // with only the separate poller task's own WS ping/pong still visible in
-  // the log. Reusing the caller's own connect timeout here as the read
-  // timeout too - it's the same "how long is this operation allowed to
-  // take" budget the caller already asked for.
+  // the log.
+  //
+  // Applied directly to the socket rather than via mbedTLS's own
+  // mbedtls_ssl_conf_read_timeout()/f_recv_timeout mechanism, which this
+  // class used to rely on: that config is set once, here, and never revisited
+  // for the lifetime of this TLSSocket, so on a pooled/reused connection
+  // (DefaultTransport::execute()) every read after the first silently kept
+  // using this connect() call's timeoutMs instead of the current request's -
+  // verified against mbedTLS's own ssl_msg.c that for TLS-over-TCP
+  // (MBEDTLS_SSL_TRANSPORT_STREAM, what this class uses - not DTLS),
+  // f_recv_timeout adds no behavior beyond handing its timeout argument
+  // through to the callback, so a plain f_recv-style callback (see
+  // setupBioCallbacks() below) reading an already-timeout-bound blocking
+  // socket is equivalent, and keeps the socket's own, always-current
+  // SO_RCVTIMEO/SO_SNDTIMEO as the single source of truth.
   if (timeoutMs > 0) {
-    mbedtls_ssl_conf_read_timeout(&sslConf, static_cast<uint32_t>(timeoutMs));
+    (void)innerSocket.setReceiveTimeout(timeoutMs);
+    (void)innerSocket.setSendTimeout(timeoutMs);
   }
 
   // mbedTLS 4.0+ doesn't declare mbedtls_ssl_conf_rng() at all - the SSL
@@ -162,6 +173,13 @@ bell::Result<> net::TLSSocket::connect(const std::string& host, uint16_t port,
   if (ret != 0) {
     return nonstd::make_unexpected(make_tls_error_code(ret));
   }
+
+  // Wires the BIO once per connection - unlike the old recvTimeoutFunc
+  // variant, the plain callbacks set up here don't depend on timeoutMs/
+  // blocking mode, so this doesn't need re-running when setBlocking() is
+  // called later (e.g. SocketBuffer forcing blocking mode on a pooled
+  // connection).
+  setupBioCallbacks();
 
   ret = mbedtls_ssl_set_hostname(&sslCtx, host.c_str());
   if (ret != 0) {
@@ -178,7 +196,7 @@ bell::Result<> net::TLSSocket::connect(const std::string& host, uint16_t port,
   return {};
 }
 
-void net::TLSSocket::setupBioCallbacks(bool blocking) {
+void net::TLSSocket::setupBioCallbacks() {
   mbedtls_ssl_send_t* sendFunc = [](void* ctx, const unsigned char* buf,
                                     size_t len) {
     auto* socket = static_cast<TCPSocket*>(ctx);
@@ -192,44 +210,28 @@ void net::TLSSocket::setupBioCallbacks(bool blocking) {
     return res.error().value();
   };
 
-  mbedtls_ssl_recv_t* recvFunc = nullptr;
-  mbedtls_ssl_recv_timeout_t* recvTimeoutFunc = nullptr;
+  // No f_recv_timeout variant: the socket's own SO_RCVTIMEO (set in
+  // connect(), re-applied per request by DefaultTransport::execute() on
+  // pooled connections) already bounds this read when blocking, and reports
+  // the same operation_would_block/timed_out errc that transformBioRes()
+  // below maps to WANT_READ either way - a timeout and a "nothing ready yet"
+  // non-blocking read are indistinguishable to mbedTLS here on purpose, same
+  // as they were before this connection ever had a bell::net::TLSSocket
+  // wrapped around it.
+  mbedtls_ssl_recv_t* recvFunc = [](void* ctx, unsigned char* buf,
+                                    size_t len) {
+    auto* socket = static_cast<TCPSocket*>(ctx);
 
-  if (blocking) {
-    recvTimeoutFunc = [](void* ctx, unsigned char* buf, size_t len,
-                         uint32_t timeoutMs) {
-      auto* socket = static_cast<TCPSocket*>(ctx);
+    auto res = transformBioRes(
+        socket->read(reinterpret_cast<std::byte*>(buf), len), true);
+    if (res) {
+      return *res;
+    }
 
-      auto timeoutRes = socket->setReceiveTimeout(timeoutMs);
-      if (!timeoutRes) {
-        return timeoutRes.error().value();
-      }
+    return res.error().value();
+  };
 
-      auto res = transformBioRes(
-          socket->read(reinterpret_cast<std::byte*>(buf), len), true);
-      if (res) {
-        return *res;
-      }
-
-      return res.error().value();
-    };
-  } else {
-
-    recvFunc = [](void* ctx, unsigned char* buf, size_t len) {
-      auto* socket = static_cast<TCPSocket*>(ctx);
-
-      auto res = transformBioRes(
-          socket->read(reinterpret_cast<std::byte*>(buf), len), true);
-      if (res) {
-        return *res;
-      }
-
-      return res.error().value();
-    };
-  }
-
-  mbedtls_ssl_set_bio(&sslCtx, &innerSocket, sendFunc, recvFunc,
-                      recvTimeoutFunc);
+  mbedtls_ssl_set_bio(&sslCtx, &innerSocket, sendFunc, recvFunc, nullptr);
 }
 
 bell::Result<> net::TLSSocket::setReceiveTimeout(int timeoutMs) {
@@ -249,7 +251,6 @@ bell::Result<int> net::TLSSocket::getSendTimeout() {
 };
 
 bell::Result<> net::TLSSocket::setBlocking(bool blocking) {
-  setupBioCallbacks(blocking);
   return innerSocket.setBlocking(blocking);
 }
 

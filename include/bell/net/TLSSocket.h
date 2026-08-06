@@ -131,8 +131,10 @@ class TLSSocket : public Socket {
   mbedtls_ssl_context sslCtx{};
   mbedtls_ssl_config sslConf{};
 
-  // Hooks for MbedTLS bio functions, depending on the blocking mode
-  void setupBioCallbacks(bool blocking);
+  // Wires the MbedTLS BIO send/recv callbacks to innerSocket. Called once
+  // per connection (from connect()) - the callbacks themselves don't depend
+  // on blocking mode, see their own comment in the .cpp.
+  void setupBioCallbacks();
 
  protected:
   bell::TCPSocket innerSocket;  // Inner socket for TLS connection
