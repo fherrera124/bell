@@ -1,9 +1,7 @@
 #include "bell/net/SocketStream.h"
 
 #include "bell/Logger.h"
-#include "bell/utils/Utils.h"
 
-#include <chrono>
 #include <cstdint>  // for uint8_t
 #include <cstdio>   // for NULL, ssize_t
 #include <functional>
@@ -12,37 +10,28 @@
 using namespace bell::net;
 
 namespace {
-// A non-blocking socket's read()/write() returning "would block" just means
-// "nothing available/room right now", not a real error - the underlying
-// Socket implementations (POSIXSocket::read/write) surface this as
-// std::errc::operation_would_block, same as any other error, indistinguishable
-// to a naive caller. Every call site here used to treat that the same as a
-// hard failure (or, for underflow(), the same as a clean EOF!) - a real
-// hardware bug: HTTPClient requests default to operationTimeoutMs=0, which
-// (per TCPSocket::connect()) leaves the socket permanently non-blocking, and
-// the very first request on a fresh connection (slower - cold TLS handshake)
-// was reliably hitting this the instant the response hadn't arrived yet by
-// the time readHeaders() first tried to read it ("Error during headers
-// read" on real hardware). Retries transparently instead, bounded so a
-// genuinely dead connection still surfaces as a real error.
-bell::Result<size_t> retryOnWouldBlock(
+// SocketBuffer forces the socket into blocking mode (see the constructor
+// below), so read()/write() themselves block on the kernel/lwIP until data
+// or room is available, or until the per-request timeout set via
+// setReceiveTimeout()/setSendTimeout() (DefaultTransport::execute()) fires -
+// no application-level retry loop needed to wait for readiness. POSIX
+// defines SO_RCVTIMEO/SO_SNDTIMEO expiry as reporting EAGAIN/EWOULDBLOCK,
+// the same errno a non-blocking socket reports for "nothing ready right
+// now" - on a blocking socket that can only mean the timeout fired, so it's
+// surfaced as a real timeout rather than retried. EINTR is retried
+// immediately since it's not a real failure, just an interrupted syscall.
+bell::Result<size_t> retryOnEintr(
     const std::function<bell::Result<size_t>()>& op) {
-  constexpr int timeoutMs = 5000;
-  auto deadline =
-      std::chrono::steady_clock::now() + std::chrono::milliseconds(timeoutMs);
-
   while (true) {
     auto res = op();
     if (res) {
       return res;
     }
-    if (res.error() == std::errc::operation_would_block ||
-        res.error() == std::errc::interrupted) {
-      if (std::chrono::steady_clock::now() >= deadline) {
-        return bell::make_unexpected_errc<size_t>(std::errc::timed_out);
-      }
-      bell::utils::sleepMs(1);
+    if (res.error() == std::errc::interrupted) {
       continue;
+    }
+    if (res.error() == std::errc::operation_would_block) {
+      return bell::make_unexpected_errc<size_t>(std::errc::timed_out);
     }
     return res;
   }
@@ -50,12 +39,16 @@ bell::Result<size_t> retryOnWouldBlock(
 }  // namespace
 
 SocketBuffer::SocketBuffer(std::shared_ptr<Socket> socket)
-    : internalSocket(std::move(socket)) {}
+    : internalSocket(std::move(socket)) {
+  // See retryOnEintr() above - blocking-with-timeout is what every call site
+  // here expects, regardless of what mode connect() left the socket in.
+  (void)internalSocket->setBlocking(true);
+}
 
 int SocketBuffer::sync() {
   size_t n = pptr() - pbase();
   while (n > 0) {
-    auto bw = retryOnWouldBlock([&] {
+    auto bw = retryOnEintr([&] {
       return internalSocket->write(reinterpret_cast<std::byte*>(pptr() - n),
                                    n);
     });
@@ -73,7 +66,7 @@ int SocketBuffer::sync() {
 }
 
 SocketBuffer::int_type SocketBuffer::underflow() {
-  auto br = retryOnWouldBlock([&] {
+  auto br = retryOnEintr([&] {
     return internalSocket->read(reinterpret_cast<std::byte*>(ibuf.data()),
                                 bufLen);
   });
@@ -112,7 +105,7 @@ std::streamsize SocketBuffer::xsgetn(char_type* _s, std::streamsize _n) {
   std::streamsize remain = _n - bn;
   char_type* end = _s + _n;
   while (remain > 0) {
-    auto br = retryOnWouldBlock([&] {
+    auto br = retryOnEintr([&] {
       return internalSocket->read(
           reinterpret_cast<std::byte*>(end - remain), remain);
     });
@@ -142,7 +135,7 @@ std::streamsize SocketBuffer::xsputn(const char_type* s, std::streamsize n) {
   std::streamsize remain = n;
   const char_type* end = s + n;
   while (remain > bufLen) {
-    auto bw = retryOnWouldBlock([&] {
+    auto bw = retryOnEintr([&] {
       return internalSocket->write(
           reinterpret_cast<const std::byte*>(end - remain), remain);
     });

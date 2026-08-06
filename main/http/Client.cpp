@@ -227,7 +227,12 @@ bell::Result<Response> DefaultTransport::execute(const Request& req) {
     // blocking read()/recv() below with no timeout at all, hanging forever.
     // Re-applied on every request (not just fresh connections) since a
     // pooled socket may carry a stale timeout from a previous request.
+    // setSendTimeout() mirrors it for the write side (SocketBuffer::sync()/
+    // xsputn()) - a peer that stops draining its receive window (rather than
+    // stopping outright) would otherwise leave a blocking write() unbounded
+    // too.
     (void)connection->setReceiveTimeout(req.operationTimeoutMs.value_or(0));
+    (void)connection->setSendTimeout(req.operationTimeoutMs.value_or(0));
 
     auto socketStream = std::make_shared<net::SocketStream>(connection);
 
