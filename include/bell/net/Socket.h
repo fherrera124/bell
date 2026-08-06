@@ -98,6 +98,25 @@ class Socket {
   virtual bell::Result<size_t> write(const std::byte* buf, size_t len) = 0;
 
   /**
+   * @brief Write the entire buffer, looping over write() until all of it has
+   * been sent or a real error occurs.
+   *
+   * write() may send fewer bytes than requested and this is not an error -
+   * every caller is expected to retry with the remainder. This helper does
+   * that. It assumes the socket is blocking with a real timeout already set
+   * (see setSendTimeout()): a would-block/timed-out write is treated as a
+   * genuine failure and returned as-is, not retried. Not appropriate for a
+   * socket kept deliberately non-blocking for an external poll-driven event
+   * loop (e.g. a socket registered with SocketPollListener) - such a caller
+   * needs its own retry against socket readiness instead.
+   *
+   * @param buf Pointer to the buffer containing the data to send.
+   * @param len The number of bytes to write from the buffer.
+   * @return The number of bytes written (always len on success).
+   */
+  bell::Result<size_t> writeAll(const std::byte* buf, size_t len);
+
+  /**
    * @brief Read data from the socket.
    *
    * This method receives data from the socket and stores it in the provided buffer.

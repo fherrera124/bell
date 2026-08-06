@@ -47,21 +47,21 @@ SocketBuffer::SocketBuffer(std::shared_ptr<Socket> socket)
 
 int SocketBuffer::sync() {
   size_t n = pptr() - pbase();
-  while (n > 0) {
-    auto bw = retryOnEintr([&] {
-      return internalSocket->write(reinterpret_cast<std::byte*>(pptr() - n),
-                                   n);
-    });
+  // Reset the put area either way: writeAll() doesn't report how many bytes
+  // it got out before a failure, and there's no way to know how many of the
+  // n bytes buffered here still need resending - not a real gap in
+  // practice, since every caller (DefaultTransport::execute()) closes and
+  // discards the connection on a write failure rather than retrying this
+  // same SocketBuffer.
+  setp(obuf.data(), obuf.data() + bufLen);
+  if (n > 0) {
+    auto bw = internalSocket->writeAll(
+        reinterpret_cast<std::byte*>(pbase()), n);
     if (!bw) {
-      // Set failbit and preserve the socket error
       BELL_LOG(error, "SocketBuffer", "Write failed: {}", bw.error());
-      setp(pptr() - n, obuf.data() + bufLen);
-      pbump(n);
       return -1;  // This will make the stream set failbit
     }
-    n -= *bw;
   }
-  setp(obuf.data(), obuf.data() + bufLen);
   return 0;
 }
 
@@ -132,20 +132,22 @@ std::streamsize SocketBuffer::xsputn(const char_type* s, std::streamsize n) {
   if (sync() < 0) {
     return 0;  // Stream sets failbit
   }
-  std::streamsize remain = n;
-  const char_type* end = s + n;
-  while (remain > bufLen) {
-    auto bw = retryOnEintr([&] {
-      return internalSocket->write(
-          reinterpret_cast<const std::byte*>(end - remain), remain);
-    });
+
+  // Anything beyond one bufLen-sized chunk goes straight to the socket
+  // (writeAll() loops internally); whatever's left (always <= bufLen, since
+  // sync() above just emptied obuf) gets buffered normally below.
+  std::streamsize bulk = n > bufLen ? n - bufLen : 0;
+  if (bulk > 0) {
+    auto bw = internalSocket->writeAll(reinterpret_cast<const std::byte*>(s),
+                                       bulk);
     if (!bw) {
       return 0;  // Stream sets failbit
     }
-    remain -= *bw;
   }
+
+  std::streamsize remain = n - bulk;
   if (remain > 0) {
-    traits_type::copy(pptr(), end - remain, remain);
+    traits_type::copy(pptr(), s + bulk, remain);
     pbump(remain);
   }
   return n;
