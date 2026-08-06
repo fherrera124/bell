@@ -3,6 +3,8 @@
 
 // Standard includes
 #include <cerrno>
+#include <chrono>
+#include <optional>
 #include <stdexcept>
 #include <system_error>
 
@@ -186,10 +188,26 @@ bell::Result<> net::TLSSocket::connect(const std::string& host, uint16_t port,
     return nonstd::make_unexpected(make_tls_error_code(ret));
   }
 
+  // mbedTLS puts no ceiling on how many times this loop may retry a
+  // WANT_READ/WANT_WRITE for TLS-over-TCP (that retry-limiting logic is
+  // DTLS-only) - a peer that goes silent mid-handshake without closing the
+  // connection would otherwise retry forever. Tracks a deadline across the
+  // whole loop instead of just each read/write, same as ESP-IDF's esp-tls
+  // (esp_tls_conn_new_sync()).
+  auto handshakeDeadline =
+      timeoutMs > 0 ? std::optional{std::chrono::steady_clock::now() +
+                                    std::chrono::milliseconds(timeoutMs)}
+                    : std::nullopt;
+
   while ((ret = mbedtls_ssl_handshake(&sslCtx)) != 0) {
     if (ret != MBEDTLS_ERR_SSL_WANT_READ && ret != MBEDTLS_ERR_SSL_WANT_WRITE) {
       BELL_LOG(error, LOG_TAG, "Failed to perform TLS handshake {}", ret);
       return nonstd::make_unexpected(make_tls_error_code(ret));
+    }
+    if (handshakeDeadline &&
+        std::chrono::steady_clock::now() >= *handshakeDeadline) {
+      BELL_LOG(error, LOG_TAG, "TLS handshake timed out");
+      return bell::make_unexpected_errc(std::errc::timed_out);
     }
   }
 
