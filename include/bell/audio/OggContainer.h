@@ -9,7 +9,7 @@ namespace bell::audio {
 class OggContainer : public Container {
  public:
   OggContainer() = default;
-  ~OggContainer() override{};
+  ~OggContainer() override { close(); }
 
   // Base class overrides
   bell::Result<> openForRead(
@@ -42,6 +42,10 @@ class OggContainer : public Container {
   uint64_t currentFrame = 0;
   int64_t dataStartOffset = 0;
   int streamSerialNo;  // TODO: support multiple streams
+
+  // Guards close() against clearing never-initialized state.
+  bool syncInitialized = false;
+  bool streamInitialized = false;
 
   bell::Result<> readNextPage();
 

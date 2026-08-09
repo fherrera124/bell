@@ -46,6 +46,7 @@ bell::Result<> OggContainer::openForRead(
     std::shared_ptr<bell::io::DataStream> dataStream) {
   stream = std::move(dataStream);
   ogg_sync_init(&oggSyncState);
+  syncInitialized = true;
 
   // Seek the data source to last 16 KiB
   if (stream->isSeekable()) {
@@ -105,6 +106,7 @@ bell::Result<> OggContainer::openForRead(
   streamSerialNo = ogg_page_serialno(&oggPage);
 
   ogg_stream_init(&oggStreamState, streamSerialNo);
+  streamInitialized = true;
 
   if (ogg_stream_pagein(&oggStreamState, &oggPage) < 0) {
     BELL_LOG(error, "OggContainer", "ogg_stream_pagein failed on first page.");
@@ -353,8 +355,15 @@ bell::Result<> OggContainer::seekToByteOffset(size_t byteOffset,
 }
 
 void OggContainer::close() {
-  ogg_stream_destroy(&oggStreamState);
-  ogg_sync_destroy(&oggSyncState);
+  // _clear(), not _destroy(): these are plain members, not heap-allocated.
+  if (streamInitialized) {
+    ogg_stream_clear(&oggStreamState);
+    streamInitialized = false;
+  }
+  if (syncInitialized) {
+    ogg_sync_clear(&oggSyncState);
+    syncInitialized = false;
+  }
 }
 
 uint64_t OggContainer::tellFrame() const {
