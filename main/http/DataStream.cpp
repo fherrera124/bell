@@ -9,6 +9,15 @@
 
 using namespace bell::http;
 
+namespace {
+constexpr int kMaxRedirects = 5;
+
+bool isRedirectStatus(int statusCode) {
+  return statusCode == 301 || statusCode == 302 || statusCode == 303 ||
+         statusCode == 307 || statusCode == 308;
+}
+}  // namespace
+
 bell::Result<> DataStream::open(bell::HTTPMethod method, const std::string& url,
                                 const Headers& headers) {
   lastReadChunk.resize(chunkSize);
@@ -18,22 +27,40 @@ bell::Result<> DataStream::open(bell::HTTPMethod method, const std::string& url,
   isSeekableFlag = false;
   activeResponse.reset();
 
-  auto req = Request::create(method, url);
-  if (!req) {
-    return nonstd::make_unexpected(req.error());
-  }
+  std::string requestUrl = url;
+  bell::Result<Response> response =
+      bell::make_unexpected_errc<Response>(std::errc::io_error);
 
-  req->operationTimeoutMs = 3000;
-  req->headers = headers;
-  this->httpRequest = *req;
-  this->httpRequest.headers["Connection"] = "keep-alive";
-  this->httpRequest.headers["Range"] = fmt::format("bytes=0-{}", chunkSize - 1);
+  for (int redirectCount = 0;; redirectCount++) {
+    auto req = Request::create(method, requestUrl);
+    if (!req) {
+      return nonstd::make_unexpected(req.error());
+    }
 
-  // Initial request
-  auto response = httpClient->rawRequest(httpRequest);
-  if (!response) {
-    BELL_LOG(error, LOG_TAG, "HTTP request error: {}", response.error());
-    return nonstd::make_unexpected(response.error());
+    req->operationTimeoutMs = 3000;
+    req->headers = headers;
+    this->httpRequest = *req;
+    this->httpRequest.headers["Connection"] = "keep-alive";
+    this->httpRequest.headers["Range"] =
+        fmt::format("bytes=0-{}", chunkSize - 1);
+
+    response = httpClient->rawRequest(httpRequest);
+    if (!response) {
+      BELL_LOG(error, LOG_TAG, "HTTP request error: {}", response.error());
+      return nonstd::make_unexpected(response.error());
+    }
+
+    if (!isRedirectStatus(response->statusCode) ||
+        !response->headers.contains("Location")) {
+      break;
+    }
+    if (redirectCount >= kMaxRedirects) {
+      BELL_LOG(error, LOG_TAG, "Too many redirects following {}", url);
+      return bell::make_unexpected_errc<>(std::errc::too_many_links);
+    }
+    requestUrl = response->headers.at("Location");
+    BELL_LOG(debug, LOG_TAG, "Following {} redirect to {}",
+             response->statusCode, requestUrl);
   }
 
   totalSize = response->contentLength;
