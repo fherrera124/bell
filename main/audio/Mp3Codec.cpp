@@ -68,7 +68,9 @@ bell::Result<Codec::SetupStatus> Mp3Codec::setupDecodeFromHeaders(
     return nonstd::make_unexpected(make_helix_mp3_error_code(res));
   }
 
-  audioFormat = audio::Format{frameInfo.nChans, SampleFormat::S16,
+  // decode() always hands out stereo (see its own comment) - matched
+  // here so getAudioFormat() is consistent before decode() has run too.
+  audioFormat = audio::Format{2, SampleFormat::S16,
                               static_cast<SampleRate>(frameInfo.samprate)};
   headerParsed = true;
   return SetupStatus::Ready;
@@ -105,12 +107,24 @@ bell::Result<Codec::DecodeResult> Mp3Codec::decode(
 
   MP3FrameInfo frameInfo{};
   MP3GetLastFrameInfo(decoder, &frameInfo);
-  audioFormat = audio::Format{frameInfo.nChans, SampleFormat::S16,
+  audioFormat = audio::Format{2, SampleFormat::S16,
                               static_cast<SampleRate>(frameInfo.samprate)};
+
+  size_t outputSamps = static_cast<size_t>(frameInfo.outputSamps);
+  if (frameInfo.nChans == 1) {
+    // AudioSinkI2S is fixed at stereo - duplicate mono samples to L+R.
+    // Backward in-place: each write (2i, 2i+1) is always >= i, so it
+    // never clobbers a source sample before it's read.
+    for (size_t i = outputSamps; i-- > 0;) {
+      pcmScratch[2 * i] = pcmScratch[i];
+      pcmScratch[2 * i + 1] = pcmScratch[i];
+    }
+    outputSamps *= 2;
+  }
 
   return DecodeResult{
       .pcm = {reinterpret_cast<std::byte*>(pcmScratch.data()),
-              static_cast<size_t>(frameInfo.outputSamps) * sizeof(int16_t)},
+              outputSamps * sizeof(int16_t)},
       .consumedInputBytes = consumed,
   };
 }
