@@ -5,6 +5,7 @@ option(BELL_DISABLE_SANITIZERS "Disable sanitizers" ON)
 # Audio containers
 option(BELL_DISABLE_CONTAINERS "Disable the entire audio container wrapper" OFF)
 option(BELL_CONTAINER_OGG "Support OGG container" ON)
+option(BELL_CONTAINER_MP3 "Support MP3 container (frame demuxing)" ON)
 
 # Audio codecs
 option(BELL_DISABLE_CODECS "Disable the entire audio codec wrapper" OFF)
@@ -40,6 +41,7 @@ message(STATUS "    Disable all containers: ${BELL_DISABLE_CONTAINERS}")
 
 if(NOT BELL_DISABLE_CONTAINERS)
     message(STATUS "  * OGG audio container: ${BELL_CONTAINER_OGG}")
+    message(STATUS "  * MP3 audio container: ${BELL_CONTAINER_MP3}")
 endif()
 
 message(STATUS "    Disable all codecs: ${BELL_DISABLE_CODECS}")
