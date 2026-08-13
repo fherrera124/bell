@@ -46,6 +46,26 @@ class Container {
                                      size_t allowedDistance = 0) = 0;
 
   /**
+   * @brief Seeks directly to a known byte offset, given the frame number expected there
+   *
+   * Optional fast path for containers that can map an external seek-table
+   * lookup (or a bitrate-based estimate) straight to a byte offset,
+   * skipping the bisection search seekToFrame() would otherwise need.
+   * Default implementation reports unsupported - callers needing a
+   * fallback should use seekToFrame() instead.
+   *
+   * @param byteOffset Byte offset to seek to
+   * @param targetFrame Frame index expected at (or near) byteOffset, used to fine-tune afterwards
+   * @param allowedDistance Maximum acceptable distance from targetFrame, in frames
+   * @return Result indicating success, or Errc::OperationNotSupported if this container doesn't support it
+   */
+  virtual bell::Result<> seekToByteOffset(size_t byteOffset,
+                                          uint64_t targetFrame,
+                                          size_t allowedDistance = 0) {
+    return nonstd::make_unexpected(Errc::OperationNotSupported);
+  }
+
+  /**
    * @brief Gets the current playback position in milliseconds
    */
   virtual uint64_t tellFrame() const = 0;

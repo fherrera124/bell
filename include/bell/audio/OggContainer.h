@@ -25,7 +25,7 @@ class OggContainer : public Container {
   // candidate offset. allowedDistance: skip the fine-tune walk if landing
   // within this many frames of targetFrame already.
   bell::Result<> seekToByteOffset(size_t byteOffset, uint64_t targetFrame,
-                                  size_t allowedDistance = 0);
+                                  size_t allowedDistance = 0) override;
 
   uint64_t tellFrame() const override;
   uint64_t getTotalFrames() override;
