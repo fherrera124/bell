@@ -112,6 +112,12 @@ if(NOT BELL_DISABLE_CODECS AND BELL_CODEC_AAC)
     list(APPEND BELL_LIBS fdk-aac)
 endif()
 
+# Audio codec - MP3, Helix fixed-point decoder
+if(NOT BELL_DISABLE_CODECS AND BELL_CODEC_MP3)
+    add_subdirectory(external/libhelix-mp3)
+    list(APPEND BELL_LIBS helix-mp3)
+endif()
+
 # Audio codec - Vorbis, tremor decoder
 if(NOT BELL_DISABLE_CODECS AND BELL_CODEC_TREMOR)
     add_subdirectory(external/tremor)

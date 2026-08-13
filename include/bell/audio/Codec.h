@@ -57,6 +57,8 @@ struct AACConfig {
 
 struct TremorConfig {};
 
+struct Mp3Config {};
+
 struct LC3plusConfig {
   // Samples per packet (optional). Defaults to 480 (10ms at 48000)
   std::optional<uint32_t> samplesPerPacket;
@@ -82,7 +84,7 @@ struct HQLCConfig {
 };
 
 using CodecConfig = std::variant<OpusConfig, AACConfig, TremorConfig,
-                                 LC3plusConfig, HQLCConfig>;
+                                 LC3plusConfig, HQLCConfig, Mp3Config>;
 
 /**
  * Base class for audio codecs
@@ -181,4 +183,5 @@ using OpusConfig = audio::OpusConfig;
 using AACConfig = audio::AACConfig;
 using TremorConfig = audio::TremorConfig;
 using HQLCConfig = audio::HQLCConfig;
+using Mp3Config = audio::Mp3Config;
 }  // namespace bell

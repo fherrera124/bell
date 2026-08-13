@@ -46,13 +46,10 @@ class Container {
                                      size_t allowedDistance = 0) = 0;
 
   /**
-   * @brief Seeks directly to a known byte offset, given the frame number expected there
+   * @brief Seeks directly to a known byte offset, given the frame expected there
    *
-   * Optional fast path for containers that can map an external seek-table
-   * lookup (or a bitrate-based estimate) straight to a byte offset,
-   * skipping the bisection search seekToFrame() would otherwise need.
-   * Default implementation reports unsupported - callers needing a
-   * fallback should use seekToFrame() instead.
+   * Optional - default implementation reports unsupported; callers needing
+   * a fallback should use seekToFrame() instead.
    *
    * @param byteOffset Byte offset to seek to
    * @param targetFrame Frame index expected at (or near) byteOffset, used to fine-tune afterwards
