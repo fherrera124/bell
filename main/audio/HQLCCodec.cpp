@@ -62,9 +62,16 @@ bell::Result<> HQLCCodec::setupEncode(const AudioFormat& audioFormat,
   }
   config = std::get<HQLCConfig>(codecSpecificConfig);
 
-  // Set up memory resource
-  memoryResource = config.memoryResource ? config.memoryResource
-                                         : std::pmr::new_delete_resource();
+  // Memory resource is latched on first setup: buffers persist across
+  // reconfigures, so they must all come from (and return to) one resource
+  auto* newResource = config.memoryResource ? config.memoryResource
+                                            : std::pmr::new_delete_resource();
+  if (!memoryResource) {
+    memoryResource = newResource;
+  } else if (memoryResource != newResource) {
+    BELL_LOG(warn, LOG_TAG,
+             "Ignoring memory resource change on codec reconfigure");
+  }
 
   // HQLC only supports 48kHz
   auto sampleRate = audioFormat.getSampleRateValue();
@@ -107,16 +114,13 @@ bell::Result<> HQLCCodec::setupEncode(const AudioFormat& audioFormat,
     encCfg.bitrate = config.bitrate.value_or(196000);
   }
 
-  if (encoder) {
-    memoryResource->deallocate(encoder, encoderSize, alignof(std::max_align_t));
-    encoder = nullptr;
-    encoderSize = 0;
+  // State size is a compile-time constant, so a reconfigure reuses the
+  // existing allocation and only re-inits in place
+  if (!encoder) {
+    encoderSize = hqlc_encoder_size();
+    encoder = reinterpret_cast<hqlc_encoder*>(
+        memoryResource->allocate(encoderSize, alignof(std::max_align_t)));
   }
-
-  // allocate encoder mem
-  encoderSize = hqlc_encoder_size();
-  encoder = reinterpret_cast<hqlc_encoder*>(
-      memoryResource->allocate(encoderSize, alignof(std::max_align_t)));
 
   hqlc_error err = hqlc_encoder_init(encoder, &encCfg);
   if (err != HQLC_OK) {
@@ -128,30 +132,18 @@ bell::Result<> HQLCCodec::setupEncode(const AudioFormat& audioFormat,
     return nonstd::make_unexpected(make_hqlc_error_code(static_cast<int>(err)));
   }
 
-  // free existing scratch mem in reinit
-  if (encoderScratch) {
-    memoryResource->deallocate(encoderScratch, encoderScratchSize,
-                               alignof(std::max_align_t));
-    encoderScratch = nullptr;
-    encoderScratchSize = 0;
+  // Scratch and output sizes are constant too - allocate once
+  if (!encoderScratch) {
+    encoderScratchSize = hqlc_encoder_scratch_size();
+    encoderScratch = static_cast<uint8_t*>(memoryResource->allocate(
+        encoderScratchSize, alignof(std::max_align_t)));
   }
 
-  // allocate scratch mem
-  encoderScratchSize = hqlc_encoder_scratch_size();
-  encoderScratch = static_cast<uint8_t*>(
-      memoryResource->allocate(encoderScratchSize, alignof(std::max_align_t)));
-
-  if (encodeOutputBuffer) {
-    memoryResource->deallocate(encodeOutputBuffer, encodeOutputBufferSize,
-                               alignof(std::max_align_t));
-    encodeOutputBuffer = nullptr;
-    encodeOutputBufferSize = 0;
+  if (!encodeOutputBuffer) {
+    encodeOutputBufferSize = HQLC_MAX_FRAME_BYTES;
+    encodeOutputBuffer = static_cast<std::byte*>(memoryResource->allocate(
+        encodeOutputBufferSize, alignof(std::max_align_t)));
   }
-
-  // Allocate encode output buffer via the memory resource
-  encodeOutputBufferSize = HQLC_MAX_FRAME_BYTES;
-  encodeOutputBuffer = static_cast<std::byte*>(memoryResource->allocate(
-      encodeOutputBufferSize, alignof(std::max_align_t)));
 
   BELL_LOG(info, LOG_TAG,
            "HQLC encoder setup: {}Hz, {} channels, mode={}, pcmFormat={}, enc "
@@ -171,9 +163,16 @@ bell::Result<> HQLCCodec::setupDecode(const AudioFormat& audioFormat,
   }
   config = std::get<HQLCConfig>(codecSpecificConfig);
 
-  // Set up memory resource
-  memoryResource = config.memoryResource ? config.memoryResource
-                                         : std::pmr::new_delete_resource();
+  // Memory resource is latched on first setup: buffers persist across
+  // reconfigures, so they must all come from (and return to) one resource
+  auto* newResource = config.memoryResource ? config.memoryResource
+                                            : std::pmr::new_delete_resource();
+  if (!memoryResource) {
+    memoryResource = newResource;
+  } else if (memoryResource != newResource) {
+    BELL_LOG(warn, LOG_TAG,
+             "Ignoring memory resource change on codec reconfigure");
+  }
 
   // HQLC only supports 48kHz
   auto sampleRate = audioFormat.getSampleRateValue();
@@ -202,17 +201,13 @@ bell::Result<> HQLCCodec::setupDecode(const AudioFormat& audioFormat,
     pcmFormat = HQLC_PCM16;
   }
 
-  // Free existing decoder mem
-  if (decoder) {
-    memoryResource->deallocate(decoder, decoderSize, alignof(std::max_align_t));
-    decoder = nullptr;
-    decoderSize = 0;
+  // State size is a compile-time constant, so a reconfigure reuses the
+  // existing allocation and only re-inits in place
+  if (!decoder) {
+    decoderSize = hqlc_decoder_size();
+    decoder = reinterpret_cast<hqlc_decoder*>(
+        memoryResource->allocate(decoderSize, alignof(std::max_align_t)));
   }
-
-  // Allocate decoder mem
-  decoderSize = hqlc_decoder_size();
-  decoder = reinterpret_cast<hqlc_decoder*>(
-      memoryResource->allocate(decoderSize, alignof(std::max_align_t)));
 
   hqlc_error err =
       hqlc_decoder_init(decoder, static_cast<uint8_t>(channels), sampleRate);
@@ -225,32 +220,27 @@ bell::Result<> HQLCCodec::setupDecode(const AudioFormat& audioFormat,
     return nonstd::make_unexpected(make_hqlc_error_code(static_cast<int>(err)));
   }
 
-  // Free existing decoder scratch
-  if (decoderScratch) {
-    memoryResource->deallocate(decoderScratch, decoderScratchSize,
-                               alignof(std::max_align_t));
-    decoderScratch = nullptr;
-    decoderScratchSize = 0;
+  // Scratch size is constant - allocate once
+  if (!decoderScratch) {
+    decoderScratchSize = hqlc_decoder_scratch_size();
+    decoderScratch = static_cast<uint8_t*>(memoryResource->allocate(
+        decoderScratchSize, alignof(std::max_align_t)));
   }
 
-  // Allocate decoder scratch
-  decoderScratchSize = hqlc_decoder_scratch_size();
-  decoderScratch = static_cast<uint8_t*>(
-      memoryResource->allocate(decoderScratchSize, alignof(std::max_align_t)));
-
-  // Free existing decode output buffer
-  if (decodeOutputBuffer) {
+  // Output size depends on channels/pcm format - reallocate only on change
+  size_t neededOutputSize =
+      hqlc_frame_pcm_bytes(static_cast<uint8_t>(channels), pcmFormat);
+  if (decodeOutputBuffer && decodeOutputBufferSize != neededOutputSize) {
     memoryResource->deallocate(decodeOutputBuffer, decodeOutputBufferSize,
                                alignof(std::max_align_t));
     decodeOutputBuffer = nullptr;
     decodeOutputBufferSize = 0;
   }
-
-  // Allocate decode output buffer
-  decodeOutputBufferSize =
-      hqlc_frame_pcm_bytes(static_cast<uint8_t>(channels), pcmFormat);
-  decodeOutputBuffer = static_cast<std::byte*>(memoryResource->allocate(
-      decodeOutputBufferSize, alignof(std::max_align_t)));
+  if (!decodeOutputBuffer) {
+    decodeOutputBufferSize = neededOutputSize;
+    decodeOutputBuffer = static_cast<std::byte*>(memoryResource->allocate(
+        decodeOutputBufferSize, alignof(std::max_align_t)));
+  }
 
   BELL_LOG(info, LOG_TAG, "HQLC decoder setup: {}Hz, {} channels, pcmFormat={}",
            sampleRate, channels, pcmFormat == HQLC_PCM16 ? "S16" : "S24");
