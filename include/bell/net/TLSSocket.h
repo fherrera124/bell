@@ -5,8 +5,12 @@
 #include <array>
 #include <cstdint>
 
-// MbedTLS includes
 #include "bell/net/TCPSocket.h"
+#include "bell/Result.h"
+#include "bell/net/Socket.h"
+
+#ifndef BELL_DISABLE_MBEDTLS
+// MbedTLS includes
 #include "mbedtls/build_info.h"  // MBEDTLS_VERSION_MAJOR
 #if MBEDTLS_VERSION_MAJOR < 4
 #include "mbedtls/ctr_drbg.h"
@@ -16,9 +20,6 @@
 #endif
 #include "mbedtls/error.h"
 #include "mbedtls/ssl.h"
-
-#include "bell/Result.h"
-#include "bell/net/Socket.h"
 
 namespace internal {
 class tls_errc_category : public std::error_category {
@@ -144,3 +145,4 @@ class TLSSocket : public Socket {
 namespace bell {
 using TLSSocket = net::TLSSocket;
 }
+#endif  // BELL_DISABLE_MBEDTLS

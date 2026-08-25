@@ -176,10 +176,15 @@ bell::Result<std::shared_ptr<bell::net::Socket>> connectFresh(
   bell::Result<> connectRes = bell::make_unexpected_errc(std::errc::io_error);
 
   if (scheme == "https") {
+#ifndef BELL_DISABLE_MBEDTLS
     auto tlsSocket = std::make_unique<bell::net::TLSSocket>();
     connectRes = tlsSocket->connect(
         host, port, operationTimeoutMs.value_or(kDefaultOperationTimeoutMs));
     socket = std::move(tlsSocket);
+#else
+    return nonstd::make_unexpected(
+        std::make_error_code(std::errc::function_not_supported));
+#endif
   } else {
     auto tcpSocket = std::make_unique<bell::net::TCPSocket>();
     connectRes = tcpSocket->connect(

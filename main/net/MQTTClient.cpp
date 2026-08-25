@@ -67,9 +67,14 @@ void net::MQTTClient::connect(const std::string& host, uint16_t port,
                               bool secure, int keepAlive) {
   // Connect to the broker
   if (secure) {
+#ifndef BELL_DISABLE_MBEDTLS
     auto tlsSocket = std::make_unique<net::TLSSocket>();
     (void)tlsSocket->connect(host, port, timeoutMs);
     socket = std::move(tlsSocket);
+#else
+    throw std::runtime_error(
+        "Secure MQTT requested but this bell build has BELL_DISABLE_MBEDTLS set");
+#endif
   } else {
     auto tcpSocket = std::make_unique<net::TCPSocket>();
     (void)tcpSocket->connect(host, port, timeoutMs);

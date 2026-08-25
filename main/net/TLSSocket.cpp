@@ -1,3 +1,4 @@
+#ifndef BELL_DISABLE_MBEDTLS
 #include "bell/net/TLSSocket.h"
 #include <netinet/tcp.h>
 
@@ -315,3 +316,4 @@ void net::TLSSocket::close() {
     innerSocket.close();
   }
 }
+#endif  // BELL_DISABLE_MBEDTLS

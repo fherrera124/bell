@@ -39,6 +39,10 @@ if(BELL_DISABLE_MDNS)
     target_compile_definitions(bell PUBLIC BELL_DISABLE_MDNS)
 endif()
 
+if(BELL_DISABLE_MBEDTLS)
+    target_compile_definitions(bell PUBLIC BELL_DISABLE_MBEDTLS)
+endif()
+
 if(BELL_BACKEND_PORTAUDIO)
     target_compile_definitions(bell PUBLIC BELL_BACKEND_PORTAUDIO)
 endif()

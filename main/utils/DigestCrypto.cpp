@@ -1,3 +1,4 @@
+#ifndef BELL_DISABLE_MBEDTLS
 #include "bell/utils/DigestCrypto.h"
 #include "fmt/format.h"
 
@@ -197,3 +198,4 @@ void utils::DigestCrypto::getHmac(const std::byte* key, size_t keyLength,
   hmacUpdate(message, messageLength);
   hmacFinish(output);
 }
+#endif  // BELL_DISABLE_MBEDTLS

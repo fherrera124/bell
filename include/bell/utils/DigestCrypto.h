@@ -3,6 +3,7 @@
 // Standard includes
 #include <string_view>
 
+#ifndef BELL_DISABLE_MBEDTLS
 // Local includes
 #include <mbedtls/build_info.h>  // MBEDTLS_VERSION_MAJOR
 #include <mbedtls/md.h>
@@ -146,3 +147,4 @@ class DigestCrypto {
 namespace bell {
 using DigestCrypto = utils::DigestCrypto;
 }
+#endif  // BELL_DISABLE_MBEDTLS
