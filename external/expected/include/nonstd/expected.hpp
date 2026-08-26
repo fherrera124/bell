@@ -724,13 +724,17 @@ private:
     bool m_has_value = false;
 };
 
-// Storage base, split so the destructor is trivial exactly when T and E
-// both are (std::expected's own spec requirement - see the ~expected()
-// TODO further down). A non-trivial destructor forces the Itanium ABI's
-// hidden-return-pointer convention for any function returning this type
-// by value, which this vendored copy pays even when T/E don't need it.
+// Storage base, split so the destructor/copy/move constructors are
+// trivial exactly when T and E both are (std::expected's own spec
+// requirement - see the ~expected() TODO further down). Any of those
+// being non-trivial forces the Itanium ABI's hidden-return-pointer
+// convention for any function returning this type by value, which this
+// vendored copy pays even when T/E don't need it. Gated on
+// is_trivially_copyable rather than is_trivially_destructible alone: a
+// plain, undeclared union member here is already a correct bitwise copy
+// when T/E themselves are trivially copyable.
 template< typename T, typename E,
-         bool = std::is_trivially_destructible<T>::value && std::is_trivially_destructible<E>::value >
+         bool = std::is_trivially_copyable<T>::value && std::is_trivially_copyable<E>::value >
 struct storage_dtor_base
 {
     union { T m_value; E m_error; };
@@ -752,6 +756,20 @@ struct storage_dtor_base<T, E, false>
     ~storage_dtor_base()
     {
         if ( m_has_value ) m_value.~T(); else m_error.~E();
+    }
+
+    storage_dtor_base( storage_dtor_base const & other )
+        : m_has_value( other.m_has_value )
+    {
+        if ( m_has_value ) new( std11::addressof(m_value) ) T( other.m_value );
+        else               new( std11::addressof(m_error) ) E( other.m_error );
+    }
+
+    storage_dtor_base( storage_dtor_base && other )
+        : m_has_value( other.m_has_value )
+    {
+        if ( m_has_value ) new( std11::addressof(m_value) ) T( std::move( other.m_value ) );
+        else               new( std11::addressof(m_error) ) E( std::move( other.m_error ) );
     }
 };
 
@@ -895,7 +913,13 @@ public:
 // Same split as storage_dtor_base above, for the value_type=void storage
 // (a separate template, not a partial specialization of it, so the
 // default bool argument doesn't need to survive across specializations).
-template< typename E, bool = std::is_trivially_destructible<E>::value >
+// Gated on is_trivially_copyable rather than is_trivially_destructible
+// alone: the Itanium ABI's hidden-return-pointer trigger cares about the
+// copy/move constructors too, not just the destructor - a plain,
+// undeclared union member here is already a correct bitwise copy when E
+// itself is trivially copyable, so the trivial branch needs nothing
+// beyond the union/flag.
+template< typename E, bool = std::is_trivially_copyable<E>::value >
 struct storage_dtor_base_void
 {
     union { char m_dummy; E m_error; };
@@ -917,6 +941,18 @@ struct storage_dtor_base_void<E, false>
     ~storage_dtor_base_void()
     {
         if ( ! m_has_value ) m_error.~E();
+    }
+
+    storage_dtor_base_void( storage_dtor_base_void const & other )
+        : m_has_value( other.m_has_value )
+    {
+        if ( ! m_has_value ) new( std11::addressof(m_error) ) E( other.m_error );
+    }
+
+    storage_dtor_base_void( storage_dtor_base_void && other )
+        : m_has_value( other.m_has_value )
+    {
+        if ( ! m_has_value ) new( std11::addressof(m_error) ) E( std::move( other.m_error ) );
     }
 };
 
@@ -1026,19 +1062,10 @@ public:
         : storage_t_impl<T, E>( has_value )
     {}
 
-    storage_t( storage_t const & other )
-        : storage_t_impl<T, E>( other.has_value() )
-    {
-        if ( this->has_value() ) this->construct_value( other.value() );
-        else                     this->construct_error( other.error() );
-    }
-
-    storage_t(storage_t && other )
-        : storage_t_impl<T, E>( other.has_value() )
-    {
-        if ( this->has_value() ) this->construct_value( std::move( other.value() ) );
-        else                     this->construct_error( std::move( other.error() ) );
-    }
+    // Deferred to storage_t_impl's own base (storage_dtor_base), which
+    // is conditionally trivial - see there.
+    storage_t( storage_t const & other ) = default;
+    storage_t( storage_t && other ) = default;
 };
 
 template< typename E >
@@ -1052,19 +1079,10 @@ public:
         : storage_t_impl<void, E>( has_value )
     {}
 
-    storage_t( storage_t const & other )
-        : storage_t_impl<void, E>( other.has_value() )
-    {
-        if ( this->has_value() ) ;
-        else                     this->construct_error( other.error() );
-    }
-
-    storage_t(storage_t && other )
-        : storage_t_impl<void, E>( other.has_value() )
-    {
-        if ( this->has_value() ) ;
-        else                     this->construct_error( std::move( other.error() ) );
-    }
+    // Deferred to storage_t_impl's own base (storage_dtor_base_void),
+    // which is conditionally trivial - see there.
+    storage_t( storage_t const & other ) = default;
+    storage_t( storage_t && other ) = default;
 };
 
 template< typename T, typename E >
