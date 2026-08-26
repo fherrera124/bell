@@ -724,8 +724,39 @@ private:
     bool m_has_value = false;
 };
 
+// Storage base, split so the destructor is trivial exactly when T and E
+// both are (std::expected's own spec requirement - see the ~expected()
+// TODO further down). A non-trivial destructor forces the Itanium ABI's
+// hidden-return-pointer convention for any function returning this type
+// by value, which this vendored copy pays even when T/E don't need it.
+template< typename T, typename E,
+         bool = std::is_trivially_destructible<T>::value && std::is_trivially_destructible<E>::value >
+struct storage_dtor_base
+{
+    union { T m_value; E m_error; };
+    bool m_has_value = false;
+
+    storage_dtor_base() {}
+    explicit storage_dtor_base( bool has_value ) : m_has_value( has_value ) {}
+};
+
 template< typename T, typename E >
-class storage_t_impl
+struct storage_dtor_base<T, E, false>
+{
+    union { T m_value; E m_error; };
+    bool m_has_value = false;
+
+    storage_dtor_base() {}
+    explicit storage_dtor_base( bool has_value ) : m_has_value( has_value ) {}
+
+    ~storage_dtor_base()
+    {
+        if ( m_has_value ) m_value.~T(); else m_error.~E();
+    }
+};
+
+template< typename T, typename E >
+class storage_t_impl : public storage_dtor_base<T, E>
 {
     template< typename, typename > friend class nonstd::expected_lite::expected;
 
@@ -733,147 +764,164 @@ public:
     using value_type = T;
     using error_type = E;
 
-    // no-op construction
     storage_t_impl() {}
-    ~storage_t_impl() {}
 
     explicit storage_t_impl( bool has_value )
-        : m_has_value( has_value )
+        : storage_dtor_base<T, E>( has_value )
     {}
 
     void construct_value()
     {
-        new( std11::addressof(m_value) ) value_type();
+        new( std11::addressof(this->m_value) ) value_type();
     }
 
     void construct_value( value_type const & e )
     {
-        new( std11::addressof(m_value) ) value_type( e );
+        new( std11::addressof(this->m_value) ) value_type( e );
     }
 
     void construct_value( value_type && e )
     {
-        new( std11::addressof(m_value) ) value_type( std::move( e ) );
+        new( std11::addressof(this->m_value) ) value_type( std::move( e ) );
     }
 
     template< class... Args >
     void emplace_value( Args&&... args )
     {
-        new( std11::addressof(m_value) ) value_type( std::forward<Args>(args)...);
+        new( std11::addressof(this->m_value) ) value_type( std::forward<Args>(args)...);
     }
 
     template< class U, class... Args >
     void emplace_value( std::initializer_list<U> il, Args&&... args )
     {
-        new( std11::addressof(m_value) ) value_type( il, std::forward<Args>(args)... );
+        new( std11::addressof(this->m_value) ) value_type( il, std::forward<Args>(args)... );
     }
 
     void destruct_value()
     {
-        m_value.~value_type();
+        this->m_value.~value_type();
     }
 
     void construct_error( error_type const & e )
     {
-        new( std11::addressof(m_error) ) error_type( e );
+        new( std11::addressof(this->m_error) ) error_type( e );
     }
 
     void construct_error( error_type && e )
     {
-        new( std11::addressof(m_error) ) error_type( std::move( e ) );
+        new( std11::addressof(this->m_error) ) error_type( std::move( e ) );
     }
 
     template< class... Args >
     void emplace_error( Args&&... args )
     {
-        new( std11::addressof(m_error) ) error_type( std::forward<Args>(args)...);
+        new( std11::addressof(this->m_error) ) error_type( std::forward<Args>(args)...);
     }
 
     template< class U, class... Args >
     void emplace_error( std::initializer_list<U> il, Args&&... args )
     {
-        new( std11::addressof(m_error) ) error_type( il, std::forward<Args>(args)... );
+        new( std11::addressof(this->m_error) ) error_type( il, std::forward<Args>(args)... );
     }
 
     void destruct_error()
     {
-        m_error.~error_type();
+        this->m_error.~error_type();
     }
 
     constexpr value_type const & value() const &
     {
-        return m_value;
+        return this->m_value;
     }
 
     value_type & value() &
     {
-        return m_value;
+        return this->m_value;
     }
 
     constexpr value_type const && value() const &&
     {
-        return std::move( m_value );
+        return std::move( this->m_value );
     }
 
     nsel_constexpr14 value_type && value() &&
     {
-        return std::move( m_value );
+        return std::move( this->m_value );
     }
 
     value_type const * value_ptr() const
     {
-        return std11::addressof(m_value);
+        return std11::addressof(this->m_value);
     }
 
     value_type * value_ptr()
     {
-        return std11::addressof(m_value);
+        return std11::addressof(this->m_value);
     }
 
     error_type const & error() const &
     {
-        return m_error;
+        return this->m_error;
     }
 
     error_type & error() &
     {
-        return m_error;
+        return this->m_error;
     }
 
     constexpr error_type const && error() const &&
     {
-        return std::move( m_error );
+        return std::move( this->m_error );
     }
 
     nsel_constexpr14 error_type && error() &&
     {
-        return std::move( m_error );
+        return std::move( this->m_error );
     }
 
     bool has_value() const
     {
-        return m_has_value;
+        return this->m_has_value;
     }
 
     void set_has_value( bool v )
     {
-        m_has_value = v;
+        this->m_has_value = v;
     }
-
-private:
-    union
-    {
-        value_type m_value;
-        error_type m_error;
-    };
-
-    bool m_has_value = false;
 };
 
 /// discriminated union to hold only 'error'.
 
+// Same split as storage_dtor_base above, for the value_type=void storage
+// (a separate template, not a partial specialization of it, so the
+// default bool argument doesn't need to survive across specializations).
+template< typename E, bool = std::is_trivially_destructible<E>::value >
+struct storage_dtor_base_void
+{
+    union { char m_dummy; E m_error; };
+    bool m_has_value = false;
+
+    storage_dtor_base_void() {}
+    explicit storage_dtor_base_void( bool has_value ) : m_has_value( has_value ) {}
+};
+
 template< typename E >
-struct storage_t_impl< void, E >
+struct storage_dtor_base_void<E, false>
+{
+    union { char m_dummy; E m_error; };
+    bool m_has_value = false;
+
+    storage_dtor_base_void() {}
+    explicit storage_dtor_base_void( bool has_value ) : m_has_value( has_value ) {}
+
+    ~storage_dtor_base_void()
+    {
+        if ( ! m_has_value ) m_error.~E();
+    }
+};
+
+template< typename E >
+struct storage_t_impl< void, E > : storage_dtor_base_void<E>
 {
     template< typename, typename > friend class nonstd::expected_lite::expected;
 
@@ -881,79 +929,68 @@ public:
     using value_type = void;
     using error_type = E;
 
-    // no-op construction
     storage_t_impl() {}
-    ~storage_t_impl() {}
 
     explicit storage_t_impl( bool has_value )
-        : m_has_value( has_value )
+        : storage_dtor_base_void<E>( has_value )
     {}
 
     void construct_error( error_type const & e )
     {
-        new( std11::addressof(m_error) ) error_type( e );
+        new( std11::addressof(this->m_error) ) error_type( e );
     }
 
     void construct_error( error_type && e )
     {
-        new( std11::addressof(m_error) ) error_type( std::move( e ) );
+        new( std11::addressof(this->m_error) ) error_type( std::move( e ) );
     }
 
     template< class... Args >
     void emplace_error( Args&&... args )
     {
-        new( std11::addressof(m_error) ) error_type( std::forward<Args>(args)...);
+        new( std11::addressof(this->m_error) ) error_type( std::forward<Args>(args)...);
     }
 
     template< class U, class... Args >
     void emplace_error( std::initializer_list<U> il, Args&&... args )
     {
-        new( std11::addressof(m_error) ) error_type( il, std::forward<Args>(args)... );
+        new( std11::addressof(this->m_error) ) error_type( il, std::forward<Args>(args)... );
     }
 
     void destruct_error()
     {
-        m_error.~error_type();
+        this->m_error.~error_type();
     }
 
     error_type const & error() const &
     {
-        return m_error;
+        return this->m_error;
     }
 
     error_type & error() &
     {
-        return m_error;
+        return this->m_error;
     }
 
     constexpr error_type const && error() const &&
     {
-        return std::move( m_error );
+        return std::move( this->m_error );
     }
 
     nsel_constexpr14 error_type && error() &&
     {
-        return std::move( m_error );
+        return std::move( this->m_error );
     }
 
     bool has_value() const
     {
-        return m_has_value;
+        return this->m_has_value;
     }
 
     void set_has_value( bool v )
     {
-        m_has_value = v;
+        this->m_has_value = v;
     }
-
-private:
-    union
-    {
-        char m_dummy;
-        error_type m_error;
-    };
-
-    bool m_has_value = false;
 };
 
 template< typename T, typename E, bool isConstructable, bool isMoveable >
@@ -2110,15 +2147,10 @@ public:
 
     // x.x.4.2 destructor
 
-    // TODO: ~expected: triviality
-    // Effects: If T is not cv void and is_trivially_destructible_v<T> is false and bool(*this), calls val.~T(). If is_trivially_destructible_v<E> is false and !bool(*this), calls unexpect.~unexpected<E>().
-    // Remarks: If either T is cv void or is_trivially_destructible_v<T> is true, and is_trivially_destructible_v<E> is true, then this destructor shall be a trivial destructor.
-
-    ~expected()
-    {
-        if ( has_value() ) contained.destruct_value();
-        else               contained.destruct_error();
-    }
+    // Trivial exactly when T and E both are: contained's own storage base
+    // (storage_dtor_base, see above) already does the has_value()-gated
+    // cleanup in its own destructor, conditionally on that same trait.
+    ~expected() = default;
 
     // x.x.4.3 assignment
 
@@ -2821,13 +2853,11 @@ public:
 
     // destructor
 
-    ~expected()
-    {
-        if ( ! has_value() )
-        {
-            contained.destruct_error();
-        }
-    }
+    // Trivial exactly when E is: contained's own storage base
+    // (storage_dtor_base_void, see above) already does the
+    // has_value()-gated cleanup in its own destructor, conditionally on
+    // that same trait.
+    ~expected() = default;
 
     // x.x.4.3 assignment
 
