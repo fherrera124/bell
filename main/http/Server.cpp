@@ -15,7 +15,10 @@
 using namespace bell;
 
 http::Server::Server(int maxConnections)
-    : utils::Task("bell::net::HTTPServer", 16 * 1024),
+    // espStackOnPsram=false: no particular need for PSRAM here, and
+    // not every board has it.
+    : utils::Task("bell::net::HTTPServer", 16 * 1024, /*espPriority=*/0,
+                  TaskCore::CoreAny, /*espStackOnPsram=*/false),
       maxConnections(maxConnections) {
   notFoundHandler = [](const auto& /*requestReader*/,
                        const auto& responseWriter, const auto& /*params*/) {
