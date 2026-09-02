@@ -114,7 +114,7 @@ class BrowseDispatcher : public bell::Task {
  public:
   BrowseDispatcher()
       : bell::Task("mdns_browse_dispatch", 1024 * 8, 1,
-                   bell::utils::TaskCore::Core0, /*espStackOnPsram=*/true) {
+                   bell::utils::TaskCore::Core0, /*espStackOnPsram=*/false) {
     if (startTask()) {
       activeDispatcher = this;
     } else {
@@ -517,7 +517,12 @@ class EspressifMDNSManager : public Manager {
       int /*interfaceIndex*/, const Browser::DiscoveryEventCallback& onEvent,
       bool /*autoResolveService */, bool /*autoResolveAddresses */,
       bool /*resolveIPv6*/) override {
-    auto browser = std::make_unique<EspressifMdnsBrowser>(browseDispatcher);
+    auto dispatcher = browseDispatcher.lock();
+    if (!dispatcher) {
+      dispatcher = std::make_shared<BrowseDispatcher>();
+      browseDispatcher = dispatcher;
+    }
+    auto browser = std::make_unique<EspressifMdnsBrowser>(dispatcher);
     auto res = browser->browse(serviceType, onEvent);
 
     if (!res) {
@@ -577,9 +582,9 @@ class EspressifMDNSManager : public Manager {
  private:
   const char* LOG_TAG = "EspressifMDNSManager";
 
-  // Pointer to the browse dispatcher
-  std::shared_ptr<BrowseDispatcher> browseDispatcher =
-      std::make_shared<BrowseDispatcher>();
+  // Held weak so the dispatcher task (and its stack) exists only while a
+  // browser from browse() below is actually using it.
+  std::weak_ptr<BrowseDispatcher> browseDispatcher;
 };
 
 Manager* bell::mdns::getDefaultManager() {
