@@ -44,7 +44,6 @@ bell::Result<> http::Reader::readHeaders() {
     return make_unexpected_errc(std::errc::operation_not_permitted);
   }
 
-  int minorVersion = 0;
   size_t numHeaders = 0;
 
   // Response specific
@@ -198,6 +197,22 @@ http::Reader::getQueryParams() const {
   }
 
   return queryParams;
+}
+
+bool http::Reader::keepAliveRequested() const {
+  auto connectionHeader = getHeader("Connection");
+  if (connectionHeader.empty()) {
+    return minorVersion >= 1;  // HTTP/1.1 defaults to keep-alive
+  }
+
+  constexpr std::string_view kClose = "close";
+  bool isClose =
+      connectionHeader.size() == kClose.size() &&
+      std::equal(connectionHeader.begin(), connectionHeader.end(),
+                kClose.begin(), [](char a, char b) {
+                  return std::tolower(a) == std::tolower(b);
+                });
+  return !isClose;
 }
 
 std::string_view http::Reader::getHeader(const std::string& headerName) const {

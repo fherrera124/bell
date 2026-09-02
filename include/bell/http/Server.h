@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <chrono>
 #include <functional>
 #include <vector>
 
@@ -36,8 +37,9 @@ class Server : bell::utils::Task {
  private:
   const char* LOG_TAG = "http::Server";
 
-  // Default timeout for HTTP operations
-  const int defaultHttpOperationTimeout = 5000;
+  // A kept-alive connection idle longer than this is closed to reclaim the
+  // fd, rather than held forever waiting for a request that may never come.
+  const int keepAliveIdleTimeoutMs = 5000;
 
   RadixRouter<RequestHandler> router;
 
@@ -51,6 +53,12 @@ class Server : bell::utils::Task {
   struct Connection {
     // Client socket
     std::shared_ptr<bell::net::TCPSocket> socket;
+    // Owns the byte stream across every request this connection serves, so
+    // bytes the OS delivers beyond one request (e.g. together with a small
+    // body) aren't lost between requests - a fresh SocketStream per request
+    // would discard whatever it had already buffered ahead.
+    std::shared_ptr<bell::net::SocketStream> stream;
+    std::chrono::steady_clock::time_point lastActivity;
     bool closed = false;
   };
 
@@ -67,7 +75,7 @@ class Server : bell::utils::Task {
 
   void acceptConnection();
 
-  void readFromClient(const Connection& connection);
+  void readFromClient(Connection& connection);
 
   void closeConnection(int fd);
 

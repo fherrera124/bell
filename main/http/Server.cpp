@@ -79,6 +79,14 @@ void http::Server::acceptConnection() {
   auto acceptedSock = listenSocket.accept();
 
   if (acceptedSock) {
+    // Keep-alive connections stay open between requests, so nothing else
+    // bounds how many accumulate over time except this check.
+    if (connections.size() >= static_cast<size_t>(maxConnections)) {
+      BELL_LOG(warn, LOG_TAG, "At max connections ({}), rejecting new one",
+               maxConnections);
+      return;
+    }
+
     auto setBlockingRes = acceptedSock->setBlocking(true);
     if (!setBlockingRes) {
       BELL_LOG(error, LOG_TAG, "Error setBlocking on accepted socket: {}",
@@ -89,8 +97,11 @@ void http::Server::acceptConnection() {
     int clientFd = acceptedSock->getFd();
     FD_SET(clientFd, &masterFdSet);
     BELL_LOG(debug, LOG_TAG, "Accepted connection");
+    auto socket = std::make_shared<net::TCPSocket>(std::move(*acceptedSock));
     connections.push_back({
-        std::make_shared<net::TCPSocket>(std::move(*acceptedSock)),
+        socket,
+        std::make_shared<net::SocketStream>(socket),
+        std::chrono::steady_clock::now(),
         false,
     });
   } else {
@@ -124,12 +135,11 @@ void http::Server::closeConnection(int fd) {
   }
 }
 
-void http::Server::readFromClient(const Connection& connection) {
-  // Wrap the socket in a stream, try to parse the request
-  net::SocketStream socketStream(connection.socket);
+void http::Server::readFromClient(Connection& connection) {
+  connection.lastActivity = std::chrono::steady_clock::now();
 
-  auto reader = std::make_unique<http::Reader>(Direction::Request,
-                                               &socketStream, &readBuffer);
+  auto reader = std::make_unique<http::Reader>(
+      Direction::Request, connection.stream.get(), &readBuffer);
   auto readerRes = reader->readHeaders();
 
   if (!readerRes) {
@@ -138,9 +148,11 @@ void http::Server::readFromClient(const Connection& connection) {
     return;
   }
 
-  auto writer =
-      std::make_unique<http::Writer>(Direction::Response, &socketStream);
-  writer->setHeader("Connection", "close");
+  const bool clientWantsKeepAlive = reader->keepAliveRequested();
+
+  auto writer = std::make_unique<http::Writer>(Direction::Response,
+                                               connection.stream.get());
+  writer->setHeader("Connection", clientWantsKeepAlive ? "keep-alive" : "close");
 
   // Find the handler for the request
   auto handler = router.find(*reader->getMethod(), *reader->getPath());
@@ -161,7 +173,17 @@ void http::Server::readFromClient(const Connection& connection) {
     BELL_LOG(error, LOG_TAG, "Handler did not write response");
   }
 
-  closeConnection(connection.socket->getFd());
+  // A handler that doesn't read a POST body (or errors before doing so)
+  // would otherwise leave those bytes in front of the next request on a
+  // reused connection.
+  auto bodyDrainedRes = reader->getBodyBytesLength();
+
+  const bool shouldKeepAlive = clientWantsKeepAlive && bodyDrainedRes.has_value() &&
+                               writer->hasWrittenHeaders() &&
+                               writer->hasWrittenBody();
+  if (!shouldKeepAlive) {
+    closeConnection(connection.socket->getFd());
+  }
 }
 
 void http::Server::taskLoop() {
@@ -190,10 +212,14 @@ void http::Server::taskLoop() {
   }
 
   // Handle data from each connected client
+  auto now = std::chrono::steady_clock::now();
   for (auto it = connections.begin(); it != connections.end();) {
     int clientFd = it->socket->getFd();
     if (FD_ISSET(clientFd, &readFdSet)) {
       readFromClient(*it);
+    } else if (now - it->lastActivity >
+               std::chrono::milliseconds(keepAliveIdleTimeoutMs)) {
+      it->closed = true;
     }
 
     if (it->closed) {

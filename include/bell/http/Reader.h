@@ -146,6 +146,10 @@ class Reader {
   bell::Result<std::unordered_map<std::string, std::string>> getQueryParams()
       const;
 
+  // Whether the peer's Connection header (or, absent one, its HTTP version)
+  // asked for the connection to stay open past this message.
+  bool keepAliveRequested() const;
+
   /**
    * @brief Returns the stream used by the reader
    *
@@ -171,6 +175,7 @@ class Reader {
 
   bool headersValid = false;
   size_t readContentLength = 0;
+  int minorVersion = 0;
 
   // Checkpoint of the underlying SocketStream's totalBytesConsumed() taken
   // right after headers are parsed, used by the destructor to compute how
