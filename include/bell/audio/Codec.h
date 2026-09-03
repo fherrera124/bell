@@ -83,8 +83,15 @@ struct HQLCConfig {
   std::pmr::memory_resource* memoryResource = std::pmr::new_delete_resource();
 };
 
+struct FlacConfig {
+  // Initial decode scratch-buffer size hint, in bytes - 4096 samples at 2
+  // channels/16-bit, matching a typical libFLAC max block size.
+  size_t bufferSize = 4096 * 2 * sizeof(int16_t);
+};
+
 using CodecConfig = std::variant<OpusConfig, AACConfig, TremorConfig,
-                                 LC3plusConfig, HQLCConfig, Mp3Config>;
+                                 LC3plusConfig, HQLCConfig, Mp3Config,
+                                 FlacConfig>;
 
 /**
  * Base class for audio codecs
@@ -184,4 +191,5 @@ using AACConfig = audio::AACConfig;
 using TremorConfig = audio::TremorConfig;
 using HQLCConfig = audio::HQLCConfig;
 using Mp3Config = audio::Mp3Config;
+using FlacConfig = audio::FlacConfig;
 }  // namespace bell

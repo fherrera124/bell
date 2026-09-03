@@ -136,6 +136,43 @@ if(NOT BELL_DISABLE_CODECS AND BELL_CODEC_HQLC)
     list(APPEND BELL_LIBS hqlc)
 endif()
 
+# Audio codec - FLAC, libFLAC decoder
+if(NOT BELL_DISABLE_CODECS AND BELL_CODEC_FLAC)
+    # libFLAC build configuration - library only, decode-only usage
+    set(BUILD_CXXLIBS OFF)
+    set(BUILD_PROGRAMS OFF)
+    set(BUILD_EXAMPLES OFF)
+    set(BUILD_TESTING OFF)
+    set(BUILD_DOCS OFF)
+    set(BUILD_SHARED_LIBS OFF)
+    set(WITH_OGG OFF)
+    set(ENABLE_64_BIT_WORDS OFF)
+    set(ENABLE_MULTITHREADING OFF)
+    set(INSTALL_MANPAGES OFF)
+    set(INSTALL_PKGCONFIG_MODULES OFF)
+    set(INSTALL_CMAKE_CONFIG_MODULE OFF)
+
+    # libFLAC logs a lot of messages, so we disable them
+    set(MESSAGE_QUIET ON)
+    add_subdirectory(external/flac)
+    set(MESSAGE_QUIET OFF)
+
+    # Upstream libFLAC isn't clean against ESP-IDF's stricter project cflags
+    target_compile_options(FLAC PRIVATE -Wno-error=inline -Wno-error=undef
+                                        -Wno-error=format
+                                        -Wno-error=incompatible-pointer-types)
+
+    # src/CMakeLists.txt always adds these regardless of BUILD_PROGRAMS/
+    # BUILD_CXXLIBS - unused here, keep them out of the default build set.
+    foreach(unused_flac_target replaygain_analysis replaygain_synthesis
+                               getopt grabbag utf8)
+        set_target_properties(${unused_flac_target} PROPERTIES
+                              EXCLUDE_FROM_ALL TRUE)
+    endforeach()
+
+    list(APPEND BELL_LIBS FLAC)
+endif()
+
 # Audio backends
 if(BELL_BACKEND_PORTAUDIO)
     find_package(Portaudio REQUIRED)
