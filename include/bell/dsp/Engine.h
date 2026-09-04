@@ -36,6 +36,12 @@ class Engine {
                      const audio::Format& format);
 
  private:
+  // Handles at most DataSlots::MAX_SAMPLES frames; process() feeds it in
+  // blocks of that size.
+  DataSlots* processBlock(const std::byte* inputBuffer, size_t inputBufferLen,
+                          std::byte* outputBuffer, size_t outputBufferLen,
+                          const audio::Format& format);
+
   std::shared_ptr<TransformPipeline> activePipeline;
   DataSlots innerDataSlots;
   std::mutex accessMutex;

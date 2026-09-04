@@ -1,6 +1,8 @@
 #include "bell/dsp/Engine.h"
 #include "bell/audio/Common.h"
 
+#include <algorithm>
+
 // Enable profiling with -DBELL_DSP_ENABLE_PROFILING
 #ifdef BELL_DSP_ENABLE_PROFILING
 #include "bell/Logger.h"
@@ -16,9 +18,40 @@ void Engine::applyPipeline(const std::shared_ptr<TransformPipeline>& pipeline) {
   activePipeline = pipeline;
 }
 
+// DataSlots::configure() clamps to MAX_SAMPLES rather than failing, so a
+// longer buffer handed straight to processBlock() would come back with its
+// tail neither processed nor written - silently unprocessed audio.
 DataSlots* Engine::process(const std::byte* inputBuffer, size_t inputBufferLen,
                            std::byte* outputBuffer, size_t outputBufferLen,
                            const audio::Format& format) {
+  const size_t frameBytes = format.samplesToBytes(1);
+  if (frameBytes == 0) {
+    return nullptr;
+  }
+  const size_t maxBlockBytes = DataSlots::MAX_SAMPLES * frameBytes;
+
+  DataSlots* slots = nullptr;
+  size_t offset = 0;
+  while (offset < inputBufferLen) {
+    const size_t blockBytes = std::min(maxBlockBytes, inputBufferLen - offset);
+    if (offset >= outputBufferLen) {
+      break;
+    }
+    slots = processBlock(inputBuffer + offset, blockBytes,
+                         outputBuffer + offset,
+                         std::min(blockBytes, outputBufferLen - offset), format);
+    if (slots == nullptr) {
+      return nullptr;
+    }
+    offset += blockBytes;
+  }
+  return slots;
+}
+
+DataSlots* Engine::processBlock(const std::byte* inputBuffer,
+                                size_t inputBufferLen, std::byte* outputBuffer,
+                                size_t outputBufferLen,
+                                const audio::Format& format) {
 #ifdef BELL_DSP_ENABLE_PROFILING
   auto processStartTime = bell::utils::ClockCounter::now();
 #endif
