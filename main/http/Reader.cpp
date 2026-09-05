@@ -1,5 +1,8 @@
 #include "bell/http/Reader.h"
 
+#include <algorithm>
+#include <array>
+
 #include "bell/Logger.h"
 #include "bell/Result.h"
 #include "bell/http/Common.h"
@@ -338,6 +341,56 @@ bell::Result<size_t> http::Reader::getBodyBytesLength() {
   return readContentLength;
 }
 
+size_t http::Reader::remainingBodyBytes() const {
+  if (!contentLength.has_value() || readContentLength >= *contentLength) {
+    return 0;
+  }
+
+  return *contentLength - readContentLength;
+}
+
+bell::Result<size_t> http::Reader::readBodyChunk(std::byte* dst, size_t len) {
+  if (!isValid(readerDirection)) {
+    return make_unexpected_errc<size_t>(std::errc::operation_not_permitted);
+  }
+
+  size_t toRead = std::min(len, remainingBodyBytes());
+  if (toRead == 0) {
+    return size_t{0};
+  }
+
+  istream->read(reinterpret_cast<char*>(dst),
+                static_cast<std::streamsize>(toRead));
+  readContentLength += istream->gcount();
+
+  if (istream->fail() && !istream->eof()) {
+    return make_unexpected_errc<size_t>(std::errc::io_error);
+  }
+
+  return static_cast<size_t>(istream->gcount());
+}
+
+bell::Result<> http::Reader::discardRemainingBody() {
+  if (remainingBodyBytes() > maxDrainLen) {
+    return make_unexpected_errc(std::errc::message_size);
+  }
+
+  std::array<std::byte, 512> scratch;
+  while (remainingBodyBytes() > 0) {
+    auto res = readBodyChunk(scratch.data(), scratch.size());
+    if (!res) {
+      return nonstd::make_unexpected(res.error());
+    }
+
+    // Peer stopped short of Content-Length; the rest is never arriving.
+    if (*res == 0) {
+      return make_unexpected_errc(std::errc::io_error);
+    }
+  }
+
+  return {};
+}
+
 bell::Result<> http::Reader::readBody() {
   if (!usingExternalBuffer) {
     bufferPtr = &internalBuffer;
@@ -352,13 +405,13 @@ bell::Result<> http::Reader::readBody() {
   }
 
   // Ensure that the response buffer has enough space to read the content
-  bufferPtr->resize(bufferPtr->size() + contentLength.value() -
-                    readContentLength);
+  const size_t remaining = remainingBodyBytes();
+  const size_t writeOffset = bufferPtr->size();
+  bufferPtr->resize(writeOffset + remaining);
 
   // Read the content
-  istream->read(
-      bufferPtr->data() + bufferPtr->size() - contentLength.value(),
-      static_cast<std::streamsize>(contentLength.value() - readContentLength));
+  istream->read(bufferPtr->data() + writeOffset,
+                static_cast<std::streamsize>(remaining));
 
   if (istream->fail() && !istream->eof()) {
     return make_unexpected_errc(std::errc::io_error);

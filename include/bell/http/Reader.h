@@ -139,6 +139,27 @@ class Reader {
   bell::Result<size_t> getBodyBytesLength();
 
   /**
+   * @brief Reads up to len bytes of the body into dst, leaving the rest on the
+   * stream. Returns the number of bytes read, or 0 once the body is fully
+   * consumed.
+   * @remark For bodies too large to hold in memory. Don't mix with the
+   * getBody* accessors on the same reader.
+   */
+  bell::Result<size_t> readBodyChunk(std::byte* dst, size_t len);
+
+  /**
+   * @brief Reads and discards whatever body bytes were never consumed. Fails
+   * if more than maxDrainLen are left, since a connection is not worth
+   * reusing at that price.
+   */
+  bell::Result<> discardRemainingBody();
+
+  /**
+   * @brief Body bytes not yet consumed, per the Content-Length header.
+   */
+  size_t remainingBodyBytes() const;
+
+  /**
    * @brief Returns the query parameters of the request, parsed as key-value pairs
    *
    * @return std::unordered_map<std::string, std::string>
@@ -166,6 +187,7 @@ class Reader {
   // const int" initializer is only usable in constant expressions, not as
   // something you can take the address/reference of.
   static constexpr int maxRequestLen = 4 * 1024;
+  static constexpr size_t maxDrainLen = 64 * 1024;
   Direction readerDirection = Direction::Invalid;
   std::shared_ptr<net::SocketStream> sharedIstream;
   std::istream* istream{};

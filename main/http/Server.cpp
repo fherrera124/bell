@@ -176,7 +176,7 @@ void http::Server::readFromClient(Connection& connection) {
   // A handler that doesn't read a POST body (or errors before doing so)
   // would otherwise leave those bytes in front of the next request on a
   // reused connection.
-  auto bodyDrainedRes = reader->getBodyBytesLength();
+  auto bodyDrainedRes = reader->discardRemainingBody();
 
   const bool shouldKeepAlive = clientWantsKeepAlive && bodyDrainedRes.has_value() &&
                                writer->hasWrittenHeaders() &&

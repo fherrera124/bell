@@ -1,9 +1,29 @@
 #include <doctest/doctest.h>
 
+#include <array>
+#include <cstddef>
 #include <sstream>
+#include <string>
+#include <vector>
 
 // Code under test
 #include "bell/http/Reader.h"
+
+namespace {
+std::string bodyOfLength(size_t n) {
+  std::string body(n, '\0');
+  for (size_t i = 0; i < n; i++) {
+    body[i] = static_cast<char>('a' + (i % 26));
+  }
+  return body;
+}
+
+std::string postRequest(const std::string& body, size_t declaredLength,
+                        const std::string& trailer = "") {
+  return "POST /upload HTTP/1.1\r\nHost: example.com\r\nContent-Length: " +
+         std::to_string(declaredLength) + "\r\n\r\n" + body + trailer;
+}
+}  // namespace
 
 TEST_CASE("bell::http::Reader tests") {
   // HTTP response parsing tests
@@ -157,5 +177,98 @@ TEST_CASE("bell::http::Reader tests") {
     REQUIRE(reader.readHeaders());
     REQUIRE(reader.getMethod() == bell::http::Method::PUT);
     REQUIRE(reader.getHeader("Authorization") == "Bearer token");
+  }
+}
+
+TEST_CASE("bell::http::Reader body streaming") {
+  SUBCASE("Streams the whole body in fixed chunks") {
+    const std::string body = bodyOfLength(1000);
+    std::istringstream mockRequest(postRequest(body, body.size()));
+    bell::http::Reader reader(bell::http::Direction::Request, &mockRequest);
+    REQUIRE(reader.readHeaders());
+
+    std::vector<char> received;
+    std::array<std::byte, 64> chunk{};
+    for (;;) {
+      auto read = reader.readBodyChunk(chunk.data(), chunk.size());
+      REQUIRE(read);
+      if (*read == 0) {
+        break;
+      }
+      received.insert(received.end(), reinterpret_cast<char*>(chunk.data()),
+                      reinterpret_cast<char*>(chunk.data()) + *read);
+    }
+
+    REQUIRE(std::string(received.begin(), received.end()) == body);
+    REQUIRE(reader.remainingBodyBytes() == 0);
+
+    // Nothing left for the server to drain afterwards
+    REQUIRE(reader.discardRemainingBody());
+  }
+
+  SUBCASE("Drains what a handler left behind") {
+    const std::string body = bodyOfLength(1000);
+    std::istringstream mockRequest(
+        postRequest(body, body.size(), "GET /next HTTP/1.1\r\n"));
+    bell::http::Reader reader(bell::http::Direction::Request, &mockRequest);
+    REQUIRE(reader.readHeaders());
+
+    std::array<std::byte, 100> chunk{};
+    auto read = reader.readBodyChunk(chunk.data(), chunk.size());
+    REQUIRE(read);
+    REQUIRE(*read == 100);
+    REQUIRE(reader.remainingBodyBytes() == 900);
+
+    REQUIRE(reader.discardRemainingBody());
+    REQUIRE(reader.remainingBodyBytes() == 0);
+
+    // The stream is left at the start of the next request on the connection
+    std::string nextRequestLine;
+    std::getline(mockRequest, nextRequestLine);
+    REQUIRE(nextRequestLine == "GET /next HTTP/1.1\r");
+  }
+
+  SUBCASE("Refuses to drain a body too large to be worth it") {
+    const std::string body = bodyOfLength(70 * 1024);
+    std::istringstream mockRequest(postRequest(body, body.size()));
+    bell::http::Reader reader(bell::http::Direction::Request, &mockRequest);
+    REQUIRE(reader.readHeaders());
+
+    REQUIRE(!reader.discardRemainingBody());
+  }
+
+  SUBCASE("Reports a body shorter than Content-Length") {
+    const std::string body = bodyOfLength(40);
+    std::istringstream mockRequest(postRequest(body, 1000));
+    bell::http::Reader reader(bell::http::Direction::Request, &mockRequest);
+    REQUIRE(reader.readHeaders());
+
+    size_t total = 0;
+    std::array<std::byte, 32> chunk{};
+    for (;;) {
+      auto read = reader.readBodyChunk(chunk.data(), chunk.size());
+      REQUIRE(read);
+      if (*read == 0) {
+        break;
+      }
+      total += *read;
+    }
+
+    REQUIRE(total == 40);
+    REQUIRE(reader.remainingBodyBytes() == 960);
+    REQUIRE(!reader.discardRemainingBody());
+  }
+
+  SUBCASE("Leaves the buffered accessors alone") {
+    const std::string body = bodyOfLength(500);
+    std::istringstream mockRequest(postRequest(body, body.size()));
+    bell::http::Reader reader(bell::http::Direction::Request, &mockRequest);
+    REQUIRE(reader.readHeaders());
+
+    auto view = reader.getBodyStringView();
+    REQUIRE(view);
+    REQUIRE(std::string(*view) == body);
+    REQUIRE(reader.remainingBodyBytes() == 0);
+    REQUIRE(reader.discardRemainingBody());
   }
 }
