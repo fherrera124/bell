@@ -25,12 +25,13 @@ class EspMemoryResource : public std::pmr::memory_resource {
   void* do_allocate(size_t bytes, size_t alignment) override {
     void* ptr = heap_caps_aligned_alloc(alignment, bytes, Caps);
 
-    // Could not allocate
+    // std::pmr::memory_resource's contract is to throw, which lets a
+    // caller degrade instead of taking the whole device down.
     if (ptr == nullptr) {
       BELL_LOG(error, "EspMemoryResource",
                "OOM! Failed to allocate {} bytes (align {}) with caps 0x{}",
                bytes, alignment, (unsigned long)Caps);
-      abort();
+      throw std::bad_alloc();
     }
 
     return ptr;

@@ -2,6 +2,23 @@
 #include "bell/audio/Common.h"
 
 #include <algorithm>
+#include <cstdint>
+
+namespace {
+// The pipeline works in IQ30, where full scale is 1.0 and the headroom
+// above it is real: a gain boost or a biquad overshoot lands past it, and
+// the plain cast used to wrap such a sample to the opposite rail.
+int16_t toS16Saturating(int32_t iq30) {
+  const int32_t scaled = iq30 >> 15U;
+  if (scaled > INT16_MAX) {
+    return INT16_MAX;
+  }
+  if (scaled < INT16_MIN) {
+    return INT16_MIN;
+  }
+  return static_cast<int16_t>(scaled);
+}
+}  // namespace
 
 // Enable profiling with -DBELL_DSP_ENABLE_PROFILING
 #ifdef BELL_DSP_ENABLE_PROFILING
@@ -181,8 +198,8 @@ DataSlots* Engine::processBlock(const std::byte* inputBuffer,
 
         for (size_t frameIdx = 0; frameIdx < innerDataSlots.numSamples;
              frameIdx++) {
-          int16_t left = static_cast<int16_t>(leftChan[frameIdx] >> 15U);
-          int16_t right = static_cast<int16_t>(rightChan[frameIdx] >> 15U);
+          int16_t left = toS16Saturating(leftChan[frameIdx]);
+          int16_t right = toS16Saturating(rightChan[frameIdx]);
           // Pack both samples into a single 32-bit write
           uint32_t stereoFrame =
               (static_cast<uint32_t>(static_cast<uint16_t>(left))) |
@@ -195,8 +212,8 @@ DataSlots* Engine::processBlock(const std::byte* inputBuffer,
         for (size_t frameIdx = 0; frameIdx < innerDataSlots.numSamples;
              frameIdx++) {
           for (size_t chan = 0; chan < numChannels; chan++) {
-            *dst++ = static_cast<int16_t>(
-                (*innerDataSlots.primarySlot)[chan][frameIdx] >> 15U);
+            *dst++ =
+                toS16Saturating((*innerDataSlots.primarySlot)[chan][frameIdx]);
           }
         }
       }
