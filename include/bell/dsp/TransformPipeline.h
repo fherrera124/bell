@@ -114,12 +114,14 @@ class DataSlots {
       samples = MAX_SAMPLES;
     }
 
-    numSamples = samples;
-    sampleFormat = format;
-
     size_t channels = format.getNumChannels();
     slotA.configure(channels, samples);
     slotB.configure(channels, samples);
+
+    // Last: a slot that throws leaves this unconfigured, so the next call
+    // retries instead of reading null channel pointers.
+    numSamples = samples;
+    sampleFormat = format;
   }
 };
 
