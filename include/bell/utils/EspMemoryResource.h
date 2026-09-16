@@ -49,6 +49,60 @@ class EspMemoryResource : public std::pmr::memory_resource {
   }
 };
 
+// Prefers Caps and takes FallbackCaps when the preferred pool is empty, so
+// a tight internal heap costs speed rather than the feature. The first
+// fallback is logged: it is a performance change worth seeing.
+template <uint32_t Caps, uint32_t FallbackCaps>
+class EspFallbackMemoryResource : public std::pmr::memory_resource {
+ public:
+  EspFallbackMemoryResource() = default;
+  ~EspFallbackMemoryResource() override = default;
+
+  EspFallbackMemoryResource(const EspFallbackMemoryResource&) = delete;
+  EspFallbackMemoryResource& operator=(const EspFallbackMemoryResource&) =
+      delete;
+
+ protected:
+  void* do_allocate(size_t bytes, size_t alignment) override {
+    void* ptr = heap_caps_aligned_alloc(alignment, bytes, Caps);
+    if (ptr != nullptr) {
+      return ptr;
+    }
+
+    ptr = heap_caps_aligned_alloc(alignment, bytes, FallbackCaps);
+    if (ptr == nullptr) {
+      BELL_LOG(error, "EspMemoryResource",
+               "OOM! Failed to allocate {} bytes (align {}) with caps 0x{:x} "
+               "or 0x{:x}",
+               bytes, alignment, (unsigned long)Caps,
+               (unsigned long)FallbackCaps);
+      throw std::bad_alloc();
+    }
+
+    if (!fallbackLogged) {
+      fallbackLogged = true;
+      BELL_LOG(warn, "EspMemoryResource",
+               "caps 0x{:x} exhausted; {} bytes served from 0x{:x} instead",
+               (unsigned long)Caps, bytes, (unsigned long)FallbackCaps);
+    }
+    return ptr;
+  }
+
+  void do_deallocate(void* p, size_t bytes, size_t alignment) override {
+    (void)bytes;
+    (void)alignment;
+    heap_caps_free(p);
+  }
+
+  bool do_is_equal(
+      const std::pmr::memory_resource& other) const noexcept override {
+    return this == &other;
+  }
+
+ private:
+  bool fallbackLogged = false;
+};
+
 using DmaMemoryResource =
     EspMemoryResource<MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT>;
 
@@ -66,6 +120,12 @@ static InternalMemoryResource internalMemoryResource{};
 
 // Static instance of the PSRAM memory resource
 static PsramMemoryResource psramMemoryResource{};
+
+using InternalThenPsramMemoryResource =
+    EspFallbackMemoryResource<MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT,
+                              MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT>;
+
+static InternalThenPsramMemoryResource internalThenPsramMemoryResource{};
 
 }  // namespace bell::utils
 

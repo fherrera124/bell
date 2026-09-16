@@ -16,8 +16,8 @@ namespace bell::dsp {
  * @brief Allocator that uses internal DRAM on ESP32 via polymorphic_allocator
  * 
  * This is a type alias for std::pmr::polymorphic_allocator configured to use
- * the internal memory resource. On ESP32, this forces allocations to internal
- * memory instead of PSRAM for better performance.
+ * the internal memory resource. On ESP32, this prefers internal memory over
+ * PSRAM for performance, falling back to PSRAM when internal RAM is out.
  */
 template <typename T>
 using InternalMemoryAllocator = std::pmr::polymorphic_allocator<T>;
@@ -26,7 +26,7 @@ using InternalMemoryAllocator = std::pmr::polymorphic_allocator<T>;
  * @brief Get the memory resource for internal DRAM allocations
  */
 inline std::pmr::memory_resource* getInternalMemoryResource() {
-  return &bell::utils::internalMemoryResource;
+  return &bell::utils::internalThenPsramMemoryResource;
 }
 
 #else
