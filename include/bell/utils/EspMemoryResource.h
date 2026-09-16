@@ -29,7 +29,7 @@ class EspMemoryResource : public std::pmr::memory_resource {
     // caller degrade instead of taking the whole device down.
     if (ptr == nullptr) {
       BELL_LOG(error, "EspMemoryResource",
-               "OOM! Failed to allocate {} bytes (align {}) with caps 0x{}",
+               "OOM! Failed to allocate {} bytes (align {}) with caps 0x{:x}",
                bytes, alignment, (unsigned long)Caps);
       throw std::bad_alloc();
     }
