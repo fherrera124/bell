@@ -6,10 +6,14 @@
 #include <string>
 
 namespace bell::utils {
-// Enumeration of task cores, used on Espressif platforms
+// Task core selection on Espressif platforms. With CONFIG_FREERTOS_UNICORE,
+// Core1 maps to core 0 so applications can share the same task configuration.
 enum class TaskCore {
+  // Pin the task to core 0.
   Core0 = 0,
+  // Pin the task to core 1, or core 0 in single-core configurations.
   Core1 = 1,
+  // Leave core selection to the scheduler (no affinity).
   CoreAny = -1,
 };
 
@@ -20,7 +24,8 @@ class Task {
    * @param taskName The name of the task
    * @param stackSize The size of the task stack
    * @param espPriority The priority of the task, Espressif platforms only
-   * @param espTaskCore The core to run the task on, Espressif platforms only
+   * @param espTaskCore The core to run the task on, Espressif platforms only.
+   * Core1 falls back to core 0 when CONFIG_FREERTOS_UNICORE is enabled.
    * @param espStackOnPsram Whether to allocate the stack on PSRAM, Espressif platforms only.
    */
   Task(const std::string& taskName, int stackSize, int espPriority = 0,

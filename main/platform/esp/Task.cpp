@@ -146,7 +146,12 @@ class Task::Impl {
       case TaskCore::Core0:
         return 0;
       case TaskCore::Core1:
+#if CONFIG_FREERTOS_UNICORE
+        // Keep the shared task configuration usable on single-core targets.
+        return 0;
+#else
         return 1;
+#endif
       case TaskCore::CoreAny:
         return tskNO_AFFINITY;
     }
