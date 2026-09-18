@@ -20,6 +20,10 @@ list(APPEND BELL_LIBS picohttpparser)
 
 # Include iqmath
 add_subdirectory(external/iqmath)
+if(CMAKE_C_COMPILER_ID MATCHES "^(GNU|Clang|AppleClang)$")
+    # iqmath reinterprets integer storage through float pointers.
+    target_compile_options(iqmath PRIVATE -fno-strict-aliasing)
+endif()
 list(APPEND BELL_LIBS iqmath)
 
 # Include pthread
