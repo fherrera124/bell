@@ -16,7 +16,9 @@
 namespace bell::http {
 class Server : bell::utils::Task {
  public:
-  Server(int maxConnections = 5);
+  // PSRAM stacks require ESP-IDF external task-stack support. Handlers must
+  // not perform flash I/O on that stack. Ignored on non-ESP platforms.
+  Server(int maxConnections = 5, bool espStackOnPsram = false);
   ~Server() override;
   using RequestHandler = std::function<void(
       const std::unique_ptr<Reader>& requestReader,

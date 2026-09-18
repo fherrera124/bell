@@ -14,11 +14,9 @@
 
 using namespace bell;
 
-http::Server::Server(int maxConnections)
-    // espStackOnPsram=false: no particular need for PSRAM here, and
-    // not every board has it.
+http::Server::Server(int maxConnections, bool espStackOnPsram)
     : utils::Task("bell::net::HTTPServer", 16 * 1024, /*espPriority=*/0,
-                  TaskCore::CoreAny, /*espStackOnPsram=*/false),
+                  TaskCore::CoreAny, espStackOnPsram),
       maxConnections(maxConnections) {
   notFoundHandler = [](const auto& /*requestReader*/,
                        const auto& responseWriter, const auto& /*params*/) {
@@ -64,7 +62,11 @@ bell::Result<> http::Server::listen(int port) {
   FD_SET(listenSocket.getFd(), &masterFdSet);
   maxFd = listenSocket.getFd();
 
-  startTask();  // Will begin the task loop
+  if (!startTask()) {
+    BELL_LOG(error, LOG_TAG, "Failed to start HTTP server task");
+    listenSocket.close();
+    return make_unexpected_errc(std::errc::resource_unavailable_try_again);
+  }
   BELL_LOG(info, LOG_TAG, "Server listening on port {}", *listenRes);
 
   return {};
