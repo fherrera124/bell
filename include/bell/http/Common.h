@@ -14,7 +14,10 @@
 
 namespace bell::http {
 
-enum class Errc { Success = 0, InvalidURL, InvalidState, SocketNotOpen };
+enum class Errc {
+  Success = 0, InvalidURL, InvalidState, SocketNotOpen,
+  EndOfStream, IncompleteMessage
+};
 
 namespace internal {
 struct http_error_category : public std::error_category {
@@ -29,6 +32,10 @@ struct http_error_category : public std::error_category {
         return "Invalid state, either the request or response is not valid";
       case Errc::SocketNotOpen:
         return "Socket not open";
+      case Errc::EndOfStream:
+        return "End of HTTP stream";
+      case Errc::IncompleteMessage:
+        return "Incomplete HTTP message";
       default:
         return "Unknown error";
     }

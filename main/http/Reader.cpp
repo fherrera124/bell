@@ -2,18 +2,15 @@
 
 #include <algorithm>
 #include <array>
+#include <charconv>
+#include <cstdint>
 
-#include "bell/Logger.h"
 #include "bell/Result.h"
 #include "bell/http/Common.h"
 #include "bell/io/MemoryStream.h"
 #include "bell/net/SocketStream.h"
 #include "bell/net/URIParser.h"
 #include "nonstd/expected.hpp"
-
-namespace {
-const char* LOG_TAG = "HTTPReader";
-}
 
 using namespace bell;
 
@@ -32,18 +29,60 @@ http::Reader::Reader(Direction readerDirection, std::istream* istream,
   }
 }
 
-http::Reader::Reader(Direction readerDirection,
-                     std::shared_ptr<net::SocketStream> socketStream)
-    : readerDirection(readerDirection),
-      sharedIstream(std::move(socketStream)),
-      istream(sharedIstream.get()),
-      bufferPtr(&internalBuffer) {
-  // Use the internal buffer for reading
-  bufferPtr->clear();
+http::Reader::Reader(Direction direction, net::SocketStream* stream,
+                     std::vector<char>* externalBuffer)
+    : Reader(direction, static_cast<std::istream*>(stream), externalBuffer) {
+  socketStream = stream;
+}
+
+http::Reader::Reader(Direction direction,
+                     std::shared_ptr<net::SocketStream> stream)
+    : Reader(direction, stream.get()) {
+  sharedIstream = std::move(stream);
+}
+
+http::Reader::Reader(Reader&& other) noexcept {
+  swap(other);
+}
+
+http::Reader& http::Reader::operator=(Reader&& other) noexcept {
+  if (this != &other) {
+    Reader previous(std::move(other));
+    swap(previous);
+  }
+  return *this;
+}
+
+void http::Reader::swap(Reader& other) noexcept {
+  using std::swap;
+  swap(readerDirection, other.readerDirection);
+  swap(sharedIstream, other.sharedIstream);
+  swap(istream, other.istream);
+  swap(socketStream, other.socketStream);
+  swap(internalBuffer, other.internalBuffer);
+  swap(bufferPtr, other.bufferPtr);
+  swap(usingExternalBuffer, other.usingExternalBuffer);
+  swap(headersValid, other.headersValid);
+  swap(readContentLength, other.readContentLength);
+  swap(minorVersion, other.minorVersion);
+  swap(bodyStartByteCount_, other.bodyStartByteCount_);
+  swap(phrHeaders, other.phrHeaders);
+  swap(contentLength, other.contentLength);
+  swap(method, other.method);
+  swap(path, other.path);
+  swap(queryParams, other.queryParams);
+  swap(statusCode, other.statusCode);
+  swap(statusMessage, other.statusMessage);
+  if (!usingExternalBuffer) bufferPtr = &internalBuffer;
+  if (!other.usingExternalBuffer) other.bufferPtr = &other.internalBuffer;
 }
 
 bell::Result<> http::Reader::readHeaders() {
-  if (headersValid) {
+  return readHeaders(false);
+}
+
+bell::Result<> http::Reader::readHeaders(bool responseToHead) {
+  if (!istream || readerDirection == Direction::Invalid || headersValid) {
     return make_unexpected_errc(std::errc::operation_not_permitted);
   }
 
@@ -72,12 +111,8 @@ bell::Result<> http::Reader::readHeaders() {
 
   // Consume the stream byte by byte, so we dont read into the body
   while (lastPhrResult <= 0 && istream->get(lastChar)) {
-    if (bufferPtr->size() > maxRequestLen) {
-      BELL_LOG(error, LOG_TAG,
-               "readHeaders: exceeded maxRequestLen ({} bytes), so far: {}",
-               maxRequestLen,
-               std::string_view(bufferPtr->data(), bufferPtr->size()));
-      return make_unexpected_errc(std::errc::io_error);
+    if (bufferPtr->size() >= maxRequestLen) {
+      return make_unexpected_errc(std::errc::message_size);
     }
 
     bufferPtr->push_back(lastChar);
@@ -108,13 +143,7 @@ bell::Result<> http::Reader::readHeaders() {
 
       // Throw on phr error, or if the parser is not done yet and we're at the end
       if (lastPhrResult == -1 || (isLastLine && lastPhrResult <= 0)) {
-        BELL_LOG(error, LOG_TAG,
-                 "readHeaders: phr_parse_{} rejected/incomplete "
-                 "(result={}, isLastLine={}), {} bytes so far: {}",
-                 readerDirection == Direction::Request ? "request" : "response",
-                 lastPhrResult, isLastLine, bufferPtr->size(),
-                 std::string_view(bufferPtr->data(), bufferPtr->size()));
-        return make_unexpected_errc(std::errc::io_error);
+        return make_unexpected_errc(std::errc::bad_message);
       }
 
       lastLineStart = bufferPtr->size();
@@ -122,30 +151,49 @@ bell::Result<> http::Reader::readHeaders() {
   }
 
   if (lastPhrResult <= 0) {
-    // Stream ended (clean EOF or a real read error already logged by
-    // SocketBuffer) before a full status line + headers were ever seen.
-    BELL_LOG(error, LOG_TAG,
-             "readHeaders: stream ended before headers were complete "
-             "(eof={}, fail={}, bad={}), {} bytes so far: {}",
-             istream->eof(), istream->fail(), istream->bad(),
-             bufferPtr->size(),
-             std::string_view(bufferPtr->data(), bufferPtr->size()));
-    return make_unexpected_errc(std::errc::io_error);
+    return nonstd::make_unexpected(readFailure(
+        bufferPtr->empty() ? Errc::EndOfStream : Errc::IncompleteMessage));
+  }
+  phrHeaders.resize(numHeaders);
+
+  // Content-Length must be an unambiguous, nonnegative decimal size.
+  size_t lengthFields = 0;
+  for (const auto& header : phrHeaders) {
+    constexpr std::string_view name = "Content-Length";
+    if (header.name_len == name.size() &&
+        std::equal(name.begin(), name.end(), header.name,
+                   [](unsigned char a, unsigned char b) {
+                     return std::tolower(a) == std::tolower(b);
+                   })) {
+      ++lengthFields;
+    }
+  }
+  if (lengthFields > 0) {
+    auto value = getHeader("Content-Length");
+    size_t length = 0;
+    auto parsed = std::from_chars(value.data(), value.data() + value.size(), length);
+    if (lengthFields != 1 || parsed.ec != std::errc{} ||
+        parsed.ptr != value.data() + value.size()) {
+      return make_unexpected_errc(std::errc::bad_message);
+    }
+    contentLength = length;
+  } else if (readerDirection == Direction::Request) {
+    contentLength = 0;
   }
 
-  headersValid = true;  // Mark headers as read
-
-  // Assign the content length
-  auto contentLengthHeader = getHeader("Content-Length");
-  if (!contentLengthHeader.empty()) {
-    contentLength = std::stoi(std::string(contentLengthHeader));
-  } else {
+  const bool noResponseBody = readerDirection == Direction::Response &&
+      (responseToHead || parsedStatusCode < 200 || parsedStatusCode == 204 ||
+       parsedStatusCode == 304);
+  if (noResponseBody) {
     contentLength = 0;
+  } else if (!getHeader("Transfer-Encoding").empty()) {
+    // Transfer codings require a decoder before message boundaries are known.
+    return make_unexpected_errc(std::errc::not_supported);
   }
 
   if (readerDirection == Direction::Response) {
     statusCode = parsedStatusCode;
-    statusMessage = std::string(statusMessagePtr, statusMessageLen);
+    statusMessage = std::string_view(statusMessagePtr, statusMessageLen);
 
     if (statusCode < 100 || statusCode >= 600) {
       return make_unexpected_errc(std::errc::protocol_not_supported);
@@ -158,12 +206,15 @@ bell::Result<> http::Reader::readHeaders() {
       return make_unexpected_errc(std::errc::protocol_not_supported);
     }
 
+    headersValid = true;
     auto res = parseQueryParams();
     if (!res) {
+      headersValid = false;
       return res;
     }
   }
 
+  headersValid = true;
   if (sharedIstream) {
     bodyStartByteCount_ = sharedIstream->totalBytesConsumed();
   }
@@ -172,16 +223,30 @@ bell::Result<> http::Reader::readHeaders() {
 }
 
 http::Reader::~Reader() {
+  releaseConnection();
+}
+
+void http::Reader::releaseConnection() {
   if (readerDirection != Direction::Response || !sharedIstream) {
     return;
   }
-  // An undrained or unverifiable (no Content-Length) body must not go back
-  // to the connection pool looking healthy.
-  size_t bytesConsumed =
-      sharedIstream->totalBytesConsumed() - bodyStartByteCount_;
-  if (!contentLength.has_value() || bytesConsumed < *contentLength) {
+  const size_t consumed = sharedIstream->totalBytesConsumed();
+  if (!headersValid || !contentLength || consumed < bodyStartByteCount_ ||
+      consumed - bodyStartByteCount_ != *contentLength ||
+      sharedIstream->readState() != net::ReadState::Ready ||
+      (statusCode && *statusCode < 200) || !keepAliveRequested()) {
     sharedIstream->close();
   }
+}
+
+std::error_code http::Reader::readFailure(Errc eofError) const {
+  if (socketStream && socketStream->readState() == net::ReadState::Error) {
+    return socketStream->readError();
+  }
+  if (istream->bad() || !istream->eof()) {
+    return std::make_error_code(std::errc::io_error);
+  }
+  return make_error_code(eofError);
 }
 
 std::istream* http::Reader::getStream() const {
@@ -189,7 +254,7 @@ std::istream* http::Reader::getStream() const {
 }
 
 size_t http::Reader::getContentLength() const {
-  return contentLength.value();
+  return contentLength.value_or(0);
 }
 
 bell::Result<std::unordered_map<std::string, std::string>>
@@ -247,11 +312,9 @@ bell::Result<std::string_view> http::Reader::getBodyStringView() {
     bufferPtr = &internalBuffer;
   }
 
-  if (readContentLength == 0) {
-    auto res = readBody();
-    if (!res) {
-      return nonstd::make_unexpected(res.error());
-    }
+  auto res = readBody();
+  if (!res) {
+    return nonstd::make_unexpected(res.error());
   }
 
   if (!usingExternalBuffer) {
@@ -268,11 +331,9 @@ bell::Result<std::vector<std::byte>> http::Reader::getBodyBytes() {
     bufferPtr = &internalBuffer;
   }
 
-  if (readContentLength == 0) {
-    auto res = readBody();
-    if (!res) {
-      return nonstd::make_unexpected(res.error());
-    }
+  auto res = readBody();
+  if (!res) {
+    return nonstd::make_unexpected(res.error());
   }
 
   return std::vector<std::byte>{
@@ -287,11 +348,9 @@ bell::Result<const std::byte*> http::Reader::getBodyBytesPtr() {
     bufferPtr = &internalBuffer;
   }
 
-  if (readContentLength == 0) {
-    auto res = readBody();
-    if (!res) {
-      return nonstd::make_unexpected(res.error());
-    }
+  auto res = readBody();
+  if (!res) {
+    return nonstd::make_unexpected(res.error());
   }
 
   return reinterpret_cast<const std::byte*>(
@@ -331,11 +390,9 @@ bell::Result<> http::Reader::parseQueryParams() {
 }
 
 bell::Result<size_t> http::Reader::getBodyBytesLength() {
-  if (readContentLength == 0) {
-    auto res = readBody();
-    if (!res) {
-      return nonstd::make_unexpected(res.error());
-    }
+  auto res = readBody();
+  if (!res) {
+    return nonstd::make_unexpected(res.error());
   }
 
   return readContentLength;
@@ -353,25 +410,31 @@ bell::Result<size_t> http::Reader::readBodyChunk(std::byte* dst, size_t len) {
   if (!isValid(readerDirection)) {
     return make_unexpected_errc<size_t>(std::errc::operation_not_permitted);
   }
-
-  size_t toRead = std::min(len, remainingBodyBytes());
+  const size_t toRead = contentLength ? std::min(len, remainingBodyBytes()) : len;
   if (toRead == 0) {
     return size_t{0};
   }
-
   istream->read(reinterpret_cast<char*>(dst),
                 static_cast<std::streamsize>(toRead));
-  readContentLength += istream->gcount();
-
-  if (istream->fail() && !istream->eof()) {
-    return make_unexpected_errc<size_t>(std::errc::io_error);
+  const size_t count = static_cast<size_t>(istream->gcount());
+  readContentLength += count;
+  if (count < toRead) {
+    auto error = readFailure(Errc::IncompleteMessage);
+    const bool cleanEof = istream->eof() && !istream->bad() &&
+        (!socketStream || socketStream->readState() == net::ReadState::EndOfStream);
+    if (sharedIstream) sharedIstream->close();
+    if (count == 0 && (contentLength || !cleanEof)) {
+      return nonstd::make_unexpected(error);
+    }
   }
-
-  return static_cast<size_t>(istream->gcount());
+  return count;
 }
 
 bell::Result<> http::Reader::discardRemainingBody() {
-  if (remainingBodyBytes() > maxDrainLen) {
+  if (!headersValid) {
+    return make_unexpected_errc(std::errc::operation_not_permitted);
+  }
+  if (!contentLength || remainingBodyBytes() > maxDrainLen) {
     return make_unexpected_errc(std::errc::message_size);
   }
 
@@ -384,7 +447,7 @@ bell::Result<> http::Reader::discardRemainingBody() {
 
     // Peer stopped short of Content-Length; the rest is never arriving.
     if (*res == 0) {
-      return make_unexpected_errc(std::errc::io_error);
+      return nonstd::make_unexpected(make_error_code(Errc::IncompleteMessage));
     }
   }
 
@@ -400,27 +463,35 @@ bell::Result<> http::Reader::readBody() {
     return make_unexpected_errc(std::errc::operation_not_permitted);
   }
 
-  if (contentLength == 0 || readContentLength == contentLength) {
-    return {};  // Nothing to read
+  while (!contentLength || remainingBodyBytes() > 0) {
+    const size_t count = contentLength ? remainingBodyBytes() : 4096;
+    const size_t offset = bufferPtr->size();
+    resizeBuffer(offset + count);
+    auto res = readBodyChunk(reinterpret_cast<std::byte*>(bufferPtr->data() + offset), count);
+    resizeBuffer(offset + (res ? *res : 0));
+    if (!res) return nonstd::make_unexpected(res.error());
+    if (*res == 0) break;
   }
-
-  // Ensure that the response buffer has enough space to read the content
-  const size_t remaining = remainingBodyBytes();
-  const size_t writeOffset = bufferPtr->size();
-  bufferPtr->resize(writeOffset + remaining);
-
-  // Read the content
-  istream->read(bufferPtr->data() + writeOffset,
-                static_cast<std::streamsize>(remaining));
-
-  if (istream->fail() && !istream->eof()) {
-    return make_unexpected_errc(std::errc::io_error);
-  }
-
-  // Update the read content length
-  readContentLength += istream->gcount();
-
   return {};
+}
+
+void http::Reader::resizeBuffer(size_t size) {
+  const auto base = reinterpret_cast<uintptr_t>(bufferPtr->data());
+  bufferPtr->resize(size);
+  const auto newBase = reinterpret_cast<uintptr_t>(bufferPtr->data());
+  if (newBase == base) return;
+  auto relocate = [base, newBase](const char* ptr) {
+    return ptr ? reinterpret_cast<const char*>(newBase +
+        (reinterpret_cast<uintptr_t>(ptr) - base)) : nullptr;
+  };
+  for (auto& header : phrHeaders) {
+    header.name = relocate(header.name);
+    header.value = relocate(header.value);
+  }
+  if (path) path = std::string_view(relocate(path->data()), path->size());
+  if (statusMessage) {
+    statusMessage = std::string_view(relocate(statusMessage->data()), statusMessage->size());
+  }
 }
 
 bool http::Reader::isValid(Direction expectedDirection) const {

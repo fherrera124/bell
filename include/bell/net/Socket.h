@@ -125,9 +125,10 @@ class Socket {
    *
    * @param buf Pointer to the buffer where the received data will be stored.
    * @param len The maximum number of bytes to read into the buffer.
-   * @return The number of bytes successfully read. A return value of 0 may indicate
-   * that the connection was closed, while a value less than len could indicate that
-   * no more data is currently available.
+   * @return The number of bytes read. On a stream socket with nonzero len,
+   * 0 means an orderly
+   * end of stream. Timeouts, resets and TLS truncation return an error.
+   * A positive short read does not imply end of stream.
    */
   virtual bell::Result<size_t> read(std::byte* buf, size_t len) = 0;
 

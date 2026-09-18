@@ -8,6 +8,8 @@
 #include "bell/net/Socket.h"  // for Socket
 
 namespace bell::net {
+enum class ReadState : uint8_t { Ready, EndOfStream, Error };
+
 class SocketBuffer : public std::streambuf {
  private:
   std::shared_ptr<Socket> internalSocket = nullptr;
@@ -18,6 +20,10 @@ class SocketBuffer : public std::streambuf {
 
   // Bytes read() from the socket so far. Only touched in underflow()/xsgetn().
   size_t bytesRead_ = 0;
+  ReadState readState_ = ReadState::Ready;
+  std::error_code readError_;
+
+  bell::Result<size_t> readSocket(std::byte* dst, size_t len);
 
  public:
   SocketBuffer(std::shared_ptr<Socket> socket);
@@ -34,6 +40,10 @@ class SocketBuffer : public std::streambuf {
   size_t totalBytesConsumed() const {
     return bytesRead_ - static_cast<size_t>(egptr() - gptr());
   }
+
+  // Terminal read state persists even if the owning iostream is cleared.
+  ReadState readState() const { return readState_; }
+  std::error_code readError() const { return readError_; }
 
  protected:
   int sync() override;
@@ -61,6 +71,9 @@ class SocketStream : public std::iostream {
   SocketBuffer* rdbuf() { return &socketBuf; }
 
   size_t totalBytesConsumed() const { return socketBuf.totalBytesConsumed(); }
+
+  ReadState readState() const { return socketBuf.readState(); }
+  std::error_code readError() const { return socketBuf.readError(); }
 
   void close() { socket->close(); }
 };

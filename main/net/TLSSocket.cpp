@@ -286,8 +286,17 @@ int net::TLSSocket::takeFd() {
 }
 
 bell::Result<size_t> net::TLSSocket::read(std::byte* buf, size_t len) {
+  if (len == 0) {
+    return size_t{0};
+  }
   int res = mbedtls_ssl_read(&sslCtx, reinterpret_cast<uint8_t*>(buf), len);
 
+  if (res == MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY) {
+    return size_t{0};
+  }
+  if (res == 0) {
+    return nonstd::make_unexpected(make_tls_error_code(MBEDTLS_ERR_SSL_CONN_EOF));
+  }
   if (res < 0) {
     return nonstd::make_unexpected(mbedtlsToCommonErrc(res));
   }

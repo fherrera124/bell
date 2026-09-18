@@ -339,7 +339,7 @@ bell::Result<Response> DefaultTransport::execute(const Request& req) {
     http::Reader reader(Direction::Response, socketStream);
 
     // Try to read the headers
-    res = reader.readHeaders();
+    res = reader.readHeaders(req.method == Method::HEAD);
     if (!res) {
       BELL_LOG(error, LOG_TAG, "Error during headers read: {}", res.error());
       return nonstd::make_unexpected(res.error());
@@ -366,7 +366,7 @@ Response::Response(http::Reader responseReader)
   // Extract status code and message from the reader
   statusCode = *bodyReader.getStatusCode();
   headers = bodyReader.getAllHeaders();
-  contentLength = bodyReader.getContentLength();
+  contentLength = bodyReader.contentLengthHint();
   statusMessage = *bodyReader.getStatusMessage();
 }
 
@@ -384,6 +384,10 @@ bell::Result<const std::byte*> Response::bytesPtr() {
 
 bell::Result<size_t> Response::bytesLength() {
   return bodyReader.getBodyBytesLength();
+}
+
+bell::Result<size_t> Response::readBodyChunk(std::byte* dst, size_t len) {
+  return bodyReader.readBodyChunk(dst, len);
 }
 
 std::istream* Response::stream() const {

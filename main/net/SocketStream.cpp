@@ -40,6 +40,8 @@ bell::Result<size_t> retryOnEintr(
 
 SocketBuffer::SocketBuffer(std::shared_ptr<Socket> socket)
     : internalSocket(std::move(socket)) {
+  setg(ibuf.data(), ibuf.data(), ibuf.data());
+  setp(obuf.data(), obuf.data() + bufLen);
   // See retryOnEintr() above - blocking-with-timeout is what every call site
   // here expects, regardless of what mode connect() left the socket in.
   (void)internalSocket->setBlocking(true);
@@ -66,21 +68,34 @@ int SocketBuffer::sync() {
 }
 
 SocketBuffer::int_type SocketBuffer::underflow() {
-  auto br = retryOnEintr([&] {
-    return internalSocket->read(reinterpret_cast<std::byte*>(ibuf.data()),
-                                bufLen);
-  });
-  if (!br) {
-    BELL_LOG(error, "SocketBuffer", "Read error: {}", br.error());
-    setg(nullptr, nullptr, nullptr);
-    return traits_type::eof();  // Stream sets failbit
+  if (gptr() < egptr()) {
+    return traits_type::to_int_type(*gptr());
   }
-  if (*br == 0) {
-    return traits_type::eof();  // Stream sets eofbit (clean EOF)
+  auto br = readSocket(reinterpret_cast<std::byte*>(ibuf.data()), bufLen);
+  if (!br || *br == 0) {
+    return traits_type::eof();
   }
-  bytesRead_ += *br;
   setg(ibuf.data(), ibuf.data(), ibuf.data() + *br);
   return traits_type::to_int_type(*ibuf.data());
+}
+
+bell::Result<size_t> SocketBuffer::readSocket(std::byte* dst, size_t len) {
+  if (readState_ == ReadState::Error) {
+    return nonstd::make_unexpected(readError_);
+  }
+  if (readState_ == ReadState::EndOfStream) {
+    return size_t{0};
+  }
+  auto res = retryOnEintr([&] { return internalSocket->read(dst, len); });
+  if (!res) {
+    readError_ = res.error();
+    readState_ = ReadState::Error;
+  } else if (*res == 0) {
+    readState_ = ReadState::EndOfStream;
+  } else {
+    bytesRead_ += *res;
+  }
+  return res;
 }
 
 SocketBuffer::int_type SocketBuffer::overflow(int_type c) {
@@ -94,6 +109,9 @@ SocketBuffer::int_type SocketBuffer::overflow(int_type c) {
 }
 
 std::streamsize SocketBuffer::xsgetn(char_type* _s, std::streamsize _n) {
+  if (_n <= 0) {
+    return 0;
+  }
   const std::streamsize bn = egptr() - gptr();
   if (_n <= bn) {
     traits_type::copy(_s, gptr(), _n);
@@ -101,14 +119,11 @@ std::streamsize SocketBuffer::xsgetn(char_type* _s, std::streamsize _n) {
     return _n;
   }
   traits_type::copy(_s, gptr(), bn);
-  setg(nullptr, nullptr, nullptr);
+  setg(ibuf.data(), ibuf.data(), ibuf.data());
   std::streamsize remain = _n - bn;
   char_type* end = _s + _n;
   while (remain > 0) {
-    auto br = retryOnEintr([&] {
-      return internalSocket->read(
-          reinterpret_cast<std::byte*>(end - remain), remain);
-    });
+    auto br = readSocket(reinterpret_cast<std::byte*>(end - remain), remain);
 
     if (!br) {
       return (_n - remain);
@@ -117,14 +132,16 @@ std::streamsize SocketBuffer::xsgetn(char_type* _s, std::streamsize _n) {
     if (*br == 0) {
       return (_n - remain);
     }
-    bytesRead_ += *br;
     remain -= *br;
   }
   return _n;
 }
 
 std::streamsize SocketBuffer::xsputn(const char_type* s, std::streamsize n) {
-  if (pptr() + n <= epptr()) {
+  if (n <= 0) {
+    return 0;
+  }
+  if (n <= epptr() - pptr()) {
     traits_type::copy(pptr(), s, n);
     pbump(n);
     return n;

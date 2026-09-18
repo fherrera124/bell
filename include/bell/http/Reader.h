@@ -33,6 +33,10 @@ class Reader {
   Reader(Direction readerDirection, std::istream* istream,
          std::vector<char>* externalBuffer = nullptr);
 
+  /// Borrows a socket stream and retains its transport error information.
+  Reader(Direction readerDirection, net::SocketStream* socketStream,
+         std::vector<char>* externalBuffer = nullptr);
+
   /**
    * @brief Ownership-taking constructor, initializes the reader with the given stream. No data is read from the stream until readHeaders() is called.
    * @remark Typed as SocketStream (not a generic istream) so the destructor
@@ -45,13 +49,8 @@ class Reader {
   // May close the underlying connection - see the .cpp for why.
   ~Reader();
 
-  // Move-only: the destructor decides whether to close the underlying
-  // connection based on this instance's own byte counters, so a silent
-  // copy-instead-of-move (which a user-declared destructor would otherwise
-  // cause by suppressing the implicit move members) would make that
-  // decision on a stale duplicate instead of the live instance.
-  Reader(Reader&&) = default;
-  Reader& operator=(Reader&&) = default;
+  Reader(Reader&& other) noexcept;
+  Reader& operator=(Reader&& other) noexcept;
   Reader(const Reader&) = delete;
   Reader& operator=(const Reader&) = delete;
 
@@ -59,6 +58,8 @@ class Reader {
    * @brief Read the headers from the stream. This method needs to be called before any other methods.
    */
   bell::Result<> readHeaders();
+  /// HEAD responses carry no body, regardless of their Content-Length.
+  bell::Result<> readHeaders(bool responseToHead);
 
   /**
    * @brief Return the value of the header with the given name
@@ -82,6 +83,8 @@ class Reader {
    * @return size_t Content length of the response, or 0 if the header is not present
    */
   size_t getContentLength() const;
+  /// Empty for a response whose body ends with the connection.
+  std::optional<size_t> contentLengthHint() const { return contentLength; }
 
   /**
    * @brief Returns the status code of the response
@@ -141,7 +144,8 @@ class Reader {
   /**
    * @brief Reads up to len bytes of the body into dst, leaving the rest on the
    * stream. Returns the number of bytes read, or 0 once the body is fully
-   * consumed.
+   * consumed. A partial read returns its bytes first; the next call reports
+   * any pending transport error or incomplete message.
    * @remark For bodies too large to hold in memory. Don't mix with the
    * getBody* accessors on the same reader.
    */
@@ -191,6 +195,7 @@ class Reader {
   Direction readerDirection = Direction::Invalid;
   std::shared_ptr<net::SocketStream> sharedIstream;
   std::istream* istream{};
+  net::SocketStream* socketStream{};
   std::vector<char> internalBuffer;
   std::vector<char>* bufferPtr = &internalBuffer;
   bool usingExternalBuffer = false;
@@ -226,6 +231,10 @@ class Reader {
   bool isValid(Direction expectedDirection) const;
 
   bell::Result<> readBody();
+  std::error_code readFailure(Errc eofError) const;
+  void releaseConnection();
+  void swap(Reader& other) noexcept;
+  void resizeBuffer(size_t size);
 };
 }  // namespace bell::http
 

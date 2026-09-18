@@ -145,7 +145,11 @@ void http::Server::readFromClient(Connection& connection) {
   auto readerRes = reader->readHeaders();
 
   if (!readerRes) {
-    BELL_LOG(error, LOG_TAG, "Error reading headers: {}", readerRes.error());
+    if (readerRes.error() == Errc::EndOfStream) {
+      BELL_LOG(debug, LOG_TAG, "Peer closed the HTTP connection");
+    } else {
+      BELL_LOG(error, LOG_TAG, "Error reading headers: {}", readerRes.error());
+    }
     closeConnection(connection.socket->getFd());
     return;
   }
@@ -179,6 +183,9 @@ void http::Server::readFromClient(Connection& connection) {
   // would otherwise leave those bytes in front of the next request on a
   // reused connection.
   auto bodyDrainedRes = reader->discardRemainingBody();
+  if (!bodyDrainedRes) {
+    BELL_LOG(error, LOG_TAG, "Error reading body: {}", bodyDrainedRes.error());
+  }
 
   const bool shouldKeepAlive = clientWantsKeepAlive && bodyDrainedRes.has_value() &&
                                writer->hasWrittenHeaders() &&

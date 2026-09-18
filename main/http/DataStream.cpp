@@ -20,6 +20,11 @@ bool isRedirectStatus(int statusCode) {
 
 bell::Result<> DataStream::open(bell::HTTPMethod method, const std::string& url,
                                 const Headers& headers) {
+  if (chunkSize == 0) {
+    return bell::make_unexpected_errc<>(std::errc::invalid_argument);
+  }
+  pendingReadError.clear();
+  totalSize.reset();
   lastReadChunk.resize(chunkSize);
   bytesInLastReadChunk = 0;
   chunkStartPosition = 0;
@@ -46,7 +51,6 @@ bell::Result<> DataStream::open(bell::HTTPMethod method, const std::string& url,
 
     response = httpClient->rawRequest(httpRequest);
     if (!response) {
-      BELL_LOG(error, LOG_TAG, "HTTP request error: {}", response.error());
       return nonstd::make_unexpected(response.error());
     }
 
@@ -85,15 +89,17 @@ bell::Result<> DataStream::open(bell::HTTPMethod method, const std::string& url,
     isSeekableFlag = false;
   }
 
-  // Preload first chunk
-  auto* stream = activeResponse->stream();
-  stream->read(reinterpret_cast<char*>(lastReadChunk.data()), chunkSize);
-  if (stream->fail() && !stream->eof()) {
-    return bell::make_unexpected_errc<>(std::errc::io_error);
-  }
-  bytesInLastReadChunk = static_cast<size_t>(stream->gcount());
-  chunkStartPosition = 0;
+  return readChunk();
+}
 
+bell::Result<> DataStream::readChunk() {
+  auto result = activeResponse->readBodyChunk(lastReadChunk.data(), chunkSize);
+  if (!result) {
+    pendingReadError = result.error();
+    return nonstd::make_unexpected(result.error());
+  }
+  bytesInLastReadChunk = *result;
+  chunkStartPosition = 0;
   return {};
 }
 
@@ -122,6 +128,8 @@ bell::Result<> DataStream::seek(size_t offset, SeekOrigin origin) {
     return bell::make_unexpected_errc<>(std::errc::invalid_seek);
   }
 
+  pendingReadError.clear();
+  activeResponse.reset();
   currentPosition = offset;
   bytesInLastReadChunk = 0;
   chunkStartPosition = 0;
@@ -131,54 +139,39 @@ bell::Result<> DataStream::seek(size_t offset, SeekOrigin origin) {
 
 bell::Result<size_t> DataStream::read(std::byte* outputBuffer,
                                       size_t outputBufferLen) {
+  if (outputBufferLen == 0) return size_t{0};
+  if (pendingReadError) return nonstd::make_unexpected(pendingReadError);
   size_t totalCopied = 0;
-  size_t toRead = outputBufferLen;
-
-  while (toRead > 0) {
-    // Copy from current chunk
-    size_t availableInChunk = (bytesInLastReadChunk > chunkStartPosition)
-                                  ? bytesInLastReadChunk - chunkStartPosition
-                                  : 0;
-
-    if (availableInChunk > 0) {
-      size_t toCopy = std::min(toRead, availableInChunk);
-      std::copy(lastReadChunk.data() + chunkStartPosition,
-                lastReadChunk.data() + chunkStartPosition + toCopy,
-                outputBuffer + totalCopied);
-
-      chunkStartPosition += toCopy;
-      currentPosition += toCopy;
-      totalCopied += toCopy;
-      toRead -= toCopy;
-
-      if (toRead == 0) {
-        break;
-      }
+  while (totalCopied < outputBufferLen) {
+    const size_t available = bytesInLastReadChunk - chunkStartPosition;
+    if (available > 0) {
+      const size_t count = std::min(outputBufferLen - totalCopied, available);
+      std::copy_n(lastReadChunk.data() + chunkStartPosition, count,
+                  outputBuffer + totalCopied);
+      chunkStartPosition += count;
+      currentPosition += count;
+      totalCopied += count;
+      if (totalCopied == outputBufferLen) break;
     }
 
-    // Need more data
-    if (isSeekable()) {
-      auto res = requestNextRange();
-      if (!res) {
-        return bell::make_unexpected_errc<size_t>(std::errc::io_error);
-      }
+    bell::Result<> result;
+    if (activeResponse) {
+      result = readChunk();
     } else {
-      if (!activeResponse) {
-        break;
-      }
-      auto* stream = activeResponse->stream();
-      stream->read(reinterpret_cast<char*>(lastReadChunk.data()), chunkSize);
-      if (stream->fail() && !stream->eof()) {
-        return bell::make_unexpected_errc<size_t>(std::errc::io_error);
-      }
-      bytesInLastReadChunk = static_cast<size_t>(stream->gcount());
+      bytesInLastReadChunk = 0;
       chunkStartPosition = 0;
-      if (bytesInLastReadChunk == 0) {
-        break;  // EOF
-      }
     }
+    if (result && bytesInLastReadChunk == 0 && isSeekable() &&
+        currentPosition < totalSize.value_or(0)) {
+      result = requestNextRange();
+    }
+    if (!result) {
+      pendingReadError = result.error();
+      if (totalCopied > 0) return totalCopied;
+      return nonstd::make_unexpected(pendingReadError);
+    }
+    if (bytesInLastReadChunk == 0) break;
   }
-
   return totalCopied;
 }
 
@@ -202,22 +195,15 @@ bell::Result<> DataStream::requestNextRange() {
 
   auto response = httpClient->rawRequest(httpRequest);
   if (!response) {
-    BELL_LOG(error, LOG_TAG, "HTTP request error: {}", response.error());
     return nonstd::make_unexpected(response.error());
   }
 
   activeResponse = std::move(*response);
 
-  auto* stream = activeResponse->stream();
-  stream->read(reinterpret_cast<char*>(lastReadChunk.data()),
-               *activeResponse->contentLength);
-
-  if (stream->fail() && !stream->eof()) {
-    return bell::make_unexpected_errc<>(std::errc::io_error);
+  if (!activeResponse->contentLength ||
+      *activeResponse->contentLength != chunkReadSize) {
+    activeResponse.reset();
+    return bell::make_unexpected_errc<>(std::errc::bad_message);
   }
-
-  bytesInLastReadChunk = static_cast<size_t>(stream->gcount());
-  chunkStartPosition = 0;
-
-  return {};
+  return readChunk();
 }

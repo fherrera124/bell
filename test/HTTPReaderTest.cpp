@@ -247,8 +247,8 @@ TEST_CASE("bell::http::Reader body streaming") {
     std::array<std::byte, 32> chunk{};
     for (;;) {
       auto read = reader.readBodyChunk(chunk.data(), chunk.size());
-      REQUIRE(read);
-      if (*read == 0) {
+      if (!read) {
+        REQUIRE(read.error() == bell::http::Errc::IncompleteMessage);
         break;
       }
       total += *read;

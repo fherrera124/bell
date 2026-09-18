@@ -53,6 +53,9 @@ class DataStream : public io::DataStream {
   // Keeps params of the HTTP request, reused for range-based files
   Request httpRequest;
   std::optional<Response> activeResponse;
+  std::error_code pendingReadError;
+
+  bell::Result<> readChunk();
 
   // Requests a new range of data from the server, filling up the lastReadChunk buffer.
   // This is called only for seekable streams

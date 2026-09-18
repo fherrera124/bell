@@ -128,8 +128,12 @@ class Response {
    */
   bell::Result<size_t> bytesLength();
 
+  /// Reads body bytes with framing and transport error validation.
+  bell::Result<size_t> readBodyChunk(std::byte* dst, size_t len);
+
   /**
    * @brief Gets the underlying stream for reading the response body.
+   * @remark Raw reads bypass HTTP body validation. Prefer readBodyChunk().
    * @return A pointer to the std::istream.
    */
   std::istream* stream() const;
