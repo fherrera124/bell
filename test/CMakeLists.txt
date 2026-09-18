@@ -28,6 +28,10 @@ if(NOT BELL_DISABLE_MDNS)
     target_sources(bell-test PRIVATE MDNSWrappersTest.cpp)
 endif()
 
+if(NOT BELL_DISABLE_CODECS AND BELL_CODEC_TREMOR)
+    target_sources(bell-test PRIVATE TremorCodebookTest.cpp)
+endif()
+
 # Set compile options for the test executable
 target_compile_options(bell-test PRIVATE -Wall -Wextra -Werror)
 
