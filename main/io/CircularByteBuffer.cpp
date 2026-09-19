@@ -15,7 +15,8 @@ size_t CircularByteBuffer::write(const std::byte* data, size_t dataLen) {
   std::unique_lock<std::mutex> lock(accessMutex);
 
   // Wait until there is at least one byte of space.
-  condFull.wait(lock, [this] { return currentSize < storageCapacity; });
+  condFull.wait(lock, [this] { return closed || currentSize < storageCapacity; });
+  if (closed) return 0;
 
   // Determine how many bytes we can actually write.
   size_t availableSpace = storageCapacity - currentSize;
@@ -53,13 +54,21 @@ void CircularByteBuffer::clear() {
   condFull.notify_all();  // Notify writers that space is available.
 }
 
+void CircularByteBuffer::close() {
+  std::scoped_lock lock(accessMutex);
+  closed = true;
+  condFull.notify_all();
+  condEmpty.notify_all();
+}
+
 size_t CircularByteBuffer::read(std::byte* buffer, size_t dataLen) {
   if (buffer == nullptr || dataLen == 0) {
     return 0;
   }
 
   std::unique_lock<std::mutex> lock(accessMutex);
-  condEmpty.wait(lock, [this] { return currentSize > 0; });
+  condEmpty.wait(lock, [this] { return closed || currentSize > 0; });
+  if (closed) return 0;
 
   size_t bytesToCopy = std::min(dataLen, currentSize);
 

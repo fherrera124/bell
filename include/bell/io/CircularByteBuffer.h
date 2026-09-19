@@ -65,6 +65,11 @@ class CircularByteBuffer {
    */
   void clear();
 
+  // Permanently stop reads and writes, returning zero and waking blocked
+  // callers. clear() does not reopen a closed buffer. Join users before
+  // destroying the buffer itself.
+  void close();
+
  private:
   mutable std::mutex accessMutex;
   std::condition_variable condFull;
@@ -75,5 +80,6 @@ class CircularByteBuffer {
   size_t headPos{};      // Write position
   size_t tailPos{};      // Read position
   size_t currentSize{};  // Number of bytes currently in the buffer
+  bool closed = false;
 };
 }  // namespace bell::io
